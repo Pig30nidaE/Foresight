@@ -25,23 +25,22 @@ export default function FirstMoveBar({ data, side }: Props) {
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium text-zinc-400">
-        {SIDE_LABEL[side]} 사용한 오프닝 계열 (ECO)
+        {SIDE_LABEL[side]} 첫 수
       </h3>
       {data.map((entry) => {
-        const widthWin = entry.games ? (entry.wins / entry.games) * 100 : 0;
-        const widthDraw = entry.games ? (entry.draws / entry.games) * 100 : 0;
+        const widthWin  = entry.games ? (entry.wins   / entry.games) * 100 : 0;
+        const widthDraw = entry.games ? (entry.draws  / entry.games) * 100 : 0;
         const widthLoss = entry.games ? (entry.losses / entry.games) * 100 : 0;
-        const barWidth = Math.round((entry.games / maxGames) * 100);
+        const barWidth  = Math.round((entry.games / maxGames) * 100);
 
         return (
           <div key={entry.eco} className="space-y-1">
             {/* Label Row */}
             <div className="flex items-center justify-between text-xs">
               <span className="flex gap-2 items-center">
-                <span className="font-mono font-bold text-zinc-300 w-8">
+                <span className="font-mono font-bold text-emerald-300 text-sm w-10">
                   {entry.eco}
                 </span>
-                <span className="text-zinc-500">{entry.first_move_category}</span>
               </span>
               <span className="text-zinc-400">
                 {entry.games}게임 &nbsp;
