@@ -17,6 +17,14 @@ import OpeningTreeTable from "@/components/charts/OpeningTreeTable";
 import BestWorstCard from "@/components/charts/BestWorstCard";
 import BlunderTimeline from "@/components/charts/BlunderTimeline";
 import MoveQualityDonut from "@/components/charts/MoveQualityDonut";
+import SectionHeader from "@/components/ui/SectionHeader";
+import {
+  FirstMovesSkeleton,
+  OpeningTreeSkeleton,
+  BestWorstSkeleton,
+  TimelineSkeleton,
+  DonutSkeleton,
+} from "@/components/ui/SkeletonCard";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
 
@@ -88,6 +96,13 @@ function DashboardContent() {
 
   const isLoading = loadingFirst || loadingTree || loadingBW || loadingTP;
 
+  // 타임클래스별 게임 수 표시용
+  const TC_GAME_COUNT: Record<string, number | undefined> = {
+    bullet: profile?.games_bullet ?? undefined,
+    blitz:  profile?.games_blitz  ?? undefined,
+    rapid:  profile?.games_rapid  ?? undefined,
+  };
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* ── Search Bar (Section 0) ── */}
@@ -144,8 +159,9 @@ function DashboardContent() {
       </form>
 
       {!submitted && (
-        <div className="text-center py-20 text-zinc-500">
-          유저명을 입력하고 분석을 시작하세요.
+        <div className="flex flex-col items-center py-24 gap-3 text-zinc-600">
+          <span className="text-5xl select-none">♟️</span>
+          <p className="text-sm">유저명을 입력하고 분석을 시작하세요.</p>
         </div>
       )}
 
@@ -153,32 +169,62 @@ function DashboardContent() {
         <>
           {/* Profile Header */}
           {profile && (
-            <div className="flex items-center gap-4 px-1">
+            <div className="flex items-center gap-4 px-1 animate-fade-in">
               {profile.avatar_url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={profile.avatar_url}
                   alt={submitted}
-                  className="w-12 h-12 rounded-full border border-zinc-700"
+                  className="w-12 h-12 rounded-full border-2 border-zinc-700"
                 />
               )}
-              <div>
-                <h2 className="text-xl font-bold text-white">{submitted}</h2>
-                <div className="flex gap-4 text-sm text-zinc-400 mt-0.5">
-                  {profile.rating_bullet && (
-                    <span>Bullet <span className="text-white font-medium">{profile.rating_bullet}</span></span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-white truncate">{submitted}</h2>
+                  <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full capitalize">
+                    {submittedPlatform}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-3 text-sm text-zinc-400 mt-1">
+                  {profile.rating_bullet != null && (
+                    <span className="flex items-center gap-1">
+                      <span className="text-yellow-500">&#9889;</span>
+                      <span className="text-zinc-500">Bullet</span>
+                      <span className="text-white font-semibold">{profile.rating_bullet}</span>
+                      {profile.games_bullet != null && (
+                        <span className="text-zinc-600 text-xs">({profile.games_bullet})</span>
+                      )}
+                    </span>
                   )}
-                  {profile.rating_blitz && (
-                    <span>Blitz <span className="text-white font-medium">{profile.rating_blitz}</span></span>
+                  {profile.rating_blitz != null && (
+                    <span className="flex items-center gap-1">
+                      <span className="text-orange-400">⚡</span>
+                      <span className="text-zinc-500">Blitz</span>
+                      <span className="text-white font-semibold">{profile.rating_blitz}</span>
+                      {profile.games_blitz != null && (
+                        <span className="text-zinc-600 text-xs">({profile.games_blitz})</span>
+                      )}
+                    </span>
                   )}
-                  {profile.rating_rapid && (
-                    <span>Rapid <span className="text-white font-medium">{profile.rating_rapid}</span></span>
+                  {profile.rating_rapid != null && (
+                    <span className="flex items-center gap-1">
+                      <span className="text-blue-400">⏱</span>
+                      <span className="text-zinc-500">Rapid</span>
+                      <span className="text-white font-semibold">{profile.rating_rapid}</span>
+                      {profile.games_rapid != null && (
+                        <span className="text-zinc-600 text-xs">({profile.games_rapid})</span>
+                      )}
+                    </span>
                   )}
                 </div>
               </div>
-              <span className="ml-auto text-xs text-zinc-600 uppercase tracking-wide">
-                {submittedPlatform} · {timeClass}
-              </span>
+              {/* 현재 선택된 타임클래스 게임 수 */}
+              <div className="text-right shrink-0">
+                <p className="text-lg font-bold text-emerald-400 capitalize">{timeClass}</p>
+                {TC_GAME_COUNT[timeClass] != null && (
+                  <p className="text-xs text-zinc-500">{TC_GAME_COUNT[timeClass]}게임</p>
+                )}
+              </div>
             </div>
           )}
 
@@ -189,48 +235,31 @@ function DashboardContent() {
           )}
 
           {!isLoading && (
-            <>
-              {/* ── Section 1: 첫 수 선호도 ── */}
+            <div className="space-y-4 animate-fade-in">
+              {/* ── Section 1 ── */}
               <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <h2 className="text-base font-bold text-white mb-1">
-                  1. 백 / 흑 첫 수 선호도 및 승률
-                </h2>
-                <p className="text-zinc-500 text-xs mb-5">
-                  가장 많이 사용한 오프닝 계열과 결과 분포
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <FirstMoveBar
-                    data={firstMoves?.white ?? []}
-                    side="white"
-                  />
-                  <FirstMoveBar
-                    data={firstMoves?.black ?? []}
-                    side="black"
-                  />
-                </div>
+                <SectionHeader number="1" title="백 / 흑 첫 수 선호도 및 승률" desc="가장 많이 사용한 오프닝 계열과 결과 분포" />
+                {loadingFirst ? (
+                  <FirstMovesSkeleton />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <FirstMoveBar data={firstMoves?.white ?? []} side="white" />
+                    <FirstMoveBar data={firstMoves?.black ?? []} side="black" />
+                  </div>
+                )}
               </section>
 
-              {/* ── Section 2: 오프닝 트리 + 요약 ── */}
+              {/* ── Section 2 ── */}
               <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* 2-A */}
                 <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <h2 className="text-base font-bold text-white mb-1">
-                    2-A. 오프닝 트리 탐색기
-                  </h2>
-                  <p className="text-zinc-500 text-xs mb-4">
-                    ECO 카테고리별 게임 수 및 승률
-                  </p>
-                  <OpeningTreeTable data={openingTree ?? []} />
+                  <SectionHeader number="2-A" title="오프닝 트리 탐색기" desc="ECO 카테고리별 게임 수 및 승률 — 클릭하여 전개" />
+                  {loadingTree ? <OpeningTreeSkeleton /> : <OpeningTreeTable data={openingTree ?? []} />}
                 </div>
-                {/* 2-B */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <h2 className="text-base font-bold text-white mb-1">
-                    2-B. 오프닝 퍼포먼스
-                  </h2>
-                  <p className="text-zinc-500 text-xs mb-4">
-                    Best / Worst 오프닝 요약
-                  </p>
-                  {bestWorst ? (
+                  <SectionHeader number="2-B" title="오프닝 퍼포먼스" desc="Best / Worst 오프닝 요약" />
+                  {loadingBW ? (
+                    <BestWorstSkeleton />
+                  ) : bestWorst ? (
                     <BestWorstCard data={bestWorst} />
                   ) : (
                     <p className="text-zinc-500 text-sm">데이터 없음</p>
@@ -238,30 +267,18 @@ function DashboardContent() {
                 </div>
               </section>
 
-              {/* ── Section 3: 블런더 + 수 품질 ── */}
+              {/* ── Section 3 ── */}
               <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 3-A */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <h2 className="text-base font-bold text-white mb-1">
-                    3-A. 시간 압박 블런더 비율
-                  </h2>
-                  <p className="text-zinc-500 text-xs mb-4">
-                    남은 시간에 따른 블런더 발생률 추이
-                  </p>
-                  <BlunderTimeline data={timePressure} />
+                  <SectionHeader number="3-A" title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" />
+                  {loadingTP ? <TimelineSkeleton /> : <BlunderTimeline data={timePressure} />}
                 </div>
-                {/* 3-B */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <h2 className="text-base font-bold text-white mb-1">
-                    3-B. 전반적인 수 품질 비율
-                  </h2>
-                  <p className="text-zinc-500 text-xs mb-4">
-                    Best · Excellent · Good · Inaccuracy · Mistake · Blunder
-                  </p>
-                  <MoveQualityDonut data={moveQuality} isLoading={loadingMQ} />
+                  <SectionHeader number="3-B" title="전반적인 수 품질 비율" desc="Stockfish 분석 — Best · Excellent · Inaccuracy · Mistake · Blunder" />
+                  {loadingMQ ? <DonutSkeleton /> : <MoveQualityDonut data={moveQuality} isLoading={false} />}
                 </div>
               </section>
-            </>
+            </div>
           )}
         </>
       )}
