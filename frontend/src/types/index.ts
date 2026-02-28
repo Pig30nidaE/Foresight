@@ -89,6 +89,7 @@ export interface OpeningTreeNode {
   losses: number;
   draws: number;
   win_rate: number;
+  children?: OpeningTreeNode[];
 }
 
 export interface BestWorstOpenings {

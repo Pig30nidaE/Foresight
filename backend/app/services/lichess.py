@@ -7,6 +7,7 @@ import httpx
 from typing import List, Optional
 from app.core.config import settings
 from app.models.schemas import PlayerProfile, GameSummary, GameResult, Platform
+from app.services import opening_db
 
 
 class LichessService:
@@ -96,6 +97,13 @@ class LichessService:
         opening = raw.get("opening", {})
         speed = raw.get("speed", "")  # bullet, blitz, rapid, classical
 
+        eco_code: Optional[str] = opening.get("eco")
+        # Lichess가 제공하는 이름이 우선 (이미 동일 DB 사용)
+        # 누락 시 opening_db로 fallback
+        opening_name: Optional[str] = opening.get("name")
+        if not opening_name and eco_code:
+            opening_name = opening_db.get_name_by_eco(eco_code)
+
         return GameSummary(
             game_id=raw.get("id", ""),
             platform=Platform.lichess,
@@ -103,8 +111,8 @@ class LichessService:
             black=black.get("user", {}).get("name", "?"),
             result=result,
             time_class=speed,
-            opening_eco=opening.get("eco"),
-            opening_name=opening.get("name"),
+            opening_eco=eco_code,
+            opening_name=opening_name,
             pgn=raw.get("pgn"),
             played_at=str(raw.get("createdAt", "")),
             url=f"https://lichess.org/{raw.get('id', '')}",

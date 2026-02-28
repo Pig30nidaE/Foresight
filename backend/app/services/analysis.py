@@ -4,6 +4,7 @@
 import pandas as pd
 from typing import List
 from app.models.schemas import GameSummary, OpeningStats, PerformanceSummary, Platform
+from app.services import opening_db
 
 
 class AnalysisService:
@@ -160,47 +161,83 @@ class AnalysisService:
     def get_opening_tree(self, df: pd.DataFrame, depth: int = 3) -> List[dict]:
         """
         MVP 섹션 2-A: 오프닝 트리 — ECO 계층 구조
-        ECO 코드 첫 글자 → 숫자 두 자리로 그룹핑
+        ECO 코드 첫 글자 → 알파벳 계열로 그룹핑 후 상위 15개 ECO 코드 세부 표시
         """
         if df.empty:
             return []
 
-        tree: dict = {}
+        # ── Level 1: ECO 계열 (A/B/C/D/E) ────────────────────────
+        family_tree: dict[str, dict] = {}
         for _, row in df.iterrows():
             eco = row.get("opening_eco", "?") or "?"
             name = row.get("opening_name", "Unknown") or "Unknown"
             result = row.get("result", "draw")
 
-            # Level 1: 알파벳 (A, B, C, D, E)
-            l1 = eco[0] if eco != "?" else "?"
-            # Level 2: ECO 두 자리 (e.g., B20)
-            l2 = eco[:3] if len(eco) >= 3 else eco
-            # Level 3: 전체 ECO
-            l3 = eco
+            prefix = eco[0] if eco not in ("?", "") else "?"
+            fname = opening_db.ECO_FAMILY_NAMES.get(prefix, f"{prefix} — 기타")
 
-            for level_key, level_name in [(l1, l1), (l2, l2), (l3, name)]:
-                if level_key not in tree:
-                    tree[level_key] = {"key": level_key, "name": level_name, "games": 0, "wins": 0, "losses": 0, "draws": 0, "children": {}}
-                tree[level_key]["games"] += 1
-                if result == "win":
-                    tree[level_key]["wins"] += 1
-                elif result == "loss":
-                    tree[level_key]["losses"] += 1
-                else:
-                    tree[level_key]["draws"] += 1
-                break  # 최상위 레벨만 집계
+            if prefix not in family_tree:
+                family_tree[prefix] = {
+                    "eco_prefix": prefix,
+                    "name": fname,
+                    "games": 0, "wins": 0, "losses": 0, "draws": 0,
+                    "children": {},
+                }
+            node = family_tree[prefix]
+            node["games"] += 1
+            if result == "win":
+                node["wins"] += 1
+            elif result == "loss":
+                node["losses"] += 1
+            else:
+                node["draws"] += 1
 
+            # Level 2: 3자리 ECO (e.g., B12)
+            eco3 = eco[:3] if len(eco) >= 3 else eco
+            child = node["children"]
+            if eco3 not in child:
+                # opening_db에서 표준 이름 조회, 없으면 게임 내 이름 사용
+                db_name = opening_db.get_name_by_eco(eco3) or name
+                child[eco3] = {
+                    "eco_prefix": eco3,
+                    "name": db_name,
+                    "games": 0, "wins": 0, "losses": 0, "draws": 0,
+                }
+            child[eco3]["games"] += 1
+            if result == "win":
+                child[eco3]["wins"] += 1
+            elif result == "loss":
+                child[eco3]["losses"] += 1
+            else:
+                child[eco3]["draws"] += 1
+
+        # ── 직렬화 ────────────────────────────────────────────────
         result_list = []
-        for key, node in sorted(tree.items(), key=lambda x: x[1]["games"], reverse=True)[:15]:
+        for prefix, node in sorted(family_tree.items(), key=lambda x: x[1]["games"], reverse=True):
             total = node["games"]
+            children_sorted = sorted(
+                node["children"].values(), key=lambda c: c["games"], reverse=True
+            )[:8]
             result_list.append({
-                "eco_prefix": node["key"],
+                "eco_prefix": node["eco_prefix"],
                 "name": node["name"],
                 "games": total,
                 "wins": node["wins"],
                 "losses": node["losses"],
                 "draws": node["draws"],
                 "win_rate": round(node["wins"] / total * 100, 1) if total else 0,
+                "children": [
+                    {
+                        "eco_prefix": c["eco_prefix"],
+                        "name": c["name"],
+                        "games": c["games"],
+                        "wins": c["wins"],
+                        "losses": c["losses"],
+                        "draws": c["draws"],
+                        "win_rate": round(c["wins"] / c["games"] * 100, 1) if c["games"] else 0,
+                    }
+                    for c in children_sorted
+                ],
             })
         return result_list
 
