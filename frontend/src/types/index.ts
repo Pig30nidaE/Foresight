@@ -111,6 +111,28 @@ export interface BestWorstOpenings {
 }
 
 // ────────────────────────────────────────────
+// Step 6: 수 품질 분석 (Section 3-B)
+// ────────────────────────────────────────────
+export interface MoveQualityCategory {
+  category: string;
+  emoji: string;
+  color: string;
+  count: number;
+  percentage: number;
+}
+
+export interface MoveQualityStats {
+  username: string;
+  platform: string;
+  time_class: string;
+  games_analyzed: number;
+  total_moves: number;
+  accuracy: number;       // 0~100 (Chess.com 방식)
+  acpl: number;           // 평균 센티폰 손실
+  categories: MoveQualityCategory[];
+}
+
+// ────────────────────────────────────────────
 // Step 5: 시간 압박 분석 (Section 3-A)
 // ────────────────────────────────────────────
 export interface TimePressurePhase {

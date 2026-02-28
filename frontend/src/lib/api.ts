@@ -10,6 +10,7 @@ import type {
   OpeningTreeNode,
   BestWorstOpenings,
   TimePressureStats,
+  MoveQualityStats,
 } from "@/types";
 
 const api = axios.create({
@@ -127,6 +128,22 @@ export const getTimePressure = async (
     params: { time_class: timeClass, max_games: maxGames },
   });
   return data as TimePressureStats;
+};
+
+// ────────────────────────────────────────────
+// Engine (Step 6: 수 품질 분석)
+// ────────────────────────────────────────────
+export const getMoveQuality = async (
+  platform: Platform,
+  username: string,
+  timeClass: TimeClass = "bullet",
+  maxGames = 5,
+): Promise<MoveQualityStats> => {
+  const { data } = await api.get(`/engine/move-quality/${platform}/${username}`, {
+    params: { time_class: timeClass, max_games: maxGames },
+    timeout: 300_000,   // Stockfish 분석 최대 5분
+  });
+  return data as MoveQualityStats;
 };
 
 export default api;

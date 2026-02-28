@@ -7,16 +7,16 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import type { MoveQualityStats } from "@/types";
 
-// 섹션 3B: 수 품질 도넛 차트
-// Step 6(엔진 분석) 연동 전까지 플레이스홀더 데이터 사용
-const MOCK_MOVE_QUALITY = [
-  { name: "Brilliant ✨", value: 2, color: "#22d3ee" },
-  { name: "Best 👑", value: 45, color: "#10b981" },
-  { name: "Good ✅", value: 20, color: "#6ee7b7" },
-  { name: "Inaccuracy ⚡", value: 15, color: "#f59e0b" },
-  { name: "Mistake ❌", value: 10, color: "#f97316" },
-  { name: "Blunder 💀", value: 8, color: "#ef4444" },
+// 플레이스홀더 (엔진 분석 결과 없을 때)
+const PLACEHOLDER = [
+  { category: "Best",       emoji: "✅", color: "#10b981", count: 0, percentage: 0 },
+  { category: "Excellent",  emoji: "👍", color: "#34d399", count: 0, percentage: 0 },
+  { category: "Good",       emoji: "🆗", color: "#6ee7b7", count: 0, percentage: 0 },
+  { category: "Inaccuracy", emoji: "⚡", color: "#f59e0b", count: 0, percentage: 0 },
+  { category: "Mistake",    emoji: "❌", color: "#f97316", count: 0, percentage: 0 },
+  { category: "Blunder",    emoji: "💀", color: "#ef4444", count: 0, percentage: 0 },
 ];
 
 const CustomTooltip = ({
@@ -24,60 +24,108 @@ const CustomTooltip = ({
   payload,
 }: {
   active?: boolean;
-  payload?: { name: string; value: number; payload: { color: string } }[];
+  payload?: { name: string; value: number; payload: { color: string; count: number } }[];
 }) => {
   if (!active || !payload?.length) return null;
-  const { name, value } = payload[0];
+  const { name, value, payload: p } = payload[0];
   return (
     <div className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-xs">
       <p className="font-bold text-white">{name}</p>
-      <p className="text-zinc-300">{value}%</p>
+      <p className="text-zinc-300">{value}% ({p.count}수)</p>
     </div>
   );
 };
 
 interface Props {
-  data?: typeof MOCK_MOVE_QUALITY;
-  isMock?: boolean;
+  data?: MoveQualityStats | null;
+  isLoading?: boolean;
 }
 
-export default function MoveQualityDonut({ data = MOCK_MOVE_QUALITY, isMock = true }: Props) {
+export default function MoveQualityDonut({ data, isLoading = false }: Props) {
+  const hasData = !!data && data.total_moves > 0;
+  const cats = hasData ? data.categories : PLACEHOLDER;
+  // placeholder 시엔 균등 분배로 회색톤 표시
+  const chartData = hasData
+    ? cats.filter((c) => c.percentage > 0)
+    : PLACEHOLDER.map((c) => ({ ...c, percentage: 100 / 6 }));
+
   return (
     <div className="flex flex-col items-center">
-      {isMock && (
-        <p className="text-xs text-amber-400/80 mb-2 text-center">
-          ⚠️ 엔진 분석 연동 전 예시 데이터
+      {/* 상태 배지 */}
+      {isLoading && (
+        <p className="text-xs text-zinc-400 mb-2 animate-pulse">
+          🔍 Stockfish 분석 중... (최대 ~30초)
         </p>
       )}
-      <ResponsiveContainer width="100%" height={200}>
+      {!isLoading && !hasData && (
+        <p className="text-xs text-amber-400/80 mb-2 text-center">
+          ⚡ 엔진 분석을 위해 잠시 기다려 주세요
+        </p>
+      )}
+
+      {/* 정확도 + ACPL 헤더 */}
+      {hasData && (
+        <div className="flex gap-6 mb-3">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-emerald-400">
+              {data!.accuracy.toFixed(1)}%
+            </p>
+            <p className="text-xs text-zinc-500">정확도</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-zinc-300">
+              {data!.acpl.toFixed(0)}
+            </p>
+            <p className="text-xs text-zinc-500">평균 CP 손실</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-zinc-300">
+              {data!.games_analyzed}
+            </p>
+            <p className="text-xs text-zinc-500">분석 게임</p>
+          </div>
+        </div>
+      )}
+
+      {/* 도넛 차트 */}
+      <ResponsiveContainer width="100%" height={180}>
         <PieChart>
           <Pie
-            data={data}
+            data={chartData}
             cx="50%"
             cy="50%"
-            innerRadius={55}
-            outerRadius={85}
+            innerRadius={48}
+            outerRadius={78}
             paddingAngle={2}
-            dataKey="value"
+            dataKey="percentage"
+            nameKey="category"
           >
-            {data.map((entry, index) => (
-              <Cell key={index} fill={entry.color} />
+            {chartData.map((entry, i) => (
+              <Cell
+                key={i}
+                fill={entry.color}
+                opacity={hasData ? 1 : 0.25}
+              />
             ))}
           </Pie>
-          <Tooltip content={<CustomTooltip />} />
+          {hasData && <Tooltip content={<CustomTooltip />} />}
         </PieChart>
       </ResponsiveContainer>
 
-      {/* Legend */}
+      {/* 범례 */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs w-full mt-1">
-        {data.map((entry) => (
-          <div key={entry.name} className="flex items-center gap-1.5">
+        {cats.map((entry) => (
+          <div key={entry.category} className="flex items-center gap-1.5">
             <span
               className="w-2.5 h-2.5 rounded-sm shrink-0"
-              style={{ backgroundColor: entry.color }}
+              style={{ backgroundColor: entry.color, opacity: hasData ? 1 : 0.3 }}
             />
-            <span className="text-zinc-400 truncate">{entry.name}</span>
-            <span className="text-zinc-300 ml-auto font-mono">{entry.value}%</span>
+            <span className="text-zinc-400 truncate">
+              {entry.emoji} {entry.category}
+            </span>
+            <span className="text-zinc-300 ml-auto font-mono">
+              {hasData ? `${entry.percentage}%` : "—"}
+            </span>
           </div>
         ))}
       </div>
