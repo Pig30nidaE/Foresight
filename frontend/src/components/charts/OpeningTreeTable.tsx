@@ -14,7 +14,7 @@ function flatten(nodes: OpeningTreeNode[], expanded: Set<string>): RowMeta[] {
   const rows: RowMeta[] = [];
   for (const node of nodes) {
     rows.push({ node, indent: 0, isGroup: true });
-    if (expanded.has(node.eco_prefix) && node.children?.length) {
+    if (expanded.has(node.name) && node.children?.length) {
       for (const child of node.children) {
         rows.push({ node: child, indent: 1, isGroup: false });
       }
@@ -47,36 +47,41 @@ export default function OpeningTreeTable({ data }: Props) {
     <div className="space-y-0.5 font-mono text-sm">
       {rows.map(({ node, indent, isGroup }) => (
         <div
-          key={`${indent}-${node.eco_prefix}`}
+          key={`${indent}-${node.eco_prefix}-${node.name}`}
           className={`group flex items-center justify-between py-1.5 px-2 rounded transition-colors ${
             isGroup
               ? "hover:bg-zinc-800/70 cursor-pointer bg-zinc-900/40"
               : "hover:bg-zinc-800/40 cursor-default"
           }`}
           style={{ paddingLeft: indent * 20 + 8 }}
-          onClick={isGroup && node.children?.length ? () => toggle(node.eco_prefix) : undefined}
+          onClick={isGroup && node.children?.length ? () => toggle(node.name) : undefined}
         >
           {/* Name */}
           <div className="flex items-center gap-1.5 min-w-0">
             {isGroup && node.children?.length ? (
               <span className="text-zinc-500 text-xs w-3 shrink-0">
-                {expanded.has(node.eco_prefix) ? "▾" : "▸"}
+                {expanded.has(node.name) ? "▾" : "▸"}
               </span>
             ) : (
               <span className="text-zinc-700 text-xs w-3 shrink-0">└</span>
             )}
-            <span
-              className={`font-bold shrink-0 ${
-                isGroup ? "text-amber-300" : "text-zinc-300"
-              }`}
-            >
-              {node.eco_prefix}
-            </span>
-            <span className="text-zinc-400 truncate text-xs">
-              {isGroup
-                ? node.name.replace(/^[A-E] — /, "")
-                : node.name}
-            </span>
+            {/* Level에 따라 다르게 표시 */}
+            {isGroup ? (
+              // Level 1: 실제 오프닝명 — ECO 단일 알파벳 숨김
+              <span className="font-semibold text-sm text-zinc-200 truncate">
+                {node.name}
+              </span>
+            ) : (
+              // Level 2: ECO3 배지 + 변형명
+              <>
+                <span className="font-bold shrink-0 text-amber-300 text-xs font-mono">
+                  {node.eco_prefix}
+                </span>
+                <span className="text-zinc-400 truncate text-xs">
+                  {node.name.includes(":") ? node.name.split(":", 2)[1].trim() : node.name}
+                </span>
+              </>
+            )}
           </div>
 
           {/* Stats */}

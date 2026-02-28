@@ -1,11 +1,31 @@
 """
 게임 데이터 분석 서비스 — Pandas 기반 통계 처리
 """
+import re
 import pandas as pd
 from typing import List, Optional
 from app.models.schemas import GameSummary, OpeningStats, PerformanceSummary, Platform
 from app.services import opening_db
 from app.services.pgn_parser import ParsedGame, MoveData
+
+# PGN 첫 수 추출용 정규식
+_RE_HEADERS = re.compile(r'\[[^\]]+\]')
+_RE_BRACES  = re.compile(r'\{[^}]*\}')   # {[%clk...]} 및 빈 {} 제거
+_RE_MOVENUM = re.compile(r'\d+\.+')       # 1. / 1... 제거
+_RESULT_TOKENS = frozenset({'*', '1-0', '0-1', '1/2-1/2'})
+
+
+def _extract_first_moves(pgn: str):
+    """PGN → (white_move1, black_move1) — 예) ('e4', 'c5')"""
+    if not pgn:
+        return None, None
+    moves_part = _RE_HEADERS.sub('', pgn)
+    moves_part = _RE_BRACES.sub('', moves_part)
+    moves_part = _RE_MOVENUM.sub('', moves_part)
+    tokens = [t for t in moves_part.split() if t not in _RESULT_TOKENS and t.strip()]
+    white1 = tokens[0] if len(tokens) > 0 else None
+    black1 = tokens[1] if len(tokens) > 1 else None
+    return white1, black1
 
 
 class AnalysisService:
@@ -13,6 +33,7 @@ class AnalysisService:
         """GameSummary 리스트를 Pandas DataFrame으로 변환"""
         rows = []
         for g in games:
+            white1, black1 = _extract_first_moves(g.pgn or '')
             rows.append({
                 "game_id": g.game_id,
                 "platform": g.platform.value,
@@ -23,6 +44,8 @@ class AnalysisService:
                 "opening_eco": g.opening_eco or "Unknown",
                 "opening_name": g.opening_name or "Unknown",
                 "played_at": g.played_at,
+                "white_move1": white1,
+                "black_move1": black1,
             })
         return pd.DataFrame(rows)
 
@@ -113,112 +136,119 @@ class AnalysisService:
 
     def get_first_move_stats(self, df: pd.DataFrame, username: str) -> dict:
         """
-        MVP 섹션 1: 백/흑 첫 수 선호도 및 승률
-        ECO 코드의 첫 글자를 활용하거나 opening_name에서 첫 수를 추론
+        섹션 1: 백/흑 첫 수 선호도 및 승률
+        PGN에서 추출한 실제 첫 수(e4/d4/c4/Nf3 등)로 집계
         """
         if df.empty:
             return {"white": [], "black": []}
 
-        # ECO 카테고리로 첫 수 근사
-        # A/B = 1.d4 계열 or 기타, C/D = 1.e4, E = 1.d4 인디언
-        eco_to_first_move = {
-            "A": "d4/c4/Nf3", "B": "e4", "C": "e4",
-            "D": "d4", "E": "d4",
-        }
         white_rows = df[df["white"].str.lower() == username].copy() if "white" in df.columns else pd.DataFrame()
         black_rows = df[df["black"].str.lower() == username].copy() if "black" in df.columns else pd.DataFrame()
 
-        def opening_group_stats(subset: pd.DataFrame, top_n: int = 5) -> List[dict]:
-            if subset.empty:
+        def first_move_stats(subset: pd.DataFrame, move_col: str, top_n: int = 7) -> List[dict]:
+            if subset.empty or move_col not in subset.columns:
                 return []
-            grouped = subset.groupby("opening_eco")["result"].value_counts().unstack(fill_value=0).reset_index()
+            valid = subset[subset[move_col].notna() & (subset[move_col] != '')].copy()
+            if valid.empty:
+                return []
+            grouped = (
+                valid.groupby(move_col)["result"]
+                .value_counts()
+                .unstack(fill_value=0)
+                .reset_index()
+            )
             result = []
             for _, row in grouped.iterrows():
-                eco = row["opening_eco"]
-                wins = int(row.get("win", 0))
+                move = row[move_col]
+                wins   = int(row.get("win",  0))
                 losses = int(row.get("loss", 0))
-                draws = int(row.get("draw", 0))
-                total = wins + losses + draws
-                if total < 3:
+                draws  = int(row.get("draw", 0))
+                total  = wins + losses + draws
+                if total < 2:
                     continue
-                first_letter = eco[0] if eco and eco != "Unknown" else "?"
                 result.append({
-                    "eco": eco,
-                    "first_move_category": eco_to_first_move.get(first_letter, "Other"),
+                    "eco": move,                          # 재사용 필드: 실제 수
+                    "first_move_category": move,          # 프론트 호환용
                     "games": total,
-                    "wins": wins,
+                    "wins":  wins,
                     "losses": losses,
-                    "draws": draws,
+                    "draws":  draws,
                     "win_rate": round(wins / total * 100, 1),
                 })
             result.sort(key=lambda x: x["games"], reverse=True)
             return result[:top_n]
 
         return {
-            "white": opening_group_stats(white_rows),
-            "black": opening_group_stats(black_rows),
+            "white": first_move_stats(white_rows, "white_move1"),
+            "black": first_move_stats(black_rows, "black_move1"),
         }
 
     def get_opening_tree(self, df: pd.DataFrame, depth: int = 3) -> List[dict]:
         """
-        MVP 섹션 2-A: 오프닝 트리 — ECO 계층 구조
-        ECO 코드 첫 글자 → 알파벳 계열로 그룹핑 후 상위 15개 ECO 코드 세부 표시
+        섹션 2-A: 오프닝 트리
+        Level 1 : 오프닝 기본 이름 (콜론 앞 부분) — 예) "Caro-Kann Defense"
+        Level 2 : 풀 변형명 + ECO3 코드  — 예) "Caro-Kann Defense: Advance Variation" (B12)
         """
         if df.empty:
             return []
 
-        # ── Level 1: ECO 계열 (A/B/C/D/E) ────────────────────────
-        family_tree: dict[str, dict] = {}
+        base_tree: dict[str, dict] = {}
+
         for _, row in df.iterrows():
-            eco = row.get("opening_eco", "?") or "?"
-            name = row.get("opening_name", "Unknown") or "Unknown"
+            eco  = row.get("opening_eco",  "") or ""
+            name = row.get("opening_name", "") or ""
             result = row.get("result", "draw")
 
-            prefix = eco[0] if eco not in ("?", "") else "?"
-            fname = opening_db.ECO_FAMILY_NAMES.get(prefix, f"{prefix} — 기타")
+            # 기본 오프닝명 — 콜론이 있으면 앞 부분, 없으면 전체
+            if ":" in name:
+                base_name = name.split(":", 1)[0].strip()
+            elif name and name != "Unknown":
+                base_name = name.strip()
+            else:
+                # 게임에 이름 없으면 ECO DB 조회
+                base_name = opening_db.get_name_by_eco(eco[:3]) if eco else "Unknown"
+                if not base_name:
+                    base_name = eco[:1] + "xx" if eco else "Unknown"
 
-            if prefix not in family_tree:
-                family_tree[prefix] = {
-                    "eco_prefix": prefix,
-                    "name": fname,
+            eco_family = eco[0] if eco else "?"
+            eco3 = eco[:3] if len(eco) >= 3 else eco
+
+            # Level 1
+            if base_name not in base_tree:
+                base_tree[base_name] = {
+                    "eco_prefix": eco_family,
+                    "name": base_name,
                     "games": 0, "wins": 0, "losses": 0, "draws": 0,
                     "children": {},
                 }
-            node = family_tree[prefix]
+            node = base_tree[base_name]
             node["games"] += 1
-            if result == "win":
-                node["wins"] += 1
-            elif result == "loss":
-                node["losses"] += 1
-            else:
-                node["draws"] += 1
+            if result == "win":  node["wins"]   += 1
+            elif result == "loss": node["losses"] += 1
+            else: node["draws"] += 1
 
-            # Level 2: 3자리 ECO (e.g., B12)
-            eco3 = eco[:3] if len(eco) >= 3 else eco
-            child = node["children"]
-            if eco3 not in child:
-                # opening_db에서 표준 이름 조회, 없으면 게임 내 이름 사용
-                db_name = opening_db.get_name_by_eco(eco3) or name
-                child[eco3] = {
+            # Level 2 — 풀 이름 + ECO3 를 키로 사용
+            child_key = f"{eco3}:{name}" if name else eco3
+            children = node["children"]
+            if child_key not in children:
+                children[child_key] = {
                     "eco_prefix": eco3,
-                    "name": db_name,
+                    "name": name if name else eco3,
                     "games": 0, "wins": 0, "losses": 0, "draws": 0,
                 }
-            child[eco3]["games"] += 1
-            if result == "win":
-                child[eco3]["wins"] += 1
-            elif result == "loss":
-                child[eco3]["losses"] += 1
-            else:
-                child[eco3]["draws"] += 1
+            child = children[child_key]
+            child["games"] += 1
+            if result == "win":    child["wins"]   += 1
+            elif result == "loss": child["losses"] += 1
+            else:                  child["draws"]  += 1
 
-        # ── 직렬화 ────────────────────────────────────────────────
+        # 직렬화
         result_list = []
-        for prefix, node in sorted(family_tree.items(), key=lambda x: x[1]["games"], reverse=True):
+        for node in sorted(base_tree.values(), key=lambda n: n["games"], reverse=True):
             total = node["games"]
             children_sorted = sorted(
                 node["children"].values(), key=lambda c: c["games"], reverse=True
-            )[:8]
+            )[:10]
             result_list.append({
                 "eco_prefix": node["eco_prefix"],
                 "name": node["name"],
