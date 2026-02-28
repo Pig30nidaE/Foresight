@@ -1,0 +1,111 @@
+"""
+Lichess API 연동 서비스
+Docs: https://lichess.org/api
+공개 게임은 토큰 없이 접근 가능, 자신의 게임은 OAuth 토큰 필요
+"""
+import httpx
+from typing import List, Optional
+from app.core.config import settings
+from app.models.schemas import PlayerProfile, GameSummary, GameResult, Platform
+
+
+class LichessService:
+    BASE_URL = settings.LICHESS_BASE_URL
+
+    def _get_headers(self) -> dict:
+        headers = {"Accept": "application/x-ndjson"}
+        if settings.LICHESS_API_TOKEN:
+            headers["Authorization"] = f"Bearer {settings.LICHESS_API_TOKEN}"
+        return headers
+
+    async def get_player_profile(self, username: str) -> PlayerProfile:
+        """플레이어 기본 프로필 조회"""
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.BASE_URL}/user/{username}", headers={"Accept": "application/json"}
+            )
+            resp.raise_for_status()
+
+        data = resp.json()
+        perfs = data.get("perfs", {})
+
+        return PlayerProfile(
+            username=username,
+            platform=Platform.lichess,
+            rating_rapid=perfs.get("rapid", {}).get("rating"),
+            rating_blitz=perfs.get("blitz", {}).get("rating"),
+            rating_bullet=perfs.get("bullet", {}).get("rating"),
+            country=data.get("profile", {}).get("country"),
+            avatar_url=None,  # Lichess는 아바타 URL 없음
+            joined=str(data.get("createdAt", "")),
+        )
+
+    async def get_recent_games(
+        self,
+        username: str,
+        max_games: int = 100,
+        perf_type: Optional[str] = None,  # bullet, blitz, rapid, classical
+    ) -> List[GameSummary]:
+        """최근 게임 N개 조회 (ndjson 스트림)"""
+        params = {
+            "max": max_games,
+            "opening": "true",
+            "clocks": "false",
+        }
+        if perf_type:
+            params["perfType"] = perf_type
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.BASE_URL}/games/user/{username}",
+                headers=self._get_headers(),
+                params=params,
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+
+        games = []
+        for line in resp.text.strip().split("\n"):
+            if not line:
+                continue
+            import json
+            try:
+                raw = json.loads(line)
+                games.append(self._parse_game(raw, username))
+            except Exception:
+                continue
+
+        return games
+
+    def _parse_game(self, raw: dict, username: str) -> GameSummary:
+        players = raw.get("players", {})
+        white = players.get("white", {})
+        black = players.get("black", {})
+        white_name = white.get("user", {}).get("name", "").lower()
+
+        winner = raw.get("winner")  # "white" | "black" | None (draw)
+        if winner is None:
+            result = GameResult.draw
+        elif (winner == "white" and white_name == username.lower()) or (
+            winner == "black" and white_name != username.lower()
+        ):
+            result = GameResult.win
+        else:
+            result = GameResult.loss
+
+        opening = raw.get("opening", {})
+        speed = raw.get("speed", "")  # bullet, blitz, rapid, classical
+
+        return GameSummary(
+            game_id=raw.get("id", ""),
+            platform=Platform.lichess,
+            white=white.get("user", {}).get("name", "?"),
+            black=black.get("user", {}).get("name", "?"),
+            result=result,
+            time_class=speed,
+            opening_eco=opening.get("eco"),
+            opening_name=opening.get("name"),
+            pgn=raw.get("pgn"),
+            played_at=str(raw.get("createdAt", "")),
+            url=f"https://lichess.org/{raw.get('id', '')}",
+        )
