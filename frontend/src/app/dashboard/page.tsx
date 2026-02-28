@@ -8,6 +8,7 @@ import {
   getOpeningTree,
   getBestWorstOpenings,
   getTimePressure,
+  getMoveQuality,
 } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
 import { Suspense, useState, useEffect } from "react";
@@ -74,6 +75,15 @@ function DashboardContent() {
     queryFn: () => getTimePressure(submittedPlatform, submitted, timeClass, 100),
     enabled,
     staleTime: 120_000,   // PGN 파싱 비용이 크므로 2분 캐시
+  });
+
+  // Step 6: Stockfish 수 품질 분석 (시간이 오래 걸리므로 별도 staleTime)
+  const { data: moveQuality, isLoading: loadingMQ } = useQuery({
+    queryKey: ["move-quality", submittedPlatform, submitted, timeClass],
+    queryFn: () => getMoveQuality(submittedPlatform, submitted, timeClass, 5),
+    enabled,
+    staleTime: 300_000,   // 5분 캐시 (Stockfish 분석 비용)
+    retry: 1,
   });
 
   const isLoading = loadingFirst || loadingTree || loadingBW || loadingTP;
@@ -246,9 +256,9 @@ function DashboardContent() {
                     3-B. 전반적인 수 품질 비율
                   </h2>
                   <p className="text-zinc-500 text-xs mb-4">
-                    Brilliant · Best · Inaccuracy · Mistake · Blunder
+                    Best · Excellent · Good · Inaccuracy · Mistake · Blunder
                   </p>
-                  <MoveQualityDonut />
+                  <MoveQualityDonut data={moveQuality} isLoading={loadingMQ} />
                 </div>
               </section>
             </>
