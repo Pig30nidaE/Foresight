@@ -11,7 +11,7 @@ import {
   getMoveQuality,
 } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useMemo } from "react";
 import FirstMoveBar from "@/components/charts/FirstMoveBar";
 import OpeningTreeTable from "@/components/charts/OpeningTreeTable";
 import BestWorstCard from "@/components/charts/BestWorstCard";
@@ -28,6 +28,16 @@ import {
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
 
+type Period = "1w" | "1m" | "3m" | "6m" | "1y" | "custom";
+const PERIOD_OPTIONS: { label: string; value: Period; days?: number }[] = [
+  { label: "1주", value: "1w", days: 7 },
+  { label: "1개월", value: "1m", days: 30 },
+  { label: "3개월", value: "3m", days: 90 },
+  { label: "6개월", value: "6m", days: 180 },
+  { label: "1년", value: "1y", days: 365 },
+  { label: "직접 설정", value: "custom" },
+];
+
 function DashboardContent() {
   const params = useSearchParams();
   const router = useRouter();
@@ -39,6 +49,20 @@ function DashboardContent() {
   const [timeClass, setTimeClass] = useState<TimeClass>("blitz");
   const [submitted, setSubmitted] = useState(initUsername);
   const [submittedPlatform, setSubmittedPlatform] = useState<Platform>(initPlatform);
+  const [period, setPeriod] = useState<Period>("3m");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const sinceMs = useMemo(() => {
+    if (period === "custom") return customFrom ? new Date(customFrom).getTime() : undefined;
+    const opt = PERIOD_OPTIONS.find(p => p.value === period);
+    return opt?.days ? Date.now() - opt.days * 86_400_000 : undefined;
+  }, [period, customFrom]);
+
+  const untilMs = useMemo(() => {
+    if (period === "custom" && customTo) return new Date(customTo).getTime();
+    return undefined;
+  }, [period, customTo]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,44 +88,37 @@ function DashboardContent() {
   }, [profile?.preferred_time_class]);
 
   const { data: firstMoves, isLoading: loadingFirst } = useQuery({
-    queryKey: ["first-moves", submittedPlatform, submitted, timeClass],
-    queryFn: () => getFirstMoveStats(submittedPlatform, submitted, timeClass),
+    queryKey: ["first-moves", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
+    queryFn: () => getFirstMoveStats(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
     enabled,
   });
   const { data: openingTree, isLoading: loadingTree } = useQuery({
-    queryKey: ["opening-tree", submittedPlatform, submitted, timeClass],
-    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass),
+    queryKey: ["opening-tree", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
+    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
     enabled,
   });
   const { data: bestWorst, isLoading: loadingBW } = useQuery({
-    queryKey: ["best-worst", submittedPlatform, submitted, timeClass],
-    queryFn: () => getBestWorstOpenings(submittedPlatform, submitted, timeClass),
+    queryKey: ["best-worst", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
+    queryFn: () => getBestWorstOpenings(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
     enabled,
   });
   const { data: timePressure, isLoading: loadingTP } = useQuery({
-    queryKey: ["time-pressure", submittedPlatform, submitted, timeClass],
-    queryFn: () => getTimePressure(submittedPlatform, submitted, timeClass, 100),
+    queryKey: ["time-pressure", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
+    queryFn: () => getTimePressure(submittedPlatform, submitted, timeClass, 100, sinceMs, untilMs),
     enabled,
-    staleTime: 120_000,   // PGN 파싱 비용이 크므로 2분 캐시
+    staleTime: 120_000,
   });
 
   // Step 6: Stockfish 수 품질 분석 (시간이 오래 걸리므로 별도 staleTime)
   const { data: moveQuality, isLoading: loadingMQ } = useQuery({
-    queryKey: ["move-quality", submittedPlatform, submitted, timeClass],
+    queryKey: ["move-quality", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
     queryFn: () => getMoveQuality(submittedPlatform, submitted, timeClass, 5),
     enabled,
-    staleTime: 300_000,   // 5분 캐시 (Stockfish 분석 비용)
+    staleTime: 300_000,
     retry: 1,
   });
 
   const isLoading = loadingFirst || loadingTree || loadingBW || loadingTP;
-
-  // 타임클래스별 게임 수 표시용
-  const TC_GAME_COUNT: Record<string, number | undefined> = {
-    bullet: profile?.games_bullet ?? undefined,
-    blitz:  profile?.games_blitz  ?? undefined,
-    rapid:  profile?.games_rapid  ?? undefined,
-  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -158,6 +175,45 @@ function DashboardContent() {
         </button>
       </form>
 
+      {/* ── 기간 탭 ── */}
+      {submitted && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-lg overflow-hidden border border-zinc-800 shrink-0">
+            {PERIOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPeriod(opt.value)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  period === opt.value
+                    ? "bg-emerald-600 text-white"
+                    : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {period === "custom" && (
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+              />
+              <span>~</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {!submitted && (
         <div className="flex flex-col items-center py-24 gap-3 text-zinc-600">
           <span className="text-5xl select-none">♟️</span>
@@ -191,9 +247,6 @@ function DashboardContent() {
                       <span className="text-yellow-500">&#9889;</span>
                       <span className="text-zinc-500">Bullet</span>
                       <span className="text-white font-semibold">{profile.rating_bullet}</span>
-                      {profile.games_bullet != null && (
-                        <span className="text-zinc-600 text-xs">({profile.games_bullet})</span>
-                      )}
                     </span>
                   )}
                   {profile.rating_blitz != null && (
@@ -201,9 +254,6 @@ function DashboardContent() {
                       <span className="text-orange-400">⚡</span>
                       <span className="text-zinc-500">Blitz</span>
                       <span className="text-white font-semibold">{profile.rating_blitz}</span>
-                      {profile.games_blitz != null && (
-                        <span className="text-zinc-600 text-xs">({profile.games_blitz})</span>
-                      )}
                     </span>
                   )}
                   {profile.rating_rapid != null && (
@@ -211,19 +261,9 @@ function DashboardContent() {
                       <span className="text-blue-400">⏱</span>
                       <span className="text-zinc-500">Rapid</span>
                       <span className="text-white font-semibold">{profile.rating_rapid}</span>
-                      {profile.games_rapid != null && (
-                        <span className="text-zinc-600 text-xs">({profile.games_rapid})</span>
-                      )}
                     </span>
                   )}
                 </div>
-              </div>
-              {/* 현재 선택된 타임클래스 게임 수 */}
-              <div className="text-right shrink-0">
-                <p className="text-lg font-bold text-emerald-400 capitalize">{timeClass}</p>
-                {TC_GAME_COUNT[timeClass] != null && (
-                  <p className="text-xs text-zinc-500">{TC_GAME_COUNT[timeClass]}게임</p>
-                )}
               </div>
             </div>
           )}
@@ -238,7 +278,7 @@ function DashboardContent() {
             <div className="space-y-4 animate-fade-in">
               {/* ── Section 1 ── */}
               <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <SectionHeader number="1" title="백 / 흑 첫 수 선호도 및 승률" desc="가장 많이 사용한 오프닝 계열과 결과 분포" />
+                <SectionHeader title="백 / 흑 첫 수 선호도 및 승률" desc="가장 많이 사용한 오프닝 계열과 결과 분포" />
                 {loadingFirst ? (
                   <FirstMovesSkeleton />
                 ) : (
@@ -252,11 +292,11 @@ function DashboardContent() {
               {/* ── Section 2 ── */}
               <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <SectionHeader number="2-A" title="오프닝 트리 탐색기" desc="ECO 카테고리별 게임 수 및 승률 — 클릭하여 전개" />
+                  <SectionHeader title="오프닝 트리 탐색기" desc="ECO 카테고리별 게임 수 및 승률 — 클릭하여 전개" />
                   {loadingTree ? <OpeningTreeSkeleton /> : <OpeningTreeTable data={openingTree ?? []} />}
                 </div>
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <SectionHeader number="2-B" title="오프닝 퍼포먼스" desc="Best / Worst 오프닝 요약" />
+                  <SectionHeader title="오프닝 퍼포먼스" desc="Best / Worst 오프닝 요약" />
                   {loadingBW ? (
                     <BestWorstSkeleton />
                   ) : bestWorst ? (
@@ -270,11 +310,11 @@ function DashboardContent() {
               {/* ── Section 3 ── */}
               <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <SectionHeader number="3-A" title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" />
+                  <SectionHeader title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" />
                   {loadingTP ? <TimelineSkeleton /> : <BlunderTimeline data={timePressure} />}
                 </div>
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <SectionHeader number="3-B" title="전반적인 수 품질 비율" desc="Stockfish 분석 — Best · Excellent · Inaccuracy · Mistake · Blunder" />
+                  <SectionHeader title="전반적인 수 품질 비율" desc="Stockfish 분석 — Best · Excellent · Inaccuracy · Mistake · Blunder" />
                   {loadingMQ ? <DonutSkeleton /> : <MoveQualityDonut data={moveQuality} isLoading={false} />}
                 </div>
               </section>

@@ -88,33 +88,42 @@ export const getOpponentAnalysis = async (
 export const getFirstMoveStats = async (
   platform: Platform,
   username: string,
-  timeClass: TimeClass = "blitz"
+  timeClass: TimeClass = "blitz",
+  sinceMs?: number,
+  untilMs?: number,
 ) => {
-  const { data } = await api.get(`/stats/first-moves/${platform}/${username}`, {
-    params: { time_class: timeClass },
-  });
+  const params: Record<string, unknown> = { time_class: timeClass };
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  const { data } = await api.get(`/stats/first-moves/${platform}/${username}`, { params });
   return data as { white: FirstMoveEntry[]; black: FirstMoveEntry[] };
 };
 
 export const getOpeningTree = async (
   platform: Platform,
   username: string,
-  timeClass: TimeClass = "blitz"
+  timeClass: TimeClass = "blitz",
+  sinceMs?: number,
+  untilMs?: number,
 ) => {
-  const { data } = await api.get(`/stats/opening-tree/${platform}/${username}`, {
-    params: { time_class: timeClass },
-  });
+  const params: Record<string, unknown> = { time_class: timeClass };
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  const { data } = await api.get(`/stats/opening-tree/${platform}/${username}`, { params });
   return data as OpeningTreeNode[];
 };
 
 export const getBestWorstOpenings = async (
   platform: Platform,
   username: string,
-  timeClass: TimeClass = "blitz"
+  timeClass: TimeClass = "blitz",
+  sinceMs?: number,
+  untilMs?: number,
 ) => {
-  const { data } = await api.get(`/stats/opening-best-worst/${platform}/${username}`, {
-    params: { time_class: timeClass },
-  });
+  const params: Record<string, unknown> = { time_class: timeClass };
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  const { data } = await api.get(`/stats/opening-best-worst/${platform}/${username}`, { params });
   return data as BestWorstOpenings;
 };
 
@@ -122,11 +131,14 @@ export const getTimePressure = async (
   platform: Platform,
   username: string,
   timeClass: TimeClass = "blitz",
-  maxGames = 100
+  maxGames = 100,
+  sinceMs?: number,
+  untilMs?: number,
 ): Promise<TimePressureStats> => {
-  const { data } = await api.get(`/stats/time-pressure/${platform}/${username}`, {
-    params: { time_class: timeClass, max_games: maxGames },
-  });
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  const { data } = await api.get(`/stats/time-pressure/${platform}/${username}`, { params });
   return data as TimePressureStats;
 };
 

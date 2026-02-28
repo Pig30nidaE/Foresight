@@ -22,17 +22,20 @@ async def get_first_move_stats(
     username: str,
     time_class: str = Query(default="blitz"),
     max_games: int = Query(default=200),
+    since_ms: Optional[int] = Query(default=None),
+    until_ms: Optional[int] = Query(default=None),
 ):
     """
     MVP 섹션 1: 백/흑 첫 수 선호도 및 승률
-    - 백으로 가장 많이 둔 첫 수 (e4, d4, c4 등)
-    - 흑으로 상대 e4/d4에 대한 응수 (e5, c5, e6 등)
+    since_ms / until_ms (Unix ms) 로 기간 필터 가능.
     """
     try:
         if platform == Platform.chessdotcom:
-            games = await chessdotcom_svc.get_recent_games(username, max_games)
+            since_ts = since_ms // 1000 if since_ms else None
+            until_ts = until_ms // 1000 if until_ms else None
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class)
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         df = analysis_svc.build_dataframe(games)
         if not df.empty:
@@ -50,6 +53,8 @@ async def get_opening_tree(
     time_class: str = Query(default="blitz"),
     max_games: int = Query(default=300),
     depth: int = Query(default=3, ge=1, le=5),
+    since_ms: Optional[int] = Query(default=None),
+    until_ms: Optional[int] = Query(default=None),
 ):
     """
     MVP 섹션 2-A: 오프닝 트리 탐색기
@@ -57,9 +62,11 @@ async def get_opening_tree(
     """
     try:
         if platform == Platform.chessdotcom:
-            games = await chessdotcom_svc.get_recent_games(username, max_games)
+            since_ts = since_ms // 1000 if since_ms else None
+            until_ts = until_ms // 1000 if until_ms else None
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class)
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         df = analysis_svc.build_dataframe(games)
         if not df.empty:
@@ -77,15 +84,19 @@ async def get_best_worst_openings(
     time_class: str = Query(default="blitz"),
     max_games: int = Query(default=200),
     min_games: int = Query(default=5),
+    since_ms: Optional[int] = Query(default=None),
+    until_ms: Optional[int] = Query(default=None),
 ):
     """
     MVP 섹션 2-B: 오프닝 퍼포먼스 요약 (베스트 / 워스트)
     """
     try:
         if platform == Platform.chessdotcom:
-            games = await chessdotcom_svc.get_recent_games(username, max_games)
+            since_ts = since_ms // 1000 if since_ms else None
+            until_ts = until_ms // 1000 if until_ms else None
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class)
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         df = analysis_svc.build_dataframe(games)
         if not df.empty:
@@ -101,8 +112,10 @@ async def get_time_pressure(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=100, le=300),
+    max_games: int = Query(default=100, le=5000),
     pressure_threshold: float = Query(default=30.0, description="시간 압박 기준 잔여 시간(초)"),
+    since_ms: Optional[int] = Query(default=None),
+    until_ms: Optional[int] = Query(default=None),
 ):
     """
     MVP 섹션 3-A: 시간 압박 분석
@@ -114,9 +127,11 @@ async def get_time_pressure(
     """
     try:
         if platform == Platform.chessdotcom:
-            games = await chessdotcom_svc.get_recent_games(username, max_games)
+            since_ts = since_ms // 1000 if since_ms else None
+            until_ts = until_ms // 1000 if until_ms else None
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class)
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         if time_class:
             games = [g for g in games if g.time_class == time_class]

@@ -2,14 +2,16 @@
  * 로딩 스켈레톤 컴포넌트
  * CSS shimmer 애니메이션 (globals.css .skeleton 클래스 사용)
  */
+import type { CSSProperties } from "react";
 
 interface SkeletonProps {
   className?: string;
+  style?: CSSProperties;
 }
 
 /** 단일 shimmer 블록 */
-export function Skeleton({ className = "" }: SkeletonProps) {
-  return <div className={`skeleton ${className}`} aria-hidden="true" />;
+export function Skeleton({ className = "", style }: SkeletonProps) {
+  return <div className={`skeleton ${className}`} style={style} aria-hidden="true" />;
 }
 
 /** 섹션 1: 첫 수 바 차트 스켈레톤 */
