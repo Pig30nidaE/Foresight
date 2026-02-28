@@ -62,15 +62,21 @@ class LichessService:
         username: str,
         max_games: int = 100,
         perf_type: Optional[str] = None,  # bullet, blitz, rapid, classical
+        since_ms: Optional[int] = None,   # Unix milliseconds
+        until_ms: Optional[int] = None,   # Unix milliseconds
     ) -> List[GameSummary]:
-        """최근 게임 N개 조회 (ndjson 스트림)"""
-        params = {
-            "max": max_games,
+        """게임 목록 조회 (ndjson 스트림). since_ms/until_ms 로 기간 필터링 가능."""
+        params: dict = {
+            "max": 5000 if (since_ms or until_ms) else max_games,
             "opening": "true",
             "clocks": "false",
         }
         if perf_type:
             params["perfType"] = perf_type
+        if since_ms:
+            params["since"] = since_ms
+        if until_ms:
+            params["until"] = until_ms
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(

@@ -172,11 +172,11 @@ def stats() -> dict:
     return {"eco_count": len(_by_eco), "position_count": len(_by_epd)}
 
 
-# ── ECO 계열 설명 (A~E) ──────────────────────────────────────
+# ── ECO family labels (A~E) ─────────────────────────────────
 ECO_FAMILY_NAMES: dict[str, str] = {
-    "A": "A — 플랭크 오프닝 / d4 주도",
-    "B": "B — 반개방 게임 (1.e4, not …e5)",
-    "C": "C — 개방 게임 (1.e4 e5)",
-    "D": "D — 퀸 폰 오프닝 / 폐쇄 게임",
-    "E": "E — 인도 방어 (1.d4 Nf6)",
+    "A": "A — Flank & Irregular Openings",
+    "B": "B — Semi-Open Games (1.e4)",
+    "C": "C — Open Games (1.e4 e5)",
+    "D": "D — Closed & Semi-Closed Games",
+    "E": "E — Indian Defences (1.d4 Nf6)",
 }

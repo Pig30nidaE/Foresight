@@ -2,8 +2,10 @@
 Chess.com Public API 연동 서비스
 Docs: https://www.chess.com/news/view/published-data-api
 """
+import calendar
 import httpx
 import re
+from datetime import datetime
 from typing import List, Optional
 from app.core.config import settings
 from app.models.schemas import PlayerProfile, GameSummary, GameResult, Platform
@@ -112,33 +114,59 @@ class ChessDotComService:
         return [self._parse_game(game, username) for game in games_data]
 
     async def get_recent_games(
-        self, username: str, max_games: int = 100
+        self,
+        username: str,
+        max_games: int = 100,
+        since_ts: Optional[int] = None,   # Unix seconds (inclusive lower bound)
+        until_ts: Optional[int] = None,   # Unix seconds (inclusive upper bound)
     ) -> List[GameSummary]:
         """
-        아카이브 API를 기반으로 최신 게임 N개 조회.
-        최신 월부터 순서대로 누적하며 max_games 충족 시 중단.
+        아카이브 API를 기반으로 게임 조회.
+        since_ts/until_ts 가 주어지면 시간 범위로 필터링. (seconds)
+        시간 필터 없을 때는 최신 max_games 개만 반환.
         """
         archives = await self._get_archives(username)
         games: List[GameSummary] = []
+        HARD_CAP = 5000
+        using_time_filter = since_ts is not None or until_ts is not None
 
         async with httpx.AsyncClient(timeout=20) as client:
             for archive_url in archives:
-                if len(games) >= max_games:
+                if not using_time_filter and len(games) >= max_games:
                     break
+                if len(games) >= HARD_CAP:
+                    break
+
+                # since_ts 가 있으면 해당 월 이전 아카이브는 건너뜀
+                if since_ts is not None:
+                    m = re.search(r'/(\d{4})/(\d{2})$', archive_url)
+                    if m:
+                        yr, mo = int(m.group(1)), int(m.group(2))
+                        last_day = calendar.monthrange(yr, mo)[1]
+                        month_end = int(datetime(yr, mo, last_day, 23, 59, 59).timestamp())
+                        if month_end < since_ts:
+                            break  # 이하 아카이브는 모두 더 오래됨
+
                 try:
                     resp = await client.get(archive_url, headers=self.HEADERS)
                     resp.raise_for_status()
                     monthly = resp.json().get("games", [])
-                    # 월 내 최신순 정렬
                     monthly_sorted = sorted(
                         monthly, key=lambda g: g.get("end_time", 0), reverse=True
                     )
                     for raw in monthly_sorted:
-                        if len(games) >= max_games:
+                        if not using_time_filter and len(games) >= max_games:
                             break
+                        if len(games) >= HARD_CAP:
+                            break
+                        end_time = raw.get("end_time", 0)
+                        if since_ts is not None and end_time < since_ts:
+                            continue
+                        if until_ts is not None and end_time > until_ts:
+                            continue
                         games.append(self._parse_game(raw, username))
                 except Exception:
-                    continue  # 특정 월 실패해도 다음 월 시도
+                    continue
 
         return games
 
