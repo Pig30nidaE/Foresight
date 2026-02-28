@@ -15,6 +15,10 @@ export interface PlayerProfile {
   country?: string;
   avatar_url?: string;
   joined?: string;
+  games_bullet?: number;
+  games_blitz?: number;
+  games_rapid?: number;
+  preferred_time_class?: string;
 }
 
 export interface GameSummary {
