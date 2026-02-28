@@ -18,6 +18,8 @@ export interface PlayerProfile {
   games_bullet?: number;
   games_blitz?: number;
   games_rapid?: number;
+  games_classical?: number;
+  rating_classical?: number;
   preferred_time_class?: string;
 }
 

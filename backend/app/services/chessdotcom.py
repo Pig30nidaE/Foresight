@@ -73,6 +73,7 @@ class ChessDotComService:
         games_bullet = _record_count("chess_bullet")
         games_blitz  = _record_count("chess_blitz")
         games_rapid  = _record_count("chess_rapid")
+        # chess.com 에는 classical 카테고리가 없으므로 None
         tc_counts = {"bullet": games_bullet or 0, "blitz": games_blitz or 0, "rapid": games_rapid or 0}
         preferred = max(tc_counts, key=lambda k: tc_counts[k]) if any(tc_counts.values()) else None
 
@@ -82,12 +83,14 @@ class ChessDotComService:
             rating_rapid=self._extract_rating(stats, "chess_rapid"),
             rating_blitz=self._extract_rating(stats, "chess_blitz"),
             rating_bullet=self._extract_rating(stats, "chess_bullet"),
+            rating_classical=None,
             country=profile.get("country", "").split("/")[-1],
             avatar_url=profile.get("avatar"),
             joined=str(profile.get("joined", "")),
             games_bullet=games_bullet,
             games_blitz=games_blitz,
             games_rapid=games_rapid,
+            games_classical=None,
             preferred_time_class=preferred,
         )
 

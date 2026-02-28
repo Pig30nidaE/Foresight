@@ -28,13 +28,14 @@ import {
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
 
-type Period = "1w" | "1m" | "3m" | "6m" | "1y" | "custom";
+type Period = "1w" | "1m" | "3m" | "6m" | "1y" | "all" | "custom";
 const PERIOD_OPTIONS: { label: string; value: Period; days?: number }[] = [
   { label: "1주", value: "1w", days: 7 },
   { label: "1개월", value: "1m", days: 30 },
   { label: "3개월", value: "3m", days: 90 },
   { label: "6개월", value: "6m", days: 180 },
   { label: "1년", value: "1y", days: 365 },
+  { label: "전체", value: "all" },
   { label: "직접 설정", value: "custom" },
 ];
 
@@ -52,8 +53,10 @@ function DashboardContent() {
   const [period, setPeriod] = useState<Period>("3m");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [treeViewSide, setTreeViewSide] = useState<"white" | "black">("white");
 
   const sinceMs = useMemo(() => {
+    if (period === "all") return undefined;
     if (period === "custom") return customFrom ? new Date(customFrom).getTime() : undefined;
     const opt = PERIOD_OPTIONS.find(p => p.value === period);
     return opt?.days ? Date.now() - opt.days * 86_400_000 : undefined;
@@ -92,9 +95,14 @@ function DashboardContent() {
     queryFn: () => getFirstMoveStats(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
     enabled,
   });
-  const { data: openingTree, isLoading: loadingTree } = useQuery({
-    queryKey: ["opening-tree", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
+  const { data: openingTreeWhite, isLoading: loadingTreeW } = useQuery({
+    queryKey: ["opening-tree-white", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
+    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs, "white"),
+    enabled,
+  });
+  const { data: openingTreeBlack, isLoading: loadingTreeB } = useQuery({
+    queryKey: ["opening-tree-black", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
+    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs, "black"),
     enabled,
   });
   const { data: bestWorst, isLoading: loadingBW } = useQuery({
@@ -118,7 +126,25 @@ function DashboardContent() {
     retry: 1,
   });
 
-  const isLoading = loadingFirst || loadingTree || loadingBW || loadingTP;
+  const isLoading = loadingFirst || loadingTreeW || loadingTreeB || loadingBW || loadingTP;
+
+  const totalGames = useMemo(() => {
+    const w = (firstMoves?.white ?? []).reduce((s, e) => s + e.games, 0);
+    const b = (firstMoves?.black ?? []).reduce((s, e) => s + e.games, 0);
+    return w + b;
+  }, [firstMoves]);
+
+  const insufficientData = !loadingFirst && submitted !== "" && totalGames > 0 && totalGames < 10;
+
+  const tcGameCount = (tc: TimeClass): number | undefined => {
+    if (!profile) return undefined;
+    switch (tc) {
+      case "bullet": return profile.games_bullet;
+      case "blitz": return profile.games_blitz;
+      case "rapid": return profile.games_rapid;
+      case "classical": return profile.games_classical;
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -145,20 +171,26 @@ function DashboardContent() {
         </div>
 
         <div className="flex rounded-lg overflow-hidden border border-zinc-700 shrink-0">
-          {TIME_CLASSES.map((tc) => (
-            <button
-              key={tc}
-              type="button"
-              onClick={() => setTimeClass(tc)}
-              className={`px-3 py-2 text-sm capitalize transition-colors ${
-                timeClass === tc
-                  ? "bg-zinc-600 text-white"
-                  : "bg-zinc-900 text-zinc-400 hover:text-white"
-              }`}
-            >
-              {tc}
-            </button>
-          ))}
+          {TIME_CLASSES.map((tc) => {
+            const count = tcGameCount(tc);
+            return (
+              <button
+                key={tc}
+                type="button"
+                onClick={() => setTimeClass(tc)}
+                className={`px-3 py-2 text-sm capitalize transition-colors ${
+                  timeClass === tc
+                    ? "bg-zinc-600 text-white"
+                    : "bg-zinc-900 text-zinc-400 hover:text-white"
+                }`}
+              >
+                {tc}
+                {count != null && (
+                  <span className="ml-1 text-xs opacity-70">({count})</span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         <input
@@ -276,8 +308,19 @@ function DashboardContent() {
 
           {!isLoading && (
             <div className="space-y-4 animate-fade-in">
+              {/* 10게임 미만 블러 오버레이 */}
+              {insufficientData && (
+                <div className="relative bg-zinc-900 border border-amber-700/50 rounded-2xl p-6 text-center">
+                  <span className="text-amber-400 text-sm font-medium">
+                    ⚠️ 데이터 부족 — 현재 필터 기준 게임 수가 10게임 미만입니다.
+                  </span>
+                  <p className="text-zinc-500 text-xs mt-1">기간 범위를 늘리거나 다른 타임클래스를 선택해 보세요.</p>
+                </div>
+              )}
+
               {/* ── Section 1 ── */}
-              <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                 <SectionHeader title="백 / 흑 첫 수 선호도 및 승률" desc="가장 많이 사용한 오프닝 계열과 결과 분포" />
                 {loadingFirst ? (
                   <FirstMovesSkeleton />
@@ -290,12 +333,38 @@ function DashboardContent() {
               </section>
 
               {/* ── Section 2 ── */}
-              <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  <SectionHeader title="오프닝 트리 탐색기" desc="ECO 카테고리별 게임 수 및 승률 — 클릭하여 전개" />
-                  {loadingTree ? <OpeningTreeSkeleton /> : <OpeningTreeTable data={openingTree ?? []} />}
+              <section className={`grid grid-cols-1 lg:grid-cols-3 gap-4 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative">
+                  {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
+                  <SectionHeader title="오프닝 트리 탐색기" desc="오프닝별 게임 수 및 승률 — 클릭하여 전개" />
+                  {/* 백/흑 탭 */}
+                  <div className="flex gap-1 mb-3">
+                    {(["white", "black"] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setTreeViewSide(s)}
+                        className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
+                          treeViewSide === s
+                            ? s === "white"
+                              ? "bg-zinc-200 text-zinc-900"
+                              : "bg-zinc-700 text-zinc-100"
+                            : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                        }`}
+                      >
+                        {s === "white" ? "⬜ 백" : "⬛ 흑"}
+                      </button>
+                    ))}
+                  </div>
+                  {loadingTreeW || loadingTreeB ? (
+                    <OpeningTreeSkeleton />
+                  ) : (
+                    <OpeningTreeTable
+                      data={treeViewSide === "white" ? (openingTreeWhite ?? []) : (openingTreeBlack ?? [])}
+                    />
+                  )}
                 </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative">
+                  {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                   <SectionHeader title="오프닝 퍼포먼스" desc="Best / Worst 오프닝 요약" />
                   {loadingBW ? (
                     <BestWorstSkeleton />
@@ -308,12 +377,14 @@ function DashboardContent() {
               </section>
 
               {/* ── Section 3 ── */}
-              <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+              <section className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative">
+                  {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                   <SectionHeader title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" />
                   {loadingTP ? <TimelineSkeleton /> : <BlunderTimeline data={timePressure} />}
                 </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative">
+                  {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                   <SectionHeader title="전반적인 수 품질 비율" desc="Stockfish 분석 — Best · Excellent · Inaccuracy · Mistake · Blunder" />
                   {loadingMQ ? <DonutSkeleton /> : <MoveQualityDonut data={moveQuality} isLoading={false} />}
                 </div>

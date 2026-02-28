@@ -105,10 +105,12 @@ export const getOpeningTree = async (
   timeClass: TimeClass = "blitz",
   sinceMs?: number,
   untilMs?: number,
+  side?: "white" | "black",
 ) => {
   const params: Record<string, unknown> = { time_class: timeClass };
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
+  if (side) params.side = side;
   const { data } = await api.get(`/stats/opening-tree/${platform}/${username}`, { params });
   return data as OpeningTreeNode[];
 };

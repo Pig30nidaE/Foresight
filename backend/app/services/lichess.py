@@ -36,10 +36,16 @@ class LichessService:
             except (KeyError, TypeError):
                 return None
 
-        games_bullet = _perf_games("bullet")
-        games_blitz  = _perf_games("blitz")
-        games_rapid  = _perf_games("rapid")
-        tc_counts = {"bullet": games_bullet or 0, "blitz": games_blitz or 0, "rapid": games_rapid or 0}
+        games_bullet    = _perf_games("bullet")
+        games_blitz     = _perf_games("blitz")
+        games_rapid     = _perf_games("rapid")
+        games_classical = _perf_games("classical")
+        tc_counts = {
+            "bullet": games_bullet or 0,
+            "blitz": games_blitz or 0,
+            "rapid": games_rapid or 0,
+            "classical": games_classical or 0,
+        }
         preferred = max(tc_counts, key=lambda k: tc_counts[k]) if any(tc_counts.values()) else None
 
         return PlayerProfile(
@@ -48,12 +54,14 @@ class LichessService:
             rating_rapid=perfs.get("rapid", {}).get("rating"),
             rating_blitz=perfs.get("blitz", {}).get("rating"),
             rating_bullet=perfs.get("bullet", {}).get("rating"),
+            rating_classical=perfs.get("classical", {}).get("rating"),
             country=data.get("profile", {}).get("country"),
             avatar_url=None,
             joined=str(data.get("createdAt", "")),
             games_bullet=games_bullet,
             games_blitz=games_blitz,
             games_rapid=games_rapid,
+            games_classical=games_classical,
             preferred_time_class=preferred,
         )
 
