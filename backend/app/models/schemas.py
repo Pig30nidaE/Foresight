@@ -17,6 +17,12 @@ class PlayerProfile(BaseModel):
     country: Optional[str] = None
     avatar_url: Optional[str] = None
     joined: Optional[str] = None
+    # 타임클래스별 누적 게임 수
+    games_bullet: Optional[int] = None
+    games_blitz: Optional[int] = None
+    games_rapid: Optional[int] = None
+    # 가장 많이 플레이한 타임클래스 (자동 감지)
+    preferred_time_class: Optional[str] = None
 
 
 class GameResult(str, Enum):

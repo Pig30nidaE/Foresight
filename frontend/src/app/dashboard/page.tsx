@@ -10,7 +10,7 @@ import {
   getTimePressure,
 } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import FirstMoveBar from "@/components/charts/FirstMoveBar";
 import OpeningTreeTable from "@/components/charts/OpeningTreeTable";
 import BestWorstCard from "@/components/charts/BestWorstCard";
@@ -46,6 +46,14 @@ function DashboardContent() {
     queryFn: () => getPlayerProfile(submittedPlatform, submitted),
     enabled,
   });
+
+  // 프로필이 로드되면 플레이어가 가장 많이 플레이한 타임클래스로 자동 전환
+  useEffect(() => {
+    if (profile?.preferred_time_class) {
+      setTimeClass(profile.preferred_time_class as TimeClass);
+    }
+  }, [profile?.preferred_time_class]);
+
   const { data: firstMoves, isLoading: loadingFirst } = useQuery({
     queryKey: ["first-moves", submittedPlatform, submitted, timeClass],
     queryFn: () => getFirstMoveStats(submittedPlatform, submitted, timeClass),

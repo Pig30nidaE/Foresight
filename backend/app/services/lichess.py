@@ -30,6 +30,18 @@ class LichessService:
         data = resp.json()
         perfs = data.get("perfs", {})
 
+        def _perf_games(key: str) -> Optional[int]:
+            try:
+                return perfs[key].get("games", None)
+            except (KeyError, TypeError):
+                return None
+
+        games_bullet = _perf_games("bullet")
+        games_blitz  = _perf_games("blitz")
+        games_rapid  = _perf_games("rapid")
+        tc_counts = {"bullet": games_bullet or 0, "blitz": games_blitz or 0, "rapid": games_rapid or 0}
+        preferred = max(tc_counts, key=lambda k: tc_counts[k]) if any(tc_counts.values()) else None
+
         return PlayerProfile(
             username=username,
             platform=Platform.lichess,
@@ -37,8 +49,12 @@ class LichessService:
             rating_blitz=perfs.get("blitz", {}).get("rating"),
             rating_bullet=perfs.get("bullet", {}).get("rating"),
             country=data.get("profile", {}).get("country"),
-            avatar_url=None,  # Lichess는 아바타 URL 없음
+            avatar_url=None,
             joined=str(data.get("createdAt", "")),
+            games_bullet=games_bullet,
+            games_blitz=games_blitz,
+            games_rapid=games_rapid,
+            preferred_time_class=preferred,
         )
 
     async def get_recent_games(

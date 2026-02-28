@@ -60,6 +60,20 @@ class ChessDotComService:
         profile = profile_resp.json()
         stats = stats_resp.json()
 
+        def _record_count(key: str) -> Optional[int]:
+            """stats[key].record.win + loss + draw = 누적 게임 수"""
+            try:
+                rec = stats[key]["record"]
+                return rec.get("win", 0) + rec.get("loss", 0) + rec.get("draw", 0)
+            except (KeyError, TypeError):
+                return None
+
+        games_bullet = _record_count("chess_bullet")
+        games_blitz  = _record_count("chess_blitz")
+        games_rapid  = _record_count("chess_rapid")
+        tc_counts = {"bullet": games_bullet or 0, "blitz": games_blitz or 0, "rapid": games_rapid or 0}
+        preferred = max(tc_counts, key=lambda k: tc_counts[k]) if any(tc_counts.values()) else None
+
         return PlayerProfile(
             username=username,
             platform=Platform.chessdotcom,
@@ -69,6 +83,10 @@ class ChessDotComService:
             country=profile.get("country", "").split("/")[-1],
             avatar_url=profile.get("avatar"),
             joined=str(profile.get("joined", "")),
+            games_bullet=games_bullet,
+            games_blitz=games_blitz,
+            games_rapid=games_rapid,
+            preferred_time_class=preferred,
         )
 
     async def _get_archives(self, username: str) -> List[str]:
