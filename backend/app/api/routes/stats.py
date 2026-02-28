@@ -53,12 +53,13 @@ async def get_opening_tree(
     time_class: str = Query(default="blitz"),
     max_games: int = Query(default=300),
     depth: int = Query(default=3, ge=1, le=5),
+    side: Optional[str] = Query(default=None, description="white | black — 특정 색 게임만 필터"),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
 ):
     """
     MVP 섹션 2-A: 오프닝 트리 탐색기
-    - ECO 코드 기반 오프닝 트리 구조
+    - side='white' 또는 'black' 으로 색 필터 가능
     """
     try:
         if platform == Platform.chessdotcom:
@@ -71,6 +72,10 @@ async def get_opening_tree(
         df = analysis_svc.build_dataframe(games)
         if not df.empty:
             df = df[df["time_class"] == time_class]
+            if side == "white" and "white" in df.columns:
+                df = df[df["white"].str.lower() == username.lower()]
+            elif side == "black" and "black" in df.columns:
+                df = df[df["black"].str.lower() == username.lower()]
 
         return analysis_svc.get_opening_tree(df, depth)
     except Exception as e:

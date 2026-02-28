@@ -52,38 +52,6 @@ export default function BestWorstCard({ data }: Props) {
           <p className="text-xs text-red-300/70 mt-2">이 오프닝 준비를 강화하거나 회피를 고려하세요</p>
         </div>
       ) : null}
-
-      {/* 전체 오프닝 목록 */}
-      {data.all.length > 0 && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 text-xs text-zinc-600 uppercase tracking-wider border-b border-zinc-800">
-            <span>오프닝</span>
-            <div className="flex gap-4">
-              <span>게임</span>
-              <span className="w-10 text-right">승률</span>
-            </div>
-          </div>
-          <div className="divide-y divide-zinc-800/50">
-            {data.all.map((item) => (
-              <div
-                key={item.eco}
-                className="flex items-center justify-between px-3 py-2 hover:bg-zinc-800/40 transition-colors"
-              >
-                <div className="min-w-0 flex items-center gap-2">
-                  <span className="text-xs text-zinc-500 font-mono shrink-0 w-8">{item.eco}</span>
-                  <span className="text-zinc-300 text-xs truncate">{item.name}</span>
-                </div>
-                <div className="flex items-center gap-4 shrink-0 ml-2">
-                  <span className="text-zinc-500 text-xs">{item.games}</span>
-                  <span className={`font-bold text-xs w-10 text-right ${winColor(item.win_rate)}`}>
-                    {item.win_rate}%
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -28,6 +28,7 @@ const winColor = (r: number) =>
 
 export default function OpeningTreeTable({ data }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [showAll, setShowAll] = useState(false);
 
   if (!data.length) {
     return <p className="text-zinc-500 text-sm py-3">오프닝 데이터가 없습니다.</p>;
@@ -41,7 +42,9 @@ export default function OpeningTreeTable({ data }: Props) {
     });
   };
 
-  const rows = flatten(data, expanded);
+  const TOP_N = 5;
+  const topNodes = showAll ? data : data.slice(0, TOP_N);
+  const rows = flatten(topNodes, expanded);
 
   return (
     <div className="space-y-0.5 font-mono text-sm">
@@ -100,6 +103,16 @@ export default function OpeningTreeTable({ data }: Props) {
           </div>
         </div>
       ))}
+
+      {/* 더 보기 / 접기 토글 */}
+      {data.length > TOP_N && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="w-full mt-1 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 rounded transition-colors"
+        >
+          {showAll ? `▲ 접기` : `▼ 더 보기 (${data.length - TOP_N}개 더)`}
+        </button>
+      )}
     </div>
   );
 }

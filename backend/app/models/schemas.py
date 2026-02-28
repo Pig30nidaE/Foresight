@@ -21,6 +21,9 @@ class PlayerProfile(BaseModel):
     games_bullet: Optional[int] = None
     games_blitz: Optional[int] = None
     games_rapid: Optional[int] = None
+    games_classical: Optional[int] = None
+    # 클래시컬 레이팅 (Lichess 전용)
+    rating_classical: Optional[int] = None
     # 가장 많이 플레이한 타임클래스 (자동 감지)
     preferred_time_class: Optional[str] = None
 
