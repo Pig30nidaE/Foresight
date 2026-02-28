@@ -38,3 +38,4 @@ Thumbs.db
 # Coverage
 htmlcov/
 .coverage
+backend/app/services/_eco_cache.json

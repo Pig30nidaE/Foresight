@@ -3,82 +3,159 @@
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Cell,
 } from "recharts";
+import type { TimePressureStats } from "@/types";
 
-// Step 6(엔진/시간 분석) 연동 전까지 플레이스홀더 곡선
-const MOCK_DATA = [
-  { time: "10분+", blunder_rate: 3 },
-  { time: "8분", blunder_rate: 4 },
-  { time: "6분", blunder_rate: 5 },
-  { time: "4분", blunder_rate: 8 },
-  { time: "2분", blunder_rate: 14 },
-  { time: "1분", blunder_rate: 22 },
-  { time: "30초", blunder_rate: 35 },
-  { time: "10초", blunder_rate: 52 },
+// ── 목 데이터 (게임-클록 데이터 없을 때 표시용) ─────────────
+const MOCK_MOVE_DATA = [
+  { move_number: 5, pressure_pct: 2, avg_time_spent: 8 },
+  { move_number: 10, pressure_pct: 4, avg_time_spent: 7 },
+  { move_number: 15, pressure_pct: 7, avg_time_spent: 6 },
+  { move_number: 20, pressure_pct: 12, avg_time_spent: 5 },
+  { move_number: 25, pressure_pct: 18, avg_time_spent: 4 },
+  { move_number: 30, pressure_pct: 28, avg_time_spent: 3 },
+  { move_number: 35, pressure_pct: 40, avg_time_spent: 2 },
+  { move_number: 40, pressure_pct: 55, avg_time_spent: 1.5 },
 ];
 
+const PHASE_LABELS: Record<string, string> = {
+  opening: "오프닝",
+  middlegame: "미들게임",
+  endgame: "엔드게임",
+};
+
 interface Props {
-  data?: typeof MOCK_DATA;
-  isMock?: boolean;
+  data?: TimePressureStats;
 }
 
-export default function BlunderTimeline({
-  data = MOCK_DATA,
-  isMock = true,
-}: Props) {
+export default function BlunderTimeline({ data }: Props) {
+  const hasClock = data && data.games_with_clock > 0;
+  const isMock = !hasClock;
+
+  // ── 수 번호별 압박 비율 (실제 or 목) ─────────────────────
+  const moveData = hasClock
+    ? (data.per_move || []).filter((_, i) => i % 2 === 0 || data.per_move.length <= 15) // 너무 많으면 격수 표시
+    : MOCK_MOVE_DATA;
+
+  // ── 페이즈별 압박 비율 (실제) ─────────────────────────────
+  const phaseData = hasClock
+    ? data.by_phase.map((p) => ({
+        phase: PHASE_LABELS[p.phase] ?? p.phase,
+        pressure_pct: Math.round(p.pressure_ratio * 100),
+        avg_time: p.avg_time_spent ? Math.round(p.avg_time_spent) : null,
+        moves: p.moves,
+      }))
+    : null;
+
+  const overall = hasClock ? (data.overall["mine"] ?? Object.values(data.overall)[0]) : null;
+
   return (
-    <div>
+    <div className="space-y-4">
       {isMock && (
-        <p className="text-xs text-amber-400/80 mb-3 text-center">
-          ⚠️ 엔진 분석 연동 전 예시 데이터
+        <p className="text-xs text-amber-400/80 text-center">
+          ⚠️ 클록 데이터 없음 — 예시 곡선
         </p>
       )}
-      <ResponsiveContainer width="100%" height={180}>
-        <AreaChart data={data} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
-          <defs>
-            <linearGradient id="blunderGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-          <XAxis
-            dataKey="time"
-            tick={{ fill: "#71717a", fontSize: 11 }}
-            reversed
-          />
-          <YAxis
-            tickFormatter={(v) => `${v}%`}
-            tick={{ fill: "#71717a", fontSize: 11 }}
-            domain={[0, 60]}
-          />
-          <Tooltip
-            formatter={(v) => [`${v}%`, "블런더 발생률"]}
-            contentStyle={{
-              background: "#18181b",
-              border: "1px solid #3f3f46",
-              borderRadius: 8,
-              fontSize: 12,
-            }}
-          />
-          <Area
-            type="monotone"
-            dataKey="blunder_rate"
-            stroke="#ef4444"
-            strokeWidth={2}
-            fill="url(#blunderGrad)"
-            dot={{ fill: "#ef4444", r: 3 }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-      <p className="text-center text-xs text-zinc-600 mt-1">
-        ← 시간 여유 있음 &nbsp;|&nbsp; 시간 부족 →
-      </p>
+
+      {/* 클록 데이터가 있을 때: 요약 배지 */}
+      {hasClock && overall && (
+        <div className="flex gap-3 flex-wrap text-xs">
+          <div className="bg-zinc-800 rounded-lg px-3 py-2">
+            <span className="text-zinc-500">분석 게임</span>
+            <span className="ml-2 font-bold text-white">{data.games_with_clock}게임</span>
+          </div>
+          <div className="bg-zinc-800 rounded-lg px-3 py-2">
+            <span className="text-zinc-500">시간 압박 비율</span>
+            <span className={`ml-2 font-bold ${overall.pressure_ratio >= 0.3 ? "text-red-400" : overall.pressure_ratio >= 0.15 ? "text-amber-400" : "text-emerald-400"}`}>
+              {Math.round(overall.pressure_ratio * 100)}%
+            </span>
+          </div>
+          {overall.avg_time_spent != null && (
+            <div className="bg-zinc-800 rounded-lg px-3 py-2">
+              <span className="text-zinc-500">평균 사고 시간</span>
+              <span className="ml-2 font-bold text-zinc-200">{overall.avg_time_spent}초</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 페이즈별 압박률 막대 */}
+      {phaseData && phaseData.length > 0 && (
+        <div>
+          <p className="text-xs text-zinc-500 mb-2">페이즈별 시간 압박 비율</p>
+          <ResponsiveContainer width="100%" height={110}>
+            <BarChart data={phaseData} margin={{ left: -15, right: 4, top: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+              <XAxis dataKey="phase" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
+              <YAxis tickFormatter={(v) => `${v}%`} tick={{ fill: "#71717a", fontSize: 11 }} domain={[0, 100]} />
+              <Tooltip
+                formatter={(v) => [`${v}%`, "시간압박"]}
+                contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+              />
+              <Bar dataKey="pressure_pct" radius={[4, 4, 0, 0]}>
+                {phaseData.map((entry, i) => (
+                  <Cell
+                    key={i}
+                    fill={entry.pressure_pct >= 40 ? "#ef4444" : entry.pressure_pct >= 20 ? "#f59e0b" : "#22c55e"}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* 수 번호별 압박률 곡선 */}
+      <div>
+        <p className="text-xs text-zinc-500 mb-2">
+          수 번호별 시간 압박 비율{isMock ? " (예시)" : ""}
+        </p>
+        <ResponsiveContainer width="100%" height={160}>
+          <AreaChart data={moveData} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
+            <defs>
+              <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+            <XAxis
+              dataKey="move_number"
+              tickFormatter={(v) => `${v}수`}
+              tick={{ fill: "#71717a", fontSize: 11 }}
+            />
+            <YAxis
+              tickFormatter={(v) => `${v}%`}
+              tick={{ fill: "#71717a", fontSize: 11 }}
+              domain={[0, 100]}
+            />
+            <Tooltip
+              formatter={(v, name) => [
+                `${v}${name === "pressure_pct" ? "%" : "초"}`,
+                name === "pressure_pct" ? "시간압박" : "평균사고",
+              ]}
+              labelFormatter={(v) => `${v}수`}
+              contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+            />
+            <Area
+              type="monotone"
+              dataKey="pressure_pct"
+              stroke="#ef4444"
+              strokeWidth={2}
+              fill="url(#pressureGrad)"
+              dot={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

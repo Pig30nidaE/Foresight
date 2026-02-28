@@ -7,6 +7,7 @@ import {
   getFirstMoveStats,
   getOpeningTree,
   getBestWorstOpenings,
+  getTimePressure,
 } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
 import { Suspense, useState } from "react";
@@ -60,8 +61,14 @@ function DashboardContent() {
     queryFn: () => getBestWorstOpenings(submittedPlatform, submitted, timeClass),
     enabled,
   });
+  const { data: timePressure, isLoading: loadingTP } = useQuery({
+    queryKey: ["time-pressure", submittedPlatform, submitted, timeClass],
+    queryFn: () => getTimePressure(submittedPlatform, submitted, timeClass, 100),
+    enabled,
+    staleTime: 120_000,   // PGN 파싱 비용이 크므로 2분 캐시
+  });
 
-  const isLoading = loadingFirst || loadingTree || loadingBW;
+  const isLoading = loadingFirst || loadingTree || loadingBW || loadingTP;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -223,7 +230,7 @@ function DashboardContent() {
                   <p className="text-zinc-500 text-xs mb-4">
                     남은 시간에 따른 블런더 발생률 추이
                   </p>
-                  <BlunderTimeline />
+                  <BlunderTimeline data={timePressure} />
                 </div>
                 {/* 3-B */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">

@@ -9,6 +9,7 @@ import type {
   FirstMoveEntry,
   OpeningTreeNode,
   BestWorstOpenings,
+  TimePressureStats,
 } from "@/types";
 
 const api = axios.create({
@@ -114,6 +115,18 @@ export const getBestWorstOpenings = async (
     params: { time_class: timeClass },
   });
   return data as BestWorstOpenings;
+};
+
+export const getTimePressure = async (
+  platform: Platform,
+  username: string,
+  timeClass: TimeClass = "blitz",
+  maxGames = 100
+): Promise<TimePressureStats> => {
+  const { data } = await api.get(`/stats/time-pressure/${platform}/${username}`, {
+    params: { time_class: timeClass, max_games: maxGames },
+  });
+  return data as TimePressureStats;
 };
 
 export default api;
