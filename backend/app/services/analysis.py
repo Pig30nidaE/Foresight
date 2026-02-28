@@ -2,9 +2,10 @@
 게임 데이터 분석 서비스 — Pandas 기반 통계 처리
 """
 import pandas as pd
-from typing import List
+from typing import List, Optional
 from app.models.schemas import GameSummary, OpeningStats, PerformanceSummary, Platform
 from app.services import opening_db
+from app.services.pgn_parser import ParsedGame, MoveData
 
 
 class AnalysisService:
@@ -283,4 +284,150 @@ class AnalysisService:
                 }
                 for s in qualified[:10]
             ],
+        }
+
+    # ── Step 5: PGN 기반 시간 압박 분석 ─────────────────────────
+
+    def get_time_pressure_stats(
+        self,
+        parsed_games: List[ParsedGame],
+        username: str,
+    ) -> dict:
+        """
+        MVP 섹션 3-A: 시간 압박 블런더 분석
+        수 페이즈(opening/middlegame/endgame) × 시간 압박 여부 교차 집계.
+
+        Returns:
+        {
+          "total_games": int,
+          "games_with_clock": int,
+          "overall": {
+            "white": { pressure_ratio, avg_time_spent, pressure_moves, total_moves },
+            "black": { ... }
+          },
+          "by_phase": [
+            {
+              "phase": "opening"|"middlegame"|"endgame",
+              "white_pressure_ratio": float,  # 0~1
+              "black_pressure_ratio": float,
+              "white_avg_time": float|null,
+              "black_avg_time": float|null,
+            }, ...
+          ],
+          "per_move": [   # 수 번호(1~40)별 평균 소비 시간 + 압박 비율
+            { "move_number": int, "white_avg_time": float, "black_avg_time": float,
+              "white_pressure_pct": float, "black_pressure_pct": float }, ...
+          ]
+        }
+        """
+        uname = username.lower()
+
+        total = len(parsed_games)
+        clocked = [g for g in parsed_games
+                   if any(m.clock_after is not None for m in g.moves)]
+
+        if not clocked:
+            return {
+                "total_games": total,
+                "games_with_clock": 0,
+                "overall": {},
+                "by_phase": [],
+                "per_move": [],
+            }
+
+        # 각 게임에서 '플레이어가 백인지 흑인지' 판단
+        def _my_color(g: ParsedGame) -> Optional[str]:
+            if g.white.lower() == uname:
+                return "white"
+            if g.black.lower() == uname:
+                return "black"
+            return None   # 둘 다 아닌 경우(상대방 분석 시) None → 생략
+
+        # 수 레코드 평탄화
+        rows: list[dict] = []
+        for g in clocked:
+            my_color = _my_color(g)
+            for m in g.moves:
+                if m.clock_after is None:
+                    continue
+                is_mine = (my_color == m.color) if my_color else True
+                rows.append({
+                    "game_id": g.game_id,
+                    "color": m.color,
+                    "is_mine": is_mine,
+                    "move_number": m.move_number,
+                    "phase": m.phase,
+                    "clock_after": m.clock_after,
+                    "time_spent": m.time_spent,
+                    "is_pressure": m.is_time_pressure,
+                })
+
+        if not rows:
+            return {"total_games": total, "games_with_clock": 0,
+                    "overall": {}, "by_phase": [], "per_move": []}
+
+        df = pd.DataFrame(rows)
+        my_df = df[df["is_mine"]] if uname else df
+
+        # ── Overall ──────────────────────────────────────────────
+        def _summarise(sub: pd.DataFrame) -> dict:
+            if sub.empty:
+                return {}
+            n = len(sub)
+            p = sub["is_pressure"].sum()
+            times = sub["time_spent"].dropna()
+            return {
+                "total_moves": int(n),
+                "pressure_moves": int(p),
+                "pressure_ratio": round(float(p / n), 4) if n else 0.0,
+                "avg_time_spent": round(float(times.mean()), 2) if len(times) else None,
+            }
+
+        overall: dict = {}
+        if uname:
+            # 플레이어 색 무관하게 '내 수' 기준
+            overall["mine"] = _summarise(my_df)
+        else:
+            overall["white"] = _summarise(df[df["color"] == "white"])
+            overall["black"] = _summarise(df[df["color"] == "black"])
+
+        # ── By Phase ─────────────────────────────────────────────
+        by_phase = []
+        for phase in ["opening", "middlegame", "endgame"]:
+            ph_df = my_df[my_df["phase"] == phase] if uname else df[df["phase"] == phase]
+            if ph_df.empty:
+                continue
+            n = len(ph_df)
+            p = ph_df["is_pressure"].sum()
+            times = ph_df["time_spent"].dropna()
+            by_phase.append({
+                "phase": phase,
+                "moves": int(n),
+                "pressure_moves": int(p),
+                "pressure_ratio": round(float(p / n), 4) if n else 0.0,
+                "avg_time_spent": round(float(times.mean()), 2) if len(times) else None,
+            })
+
+        # ── Per Move (수 번호 1~40, 이후 생략) ────────────────────
+        per_move: list[dict] = []
+        for mn in range(1, 41):
+            mn_df = my_df[my_df["move_number"] == mn] if uname else df[df["move_number"] == mn]
+            if mn_df.empty:
+                continue
+            n = len(mn_df)
+            p = mn_df["is_pressure"].sum()
+            times = mn_df["time_spent"].dropna()
+            per_move.append({
+                "move_number": mn,
+                "games": int(n),
+                "pressure_pct": round(float(p / n * 100), 1) if n else 0.0,
+                "avg_time_spent": round(float(times.mean()), 2) if len(times) else None,
+            })
+
+        return {
+            "total_games": total,
+            "games_with_clock": len(clocked),
+            "overall": overall,
+            "by_phase": by_phase,
+            "per_move": per_move,
         }

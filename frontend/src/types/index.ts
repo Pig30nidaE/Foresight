@@ -105,3 +105,34 @@ export interface BestWorstOpenings {
     draws: number;
   }>;
 }
+
+// ────────────────────────────────────────────
+// Step 5: 시간 압박 분석 (Section 3-A)
+// ────────────────────────────────────────────
+export interface TimePressurePhase {
+  phase: "opening" | "middlegame" | "endgame";
+  moves: number;
+  pressure_moves: number;
+  pressure_ratio: number;   // 0~1
+  avg_time_spent: number | null;
+}
+
+export interface TimePressurePerMove {
+  move_number: number;
+  games: number;
+  pressure_pct: number;     // 0~100
+  avg_time_spent: number | null;
+}
+
+export interface TimePressureStats {
+  total_games: number;
+  games_with_clock: number;
+  overall: Record<string, {
+    total_moves: number;
+    pressure_moves: number;
+    pressure_ratio: number;
+    avg_time_spent: number | null;
+  }>;
+  by_phase: TimePressurePhase[];
+  per_move: TimePressurePerMove[];
+}

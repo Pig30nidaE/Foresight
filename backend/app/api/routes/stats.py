@@ -1,6 +1,6 @@
 """
 첫 수 선호도, 오프닝 트리, 수 품질 분석 엔드포인트
-MVP 섹션 1, 2 대응
+MVP 섹션 1, 2, 3 대응
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
@@ -8,6 +8,7 @@ from app.models.schemas import Platform
 from app.services.chessdotcom import ChessDotComService
 from app.services.lichess import LichessService
 from app.services.analysis import AnalysisService
+from app.services.pgn_parser import parse_games_bulk
 
 router = APIRouter()
 chessdotcom_svc = ChessDotComService()
@@ -91,5 +92,36 @@ async def get_best_worst_openings(
             df = df[df["time_class"] == time_class]
 
         return analysis_svc.get_best_worst_openings(df, min_games)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/time-pressure/{platform}/{username}")
+async def get_time_pressure(
+    platform: Platform,
+    username: str,
+    time_class: str = Query(default="blitz"),
+    max_games: int = Query(default=100, le=300),
+    pressure_threshold: float = Query(default=30.0, description="시간 압박 기준 잔여 시간(초)"),
+):
+    """
+    MVP 섹션 3-A: 시간 압박 분석
+    - PGN 클록 어노테이션 `{[%clk H:MM:SS]}` 파싱
+    - 수 페이즈(opening/middlegame/endgame)별 시간 압박 비율
+    - 수 번호별 평균 소비 시간 + 압박 퍼센트
+
+    games_with_clock 이 0이면 해당 플랫폼/타임클래스에 클록 데이터가 없음.
+    """
+    try:
+        if platform == Platform.chessdotcom:
+            games = await chessdotcom_svc.get_recent_games(username, max_games)
+        else:
+            games = await lichess_svc.get_recent_games(username, max_games, time_class)
+
+        if time_class:
+            games = [g for g in games if g.time_class == time_class]
+
+        parsed = parse_games_bulk(games, pressure_threshold=pressure_threshold)
+        return analysis_svc.get_time_pressure_stats(parsed, username)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
