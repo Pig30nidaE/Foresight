@@ -9,9 +9,6 @@ import {
   getBestWorstOpenings,
   getTimePressure,
   getTacticalPatterns,
-  getPerformanceSummary,
-  getMoveQuality,
-  getRatingHistory,
 } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
 import { Suspense, useState, useEffect, useMemo } from "react";
@@ -20,8 +17,6 @@ import OpeningTreeTable from "@/components/charts/OpeningTreeTable";
 import BestWorstCard from "@/components/charts/BestWorstCard";
 import BlunderTimeline from "@/components/charts/BlunderTimeline";
 import TacticalPatternsCard from "@/components/charts/TacticalPatternsCard";
-import MoveQualityDonut from "@/components/charts/MoveQualityDonut";
-import RatingTrendChart from "@/components/charts/RatingTrendChart";
 import SectionHeader from "@/components/ui/SectionHeader";
 import {
   FirstMovesSkeleton,
@@ -130,32 +125,6 @@ function DashboardContent() {
     retry: 1,
   });
 
-  // 퍼포먼스 요약 (승/패/무 + recent_form)
-  const { data: performance } = useQuery({
-    queryKey: ["performance", submittedPlatform, submitted, timeClass],
-    queryFn: () => getPerformanceSummary(submittedPlatform, submitted, timeClass),
-    enabled,
-    staleTime: 120_000,
-  });
-
-  // 레이팅 히스토리 트렌드
-  const { data: ratingHistory, isLoading: loadingRH } = useQuery({
-    queryKey: ["rating-history", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getRatingHistory(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
-    enabled,
-    staleTime: 120_000,
-  });
-
-  // 수 품질 분석 (Stockfish — 느림, 비활성화 시 수동 사용)
-  const [mqEnabled, setMqEnabled] = useState(false);
-  const { data: moveQuality, isLoading: loadingMQ } = useQuery({
-    queryKey: ["move-quality", submittedPlatform, submitted, timeClass],
-    queryFn: () => getMoveQuality(submittedPlatform, submitted, timeClass, 5),
-    enabled: enabled && mqEnabled,
-    staleTime: 600_000,
-    retry: 0,
-  });
-
   const isLoading = loadingFirst || loadingTreeW || loadingTreeB || loadingBW || loadingTP;
 
   const totalGames = useMemo(() => {
@@ -177,11 +146,11 @@ function DashboardContent() {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-8">
       {/* ── Search Bar (Section 0) ── */}
       <form
         onSubmit={handleSearch}
-        className="flex flex-wrap gap-3 items-center bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4"
+        className="flex flex-wrap gap-3 items-center bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5"
       >
         <div className="flex rounded-lg overflow-hidden border border-zinc-700 shrink-0">
           {(["chess.com", "lichess"] as Platform[]).map((p) => (
@@ -287,19 +256,19 @@ function DashboardContent() {
         <>
           {/* Profile Header */}
           {profile && (
-            <div className="flex items-center gap-4 px-1 animate-fade-in">
+            <div className="flex items-center gap-5 px-1 animate-fade-in">
               {profile.avatar_url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={profile.avatar_url}
                   alt={submitted}
-                  className="w-12 h-12 rounded-full border-2 border-zinc-700"
+                  className="w-16 h-16 rounded-full border-2 border-zinc-700"
                 />
               )}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-bold text-white truncate">{submitted}</h2>
-                  <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full capitalize">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-2xl font-bold text-white truncate">{submitted}</h2>
+                  <span className="text-sm text-zinc-500 bg-zinc-800 px-2.5 py-1 rounded-full capitalize">
                     {submittedPlatform}
                   </span>
                 </div>
@@ -337,7 +306,7 @@ function DashboardContent() {
           )}
 
           {!isLoading && (
-            <div className="space-y-4 animate-fade-in">
+            <div className="space-y-6 animate-fade-in">
               {/* 10게임 미만 블러 오버레이 */}
               {insufficientData && (
                 <div className="relative bg-zinc-900 border border-amber-700/50 rounded-2xl p-6 text-center">
@@ -348,98 +317,14 @@ function DashboardContent() {
                 </div>
               )}
 
-              {/* ── KPI + 레이팅 트렌드 ── */}
-              {performance && (
-                <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-                  {/* KPI 카드 (왼쪽 2열) */}
-                  <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">퍼포먼스 요약</h3>
-                      <span className="text-xs text-zinc-600">{performance.total_games}게임</span>
-                    </div>
-                    {/* Win / Draw / Loss 바 */}
-                    {performance.total_games > 0 && (
-                      <div>
-                        <div className="flex rounded-full overflow-hidden h-2.5 mb-2">
-                          <div
-                            className="bg-emerald-500 transition-all"
-                            style={{ width: `${(performance.wins / performance.total_games) * 100}%` }}
-                          />
-                          <div
-                            className="bg-zinc-500 transition-all"
-                            style={{ width: `${(performance.draws / performance.total_games) * 100}%` }}
-                          />
-                          <div
-                            className="bg-red-500 transition-all"
-                            style={{ width: `${(performance.losses / performance.total_games) * 100}%` }}
-                          />
-                        </div>
-                        <div className="grid grid-cols-3 text-center gap-2">
-                          <div>
-                            <p className="text-emerald-400 font-bold text-lg">{performance.wins}</p>
-                            <p className="text-zinc-600 text-xs">승</p>
-                          </div>
-                          <div>
-                            <p className="text-zinc-400 font-bold text-lg">{performance.draws}</p>
-                            <p className="text-zinc-600 text-xs">무</p>
-                          </div>
-                          <div>
-                            <p className="text-red-400 font-bold text-lg">{performance.losses}</p>
-                            <p className="text-zinc-600 text-xs">패</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {/* 승률 */}
-                    <div className="flex items-baseline gap-2 pt-1 border-t border-zinc-800">
-                      <span className={`text-3xl font-bold ${
-                        performance.win_rate >= 55 ? "text-emerald-400"
-                        : performance.win_rate >= 45 ? "text-amber-400"
-                        : "text-red-400"
-                      }`}>
-                        {performance.win_rate}%
-                      </span>
-                      <span className="text-zinc-500 text-sm">승률</span>
-                    </div>
-                    {/* 최근 폼 */}
-                    {performance.recent_form.length > 0 && (
-                      <div>
-                        <p className="text-xs text-zinc-500 mb-1.5">최근 {performance.recent_form.length}게임 폼</p>
-                        <div className="flex gap-0.5 flex-wrap">
-                          {performance.recent_form.map((r, i) => (
-                            <div
-                              key={i}
-                              title={r === "win" ? "승" : r === "draw" ? "무" : "패"}
-                              className={`w-3.5 h-3.5 rounded-sm ${
-                                r === "win" ? "bg-emerald-500"
-                                : r === "draw" ? "bg-zinc-500"
-                                : "bg-red-500"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 레이팅 트렌드 (오른쪽 3열) */}
-                  <div className="lg:col-span-3 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-                    <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">
-                      레이팅 트렌드
-                    </h3>
-                    <RatingTrendChart data={ratingHistory ?? []} isLoading={loadingRH} />
-                  </div>
-                </section>
-              )}
-
               {/* ── Section 1 ── */}
-              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                 <SectionHeader title="백 / 흑 첫 수 선호도 및 승률" desc="가장 많이 사용한 오프닝 계열과 결과 분포" />
                 {loadingFirst ? (
                   <FirstMovesSkeleton />
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
                     <FirstMoveBar data={firstMoves?.white ?? []} side="white" />
                     <FirstMoveBar data={firstMoves?.black ?? []} side="black" />
                   </div>
@@ -447,8 +332,8 @@ function DashboardContent() {
               </section>
 
               {/* ── Section 2 ── */}
-              <section className={`grid grid-cols-1 lg:grid-cols-3 gap-4 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative">
+              <section className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative">
                   {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                   <SectionHeader title="오프닝 트리 탐색기" desc="오프닝별 게임 수 및 승률 — 클릭하여 전개" />
                   {/* 백/흑 탭 */}
@@ -477,7 +362,7 @@ function DashboardContent() {
                     />
                   )}
                 </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative">
                   {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                   <SectionHeader title="오프닝 퍼포먼스" desc="Best / Worst 오프닝 요약" />
                   {loadingBW ? (
@@ -491,53 +376,17 @@ function DashboardContent() {
               </section>
 
               {/* ── Section 3 – 시간 압박 블런더 비율 ── */}
-              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                 <SectionHeader title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" />
                 {loadingTP ? <TimelineSkeleton /> : <BlunderTimeline data={timePressure} />}
               </section>
 
               {/* ── Section 4 – 전술 패턴 분석 ── */}
-              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                 <SectionHeader title="전술 패턴 분석" desc="ML 기반 10종 전술 패턴 강점 · 약점 분석" />
                 <TacticalPatternsCard data={tacticalPatterns} isLoading={loadingTactical} />
-              </section>
-
-              {/* ── Section 5 – 수 품질 분석 (Stockfish, 수동 실행) ── */}
-              <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <div className="flex items-start justify-between gap-4 mb-4">
-                  <div>
-                    <SectionHeader
-                      title="수 품질 정밀 분석"
-                      desc="Stockfish 엔진으로 최근 5게임의 Best/Blunder 비율 및 정확도 산출"
-                    />
-                  </div>
-                  {!mqEnabled && (
-                    <button
-                      onClick={() => setMqEnabled(true)}
-                      className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors"
-                    >
-                      분석 시작
-                    </button>
-                  )}
-                </div>
-                {mqEnabled ? (
-                  <MoveQualityDonut data={moveQuality} isLoading={loadingMQ} />
-                ) : (
-                  <div className="flex items-center gap-3 py-4 text-zinc-600 text-sm">
-                    <span className="text-2xl">🔍</span>
-                    <p>
-                      수 품질 분석은 Stockfish 엔진을 사용하며 약 20~40초가 소요됩니다.{" "}
-                      <button
-                        onClick={() => setMqEnabled(true)}
-                        className="text-emerald-400 hover:underline"
-                      >
-                        분석 시작
-                      </button>
-                    </p>
-                  </div>
-                )}
               </section>
             </div>
           )}

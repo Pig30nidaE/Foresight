@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "내 분석" },
+  { href: "/dashboard", label: "대시보드" },
+  { href: "/analysis",  label: "내 게임 분석" },
   { href: "/opponent",  label: "상대 분석" },
 ];
 

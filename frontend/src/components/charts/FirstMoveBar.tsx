@@ -1,98 +1,98 @@
 "use client";
 
 import type { FirstMoveEntry } from "@/types";
-import clsx from "clsx";
 
 interface Props {
   data: FirstMoveEntry[];
   side: "white" | "black";
 }
 
+function winRateBadge(wr: number) {
+  if (wr >= 55) return { bg: "bg-emerald-500/20", text: "text-emerald-400", border: "border-emerald-500/40" };
+  if (wr >= 45) return { bg: "bg-amber-500/20",   text: "text-amber-400",   border: "border-amber-500/40" };
+  return          { bg: "bg-red-500/20",    text: "text-red-400",    border: "border-red-500/40" };
+}
+
 const SIDE_LABEL: Record<"white" | "black", string> = {
-  white: "백(White)으로",
-  black: "흑(Black)으로",
+  white: "백 (White)",
+  black: "흑 (Black)",
 };
 
 export default function FirstMoveBar({ data, side }: Props) {
   if (!data.length) {
     return (
-      <p className="text-zinc-500 text-sm py-3">데이터가 부족합니다.</p>
+      <p className="text-zinc-500 text-sm py-4 text-center">데이터가 부족합니다.</p>
     );
   }
 
-  const maxGames = Math.max(...data.map((d) => d.games));
+  const sorted   = [...data].sort((a, b) => b.games - a.games).slice(0, 8);
+  const maxGames = Math.max(...sorted.map((e) => e.games), 1);
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-medium text-zinc-400">
-        {SIDE_LABEL[side]} 첫 수
-      </h3>
-      {data.map((entry) => {
-        const widthWin  = entry.games ? (entry.wins   / entry.games) * 100 : 0;
-        const widthDraw = entry.games ? (entry.draws  / entry.games) * 100 : 0;
-        const widthLoss = entry.games ? (entry.losses / entry.games) * 100 : 0;
-        const barWidth  = Math.round((entry.games / maxGames) * 100);
+    <div className="space-y-2">
+      <div className="text-sm font-semibold text-zinc-300 mb-4">{SIDE_LABEL[side]}</div>
+
+      {sorted.map((entry) => {
+        const widthPct = Math.round((entry.games / maxGames) * 100);
+        const wPct     = entry.games > 0 ? (entry.wins   / entry.games) * 100 : 0;
+        const dPct     = entry.games > 0 ? (entry.draws  / entry.games) * 100 : 0;
+        const badge    = winRateBadge(entry.win_rate);
 
         return (
-          <div key={entry.eco} className="space-y-1">
-            {/* Label Row */}
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex gap-2 items-center">
-                <span className="font-mono font-bold text-emerald-300 text-sm w-10">
+          <div key={entry.eco} className="mb-3">
+            {/* Label row */}
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm font-mono font-bold text-emerald-300 shrink-0 w-10">
                   {entry.eco}
                 </span>
-              </span>
-              <span className="text-zinc-400">
-                {entry.games}게임 &nbsp;
-                <span className="text-emerald-400">{entry.wins}승</span>
-                <span className="text-zinc-600"> · </span>
-                <span className="text-zinc-400">{entry.draws}무</span>
-                <span className="text-zinc-600"> · </span>
-                <span className="text-red-400">{entry.losses}패</span>
-              </span>
+                <span className="text-sm text-zinc-300 truncate max-w-[200px]">
+                  {entry.first_move_category}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 ml-2 shrink-0">
+                <span
+                  className={`text-xs font-bold px-2.5 py-1 rounded-full border
+                    ${badge.bg} ${badge.text} ${badge.border}`}
+                >
+                  {entry.win_rate.toFixed(1)}%
+                </span>
+                <span className="text-xs text-zinc-500">{entry.games}국</span>
+              </div>
             </div>
 
-            {/* Composite Bar */}
-            <div
-              className="h-5 rounded overflow-hidden bg-zinc-800 relative"
-              style={{ width: `${Math.max(barWidth, 20)}%` }}
-            >
-              <div className="flex h-full w-full">
-                <div
-                  className="bg-emerald-500 h-full transition-all"
-                  style={{ width: `${widthWin}%` }}
-                  title={`승: ${entry.wins}`}
-                />
-                <div
-                  className="bg-zinc-500 h-full transition-all"
-                  style={{ width: `${widthDraw}%` }}
-                  title={`무: ${entry.draws}`}
-                />
-                <div
-                  className="bg-red-500 h-full transition-all"
-                  style={{ width: `${widthLoss}%` }}
-                  title={`패: ${entry.losses}`}
-                />
+            {/* Composite Bar — always full-width proportional */}
+            <div className="w-full bg-zinc-800 rounded-full h-7 overflow-hidden">
+              <div
+                className="h-full rounded-full flex overflow-hidden transition-all duration-300"
+                style={{ width: `${widthPct}%` }}
+              >
+                <div className="bg-emerald-600 h-full" style={{ width: `${wPct}%` }} />
+                <div className="bg-zinc-500 h-full" style={{ width: `${dPct}%` }} />
+                <div className="bg-red-700 h-full flex-1" />
               </div>
-              {/* Win rate label */}
-              <span className="absolute right-2 top-0 bottom-0 flex items-center text-[10px] font-bold text-white">
-                {entry.win_rate}%
-              </span>
+            </div>
+
+            {/* W / D / L */}
+            <div className="flex gap-3 mt-1 text-xs text-zinc-500">
+              <span className="text-emerald-500 font-medium">{entry.wins}W</span>
+              <span className="text-zinc-400">{entry.draws}D</span>
+              <span className="text-red-500 font-medium">{entry.losses}L</span>
             </div>
           </div>
         );
       })}
 
       {/* Legend */}
-      <div className="flex gap-4 text-xs text-zinc-500 pt-1">
-        <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> 승
+      <div className="flex gap-5 text-xs text-zinc-500 pt-2 border-t border-zinc-800/60">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-emerald-600 inline-block" /> 승
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded-sm bg-zinc-500 inline-block" /> 무
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-zinc-500 inline-block" /> 무
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded-sm bg-red-500 inline-block" /> 패
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-red-700 inline-block" /> 패
         </span>
       </div>
     </div>

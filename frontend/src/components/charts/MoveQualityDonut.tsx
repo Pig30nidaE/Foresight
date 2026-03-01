@@ -11,12 +11,12 @@ import type { MoveQualityStats } from "@/types";
 
 // 플레이스홀더 (엔진 분석 결과 없을 때)
 const PLACEHOLDER = [
-  { category: "Best",       emoji: "✅", color: "#10b981", count: 0, percentage: 0 },
-  { category: "Excellent",  emoji: "👍", color: "#34d399", count: 0, percentage: 0 },
-  { category: "Good",       emoji: "🆗", color: "#6ee7b7", count: 0, percentage: 0 },
-  { category: "Inaccuracy", emoji: "⚡", color: "#f59e0b", count: 0, percentage: 0 },
-  { category: "Mistake",    emoji: "❌", color: "#f97316", count: 0, percentage: 0 },
-  { category: "Blunder",    emoji: "💀", color: "#ef4444", count: 0, percentage: 0 },
+  { category: "Best",       emoji: "★",  color: "#10b981", count: 0, percentage: 0 },
+  { category: "Excellent",  emoji: "!",  color: "#34d399", count: 0, percentage: 0 },
+  { category: "Good",       emoji: "⊙",  color: "#6ee7b7", count: 0, percentage: 0 },
+  { category: "Inaccuracy", emoji: "?!", color: "#f59e0b", count: 0, percentage: 0 },
+  { category: "Mistake",    emoji: "?",  color: "#f97316", count: 0, percentage: 0 },
+  { category: "Blunder",    emoji: "??", color: "#ef4444", count: 0, percentage: 0 },
 ];
 
 const CustomTooltip = ({

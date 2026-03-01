@@ -9,10 +9,10 @@ interface Props {
 
 export default function SectionHeader({ title, desc }: Props) {
   return (
-    <div className="mb-4">
-      <h2 className="text-base font-semibold text-white leading-tight">{title}</h2>
+    <div className="mb-6">
+      <h2 className="text-xl font-bold text-white leading-tight">{title}</h2>
       {desc && (
-        <p className="text-zinc-500 text-xs mt-1">{desc}</p>
+        <p className="text-zinc-400 text-sm mt-1.5">{desc}</p>
       )}
     </div>
   );

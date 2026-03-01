@@ -57,111 +57,21 @@ export interface PerformanceSummary {
   draws: number;
   win_rate: number;
   top_openings: OpeningStats[];
-  recent_form: string[];  // 최근 게임 결과 (최신순): ["win","loss","draw",...]
-}
-
-export interface RatingDataPoint {
-  date: number;    // Unix timestamp (seconds)
-  rating: number;
-}
-
-export interface OpponentEcoGroupStats {
-  eco_group: string;
-  eco_group_name: string;
-  games: number;
-  win_rate: number;
-  avg_opening_cp_loss: number | null;
-  top_opening: string;
-}
-
-export interface OpponentOpeningProfile {
-  white_tree: OpponentEcoGroupStats[];
-  black_tree: OpponentEcoGroupStats[];
-  weakest_as_white: string | null;
-  weakest_as_black: string | null;
-}
-
-export interface OpponentPhaseData {
-  avg_cp_loss: number | null;
-  score: number | null;
-  n: number;
-  label: string;
-}
-
-export interface OpponentPhaseWeakness {
-  opening?: OpponentPhaseData;
-  middlegame?: OpponentPhaseData;
-  endgame?: OpponentPhaseData;
-  weakest_phase: string | null;
-}
-
-export interface OpponentStyleProfile {
-  tactical_score: number;
-  time_management_score: number;
-  complexity_preference: string;
-  game_length_tendency: string;
-  clock_pressure_threshold: number;
-  opening_preparation_score: number;
-  queen_exchange_rate: number;
-  opposite_castling_rate: number;
-}
-
-export interface LGBMBlunderTrigger {
-  feature: string;
-  impact: number;
-  description: string;
-}
-
-export interface LGBMInsights {
-  available: boolean;
-  reason?: string;
-  blunder_triggers?: LGBMBlunderTrigger[];
-  phase_top_triggers?: Record<string, { top_trigger: string | null }>;
-  cv_mae?: number | null;
-  games_used?: number;
-}
-
-export interface StyleCluster {
-  id: number;
-  n_games: number;
-  win_rate: number;
-  avg_cp_loss: number | null;
-  label: string;
-  is_weakness: boolean;
-}
-
-export interface StyleClusters {
-  clusters: StyleCluster[];
-  worst_cluster: string | null;
-  n_clusters: number;
-}
-
-export interface PrepAdvice {
-  priority: number;
-  category: string;
-  title: string;
-  detail: string;
-  confidence: "high" | "medium" | "low";
-  evidence: string;
 }
 
 export interface OpponentAnalysis {
-  total_games: number;
+  username: string;
+  platform: Platform;
+  total_games_analyzed: number;
   win_rate: number;
-  summary: {
-    style_tag: string;
-    key_insight: string;
-    games_analyzed: number;
-    sf_games_analyzed: number;
-  };
-  opening_profile: OpponentOpeningProfile;
-  phase_weakness: OpponentPhaseWeakness;
-  style_profile: OpponentStyleProfile;
-  ml_insights: {
-    lgbm: LGBMInsights;
-    style_clusters: StyleClusters | null;
-  };
-  preparation_advice: PrepAdvice[];
+  loss_rate: number;
+  frequent_openings: OpeningStats[];
+  result_trend: Array<{
+    played_at: string;
+    win: number;
+    loss: number;
+    draw: number;
+  }>;
 }
 
 // ────────────────────────────────────────────
@@ -292,32 +202,11 @@ export interface ClusterAnalysis {
   top_strength: string | null;
 }
 
-export interface XGBoostRiskFactor {
-  feature: string;
-  importance: number;
-  description: string;
-}
-
-export interface XGBoostFeatureImportance {
-  feature: string;
-  importance: number;
-}
-
-export interface XGBoostProfile {
-  blunder_game_rate: number;
-  top_risk_factors: XGBoostRiskFactor[];
-  feature_importances: XGBoostFeatureImportance[];
-  model_accuracy: number;
-  games_analyzed: number;
-  description: string;
-}
-
 export interface TacticalAnalysis {
   total_games: number;
   patterns: TacticalPattern[];
   strengths: TacticalPattern[];
   weaknesses: TacticalPattern[];
   cluster_analysis: ClusterAnalysis | null;
-  xgboost_profile: XGBoostProfile | null;
 }
 

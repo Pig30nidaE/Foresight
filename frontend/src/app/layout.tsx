@@ -21,15 +21,15 @@ export default function RootLayout({
       <body className={`${inter.className} bg-zinc-950 text-zinc-100 min-h-screen`}>
         <Providers>
           <header className="border-b border-zinc-800/60 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-50">
-            <div className="max-w-7xl mx-auto px-4 h-12 flex items-center">
-              <Link href="/" className="flex items-center gap-1.5 font-bold text-base tracking-tight select-none">
-                <span className="text-lg leading-none">♟️</span>
+            <div className="max-w-screen-2xl mx-auto px-6 h-14 flex items-center">
+              <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tight select-none">
+                <span className="text-xl leading-none">♟️</span>
                 <span className="text-white">Fore</span>
                 <span className="text-emerald-400">sight</span>
               </Link>
             </div>
           </header>
-          <main className="max-w-7xl mx-auto px-4 py-8">{children}</main>
+          <main className="max-w-screen-2xl mx-auto px-6 py-10">{children}</main>
         </Providers>
       </body>
     </html>

@@ -40,12 +40,12 @@ THRESHOLDS: list[tuple[str, float, float]] = [
 
 # UI 메타데이터 (색상은 MoveQualityDonut 와 동기화)
 CATEGORY_META: dict[str, dict] = {
-    "Best":       {"emoji": "✅", "color": "#10b981"},
-    "Excellent":  {"emoji": "👍", "color": "#34d399"},
-    "Good":       {"emoji": "🆗", "color": "#6ee7b7"},
-    "Inaccuracy": {"emoji": "⚡", "color": "#f59e0b"},
-    "Mistake":    {"emoji": "❌", "color": "#f97316"},
-    "Blunder":    {"emoji": "💀", "color": "#ef4444"},
+    "Best":       {"emoji": "★",  "color": "#10b981"},
+    "Excellent":  {"emoji": "!",  "color": "#34d399"},
+    "Good":       {"emoji": "⊙",  "color": "#6ee7b7"},
+    "Inaccuracy": {"emoji": "?!", "color": "#f59e0b"},
+    "Mistake":    {"emoji": "?",  "color": "#f97316"},
+    "Blunder":    {"emoji": "??", "color": "#ef4444"},
 }
 
 

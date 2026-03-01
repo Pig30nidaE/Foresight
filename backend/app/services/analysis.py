@@ -9,10 +9,7 @@ from app.services import opening_db
 from app.services.pgn_parser import ParsedGame, MoveData
 
 # PGN 첫 수 추출용 정규식
-_RE_HEADERS  = re.compile(r'\[[^\]]+\]')
-# PGN 레이팅 추출용 정규식
-_RE_WHITE_ELO = re.compile(r'\[WhiteElo\s+"(\d+)"\]')
-_RE_BLACK_ELO = re.compile(r'\[BlackElo\s+"(\d+)"\]')
+_RE_HEADERS = re.compile(r'\[[^\]]+\]')
 _RE_BRACES  = re.compile(r'\{[^}]*\}')   # {[%clk...]} 및 빈 {} 제거
 _RE_MOVENUM = re.compile(r'\d+\.+')       # 1. / 1... 제거
 _RESULT_TOKENS = frozenset({'*', '1-0', '0-1', '1/2-1/2'})
@@ -70,15 +67,7 @@ class AnalysisService:
         draws = len(df[df["result"] == "draw"]) if total else 0
         win_rate = round(wins / total * 100, 1) if total else 0.0
 
-        top_openings = self.get_opening_stats(df, top_n=10)
-
-        # 최근 폼: played_at 기준 내림차순 상위 20개 결과
-        recent_form: List[str] = []
-        if not df.empty and "played_at" in df.columns:
-            rf_df = df.copy()
-            rf_df["_ts"] = pd.to_numeric(rf_df["played_at"], errors="coerce")
-            rf_df = rf_df.dropna(subset=["_ts"]).sort_values("_ts", ascending=False)
-            recent_form = rf_df["result"].head(20).tolist()
+        top_openings = self.get_opening_stats(df, top_n=5)
 
         return PerformanceSummary(
             username=username,
@@ -90,38 +79,7 @@ class AnalysisService:
             draws=draws,
             win_rate=win_rate,
             top_openings=top_openings,
-            recent_form=recent_form,
         )
-
-    def get_rating_history(
-        self,
-        username: str,
-        games: List[GameSummary],
-    ) -> List[dict]:
-        """
-        PGN WhiteElo/BlackElo 헤더에서 게임별 레이팅을 추출,
-        날짜 오름차순으로 반환.
-        [{"date": <unix_ts_sec>, "rating": <int>}, ...]
-        """
-        history = []
-        for g in games:
-            if not g.pgn or not g.played_at:
-                continue
-            is_white = g.white.lower() == username.lower()
-            elo_re = _RE_WHITE_ELO if is_white else _RE_BLACK_ELO
-            m = elo_re.search(g.pgn)
-            if not m:
-                continue
-            try:
-                rating = int(m.group(1))
-                ts = int(g.played_at)
-            except (ValueError, TypeError):
-                continue
-            if rating < 100 or rating > 4000:  # 비정상 값 제거
-                continue
-            history.append({"date": ts, "rating": rating})
-        history.sort(key=lambda x: x["date"])
-        return history
 
     def get_opening_stats(
         self, df: pd.DataFrame, top_n: int = 10
