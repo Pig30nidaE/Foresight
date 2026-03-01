@@ -135,8 +135,6 @@ class ChessDotComService:
 
         async with httpx.AsyncClient(timeout=20) as client:
             for archive_url in archives:
-                if not using_time_filter and len(games) >= max_games:
-                    break
                 if len(games) >= HARD_CAP:
                     break
 
@@ -158,8 +156,6 @@ class ChessDotComService:
                         monthly, key=lambda g: g.get("end_time", 0), reverse=True
                     )
                     for raw in monthly_sorted:
-                        if not using_time_filter and len(games) >= max_games:
-                            break
                         if len(games) >= HARD_CAP:
                             break
                         end_time = raw.get("end_time", 0)

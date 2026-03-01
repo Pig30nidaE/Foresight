@@ -164,3 +164,24 @@ export interface TimePressureStats {
   by_phase: TimePressurePhase[];
   per_move: TimePressurePerMove[];
 }
+
+// ────────────────────────────────────────────
+// MVP.md 기반 ML 전술 패턴 분석
+// ────────────────────────────────────────────
+export interface TacticalPattern {
+  label: string;
+  description: string;
+  icon: string;
+  score: number;         // 0–100
+  is_strength: boolean;
+  games_analyzed: number;
+  detail: string;
+  category: "time" | "position" | "opening" | "endgame" | "balance";
+}
+
+export interface TacticalAnalysis {
+  total_games: number;
+  patterns: TacticalPattern[];
+  strengths: TacticalPattern[];
+  weaknesses: TacticalPattern[];
+}

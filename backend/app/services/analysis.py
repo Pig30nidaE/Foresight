@@ -164,7 +164,7 @@ class AnalysisService:
                 losses = int(row.get("loss", 0))
                 draws  = int(row.get("draw", 0))
                 total  = wins + losses + draws
-                if total < 2:
+                if total < 10:
                     continue
                 result.append({
                     "eco": move,                          # 재사용 필드: 실제 수
@@ -273,7 +273,7 @@ class AnalysisService:
         return result_list
 
     def get_best_worst_openings(
-        self, df: pd.DataFrame, min_games: int = 5
+        self, df: pd.DataFrame, min_games: int = 10
     ) -> dict:
         """
         MVP 섹션 2-B: 베스트/워스트 오프닝 요약

@@ -8,7 +8,7 @@ import {
   getOpeningTree,
   getBestWorstOpenings,
   getTimePressure,
-  getMoveQuality,
+  getTacticalPatterns,
 } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
 import { Suspense, useState, useEffect, useMemo } from "react";
@@ -16,14 +16,13 @@ import FirstMoveBar from "@/components/charts/FirstMoveBar";
 import OpeningTreeTable from "@/components/charts/OpeningTreeTable";
 import BestWorstCard from "@/components/charts/BestWorstCard";
 import BlunderTimeline from "@/components/charts/BlunderTimeline";
-import MoveQualityDonut from "@/components/charts/MoveQualityDonut";
+import TacticalPatternsCard from "@/components/charts/TacticalPatternsCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import {
   FirstMovesSkeleton,
   OpeningTreeSkeleton,
   BestWorstSkeleton,
   TimelineSkeleton,
-  DonutSkeleton,
 } from "@/components/ui/SkeletonCard";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
@@ -117,12 +116,12 @@ function DashboardContent() {
     staleTime: 120_000,
   });
 
-  // Step 6: Stockfish 수 품질 분석 (시간이 오래 걸리므로 별도 staleTime)
-  const { data: moveQuality, isLoading: loadingMQ } = useQuery({
-    queryKey: ["move-quality", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getMoveQuality(submittedPlatform, submitted, timeClass, 5),
+  // 전술 패턴 분석 (ML 기반)
+  const { data: tacticalPatterns, isLoading: loadingTactical } = useQuery({
+    queryKey: ["tactical-patterns", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
+    queryFn: () => getTacticalPatterns(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
     enabled,
-    staleTime: 300_000,
+    staleTime: 180_000,
     retry: 1,
   });
 
@@ -186,7 +185,7 @@ function DashboardContent() {
               >
                 {tc}
                 {count != null && (
-                  <span className="ml-1 text-xs opacity-70">({count})</span>
+                  <span className="ml-1 text-xs opacity-70">({count} Games)</span>
                 )}
               </button>
             );
@@ -376,18 +375,18 @@ function DashboardContent() {
                 </div>
               </section>
 
-              {/* ── Section 3 ── */}
-              <section className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative">
-                  {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                  <SectionHeader title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" />
-                  {loadingTP ? <TimelineSkeleton /> : <BlunderTimeline data={timePressure} />}
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative">
-                  {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                  <SectionHeader title="전반적인 수 품질 비율" desc="Stockfish 분석 — Best · Excellent · Inaccuracy · Mistake · Blunder" />
-                  {loadingMQ ? <DonutSkeleton /> : <MoveQualityDonut data={moveQuality} isLoading={false} />}
-                </div>
+              {/* ── Section 3 – 시간 압박 블런더 비율 ── */}
+              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
+                <SectionHeader title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" />
+                {loadingTP ? <TimelineSkeleton /> : <BlunderTimeline data={timePressure} />}
+              </section>
+
+              {/* ── Section 4 – 전술 패턴 분석 ── */}
+              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-6 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
+                <SectionHeader title="전술 패턴 분석" desc="ML 기반 10종 전술 패턴 강점 · 약점 분석" />
+                <TacticalPatternsCard data={tacticalPatterns} isLoading={loadingTactical} />
               </section>
             </div>
           )}

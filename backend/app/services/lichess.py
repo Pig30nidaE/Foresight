@@ -75,7 +75,7 @@ class LichessService:
     ) -> List[GameSummary]:
         """게임 목록 조회 (ndjson 스트림). since_ms/until_ms 로 기간 필터링 가능."""
         params: dict = {
-            "max": 5000 if (since_ms or until_ms) else max_games,
+            "max": 5000,
             "opening": "true",
             "clocks": "false",
         }

@@ -11,6 +11,7 @@ import type {
   BestWorstOpenings,
   TimePressureStats,
   MoveQualityStats,
+  TacticalAnalysis,
 } from "@/types";
 
 const api = axios.create({
@@ -158,6 +159,20 @@ export const getMoveQuality = async (
     timeout: 300_000,   // Stockfish 분석 최대 5분
   });
   return data as MoveQualityStats;
+};
+
+export const getTacticalPatterns = async (
+  platform: Platform,
+  username: string,
+  timeClass: TimeClass = "blitz",
+  sinceMs?: number,
+  untilMs?: number,
+): Promise<TacticalAnalysis> => {
+  const params: Record<string, unknown> = { time_class: timeClass };
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  const { data } = await api.get(`/stats/tactical-patterns/${platform}/${username}`, { params });
+  return data as TacticalAnalysis;
 };
 
 export default api;
