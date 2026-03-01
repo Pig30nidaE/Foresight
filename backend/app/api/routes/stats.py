@@ -179,3 +179,31 @@ async def get_tactical_patterns(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/rating-history/{platform}/{username}")
+async def get_rating_history(
+    platform: Platform,
+    username: str,
+    time_class: str = Query(default="blitz"),
+    max_games: int = Query(default=300, le=1000),
+    since_ms: Optional[int] = Query(default=None),
+    until_ms: Optional[int] = Query(default=None),
+):
+    """
+    레이팅 트렌드 히스토리
+    PGN WhiteElo/BlackElo 헤더에서 추출 → 날짜순 정렬
+    [{date: unix_ts, rating: int}, ...]
+    """
+    try:
+        if platform == Platform.chessdotcom:
+            since_ts = since_ms // 1000 if since_ms else None
+            until_ts = until_ms // 1000 if until_ms else None
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
+        else:
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
+
+        games = [g for g in games if g.time_class == time_class]
+        return analysis_svc.get_rating_history(username, games)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,9 +1,13 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useState, Suspense } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getPerformanceSummary, getOpeningStats } from "@/lib/api";
-import type { Platform, TimeClass } from "@/types";
+/**
+ * /analysis 는 /dashboard (\ub0b4 \ubd84\uc11d)\ub85c \ud1b5\ud569\ub418\uc5c8\uc2b5\ub2c8\ub2e4.
+ * \uae30\uc874 \uc5f0\uacb0\uc744 \uc704\ud574 \uc601\uad6c \ub9ac\ub2e4\uc774\ub809\ud2b8\ub97c \uc720\uc9c0\ud569\ub2c8\ub2e4.
+ */
+export default function AnalysisPage() {
+  redirect("/dashboard");
+}
+
 import StatCard from "@/components/ui/StatCard";
 import OpeningsChart from "@/components/charts/OpeningsChart";
 

@@ -57,6 +57,12 @@ export interface PerformanceSummary {
   draws: number;
   win_rate: number;
   top_openings: OpeningStats[];
+  recent_form: string[];  // 최근 게임 결과 (최신순): ["win","loss","draw",...]
+}
+
+export interface RatingDataPoint {
+  date: number;    // Unix timestamp (seconds)
+  rating: number;
 }
 
 export interface OpponentEcoGroupStats {
