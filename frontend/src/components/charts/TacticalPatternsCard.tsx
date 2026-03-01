@@ -1,7 +1,7 @@
 "use client";
 
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from "recharts";
-import type { TacticalAnalysis, TacticalPattern } from "@/types";
+import type { TacticalAnalysis, TacticalPattern, ClusterInfo } from "@/types";
 
 interface Props {
   data?: TacticalAnalysis;
@@ -23,6 +23,42 @@ const CATEGORY_BG: Record<string, string> = {
   endgame: "bg-purple-400/10 border-purple-400/30",
   balance: "bg-zinc-700/30 border-zinc-600/30",
 };
+
+// K-Means 군집 카드
+function ClusterCard({ cluster, rank }: { cluster: ClusterInfo; rank: number }) {
+  const border = cluster.is_weakness
+    ? "border-red-700/50 bg-red-950/15"
+    : cluster.is_strength
+    ? "border-emerald-600/50 bg-emerald-950/15"
+    : "border-zinc-700 bg-zinc-900/40";
+  const wrColor = cluster.win_rate >= 55 ? "text-emerald-400" : cluster.win_rate >= 40 ? "text-amber-400" : "text-red-400";
+  const badge = cluster.is_weakness
+    ? <span className="text-xs text-red-400 font-bold shrink-0">▼ 약점</span>
+    : cluster.is_strength
+    ? <span className="text-xs text-emerald-400 font-bold shrink-0">★ 강점</span>
+    : null;
+
+  return (
+    <div className={`rounded-xl border p-3 space-y-1.5 ${border}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-sm font-semibold text-zinc-200 leading-snug">{cluster.label}</span>
+        <div className="flex items-center gap-1 shrink-0">
+          {badge}
+          <span className={`text-xs font-bold ${wrColor}`}>{cluster.win_rate.toFixed(0)}%</span>
+        </div>
+      </div>
+      <p className="text-xs text-zinc-500">{cluster.description}</p>
+      <div className="flex flex-wrap gap-1 mt-0.5">
+        <span className="text-xs text-zinc-600">{cluster.n_games}게임</span>
+        {cluster.key_traits.map((t) => (
+          <span key={t} className="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+            {t}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function ScoreBar({ score }: { score: number }) {
   const color =
@@ -133,6 +169,26 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
         </div>
       )}
 
+      {/* K-Means 군집화 결과 */}
+      {data.cluster_analysis && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-zinc-500 uppercase tracking-wider font-bold">
+              🤖 K-Means 게임 패턴 군집화
+            </p>
+            <span className="text-xs text-zinc-600">
+              전체 승률 {data.cluster_analysis.overall_win_rate.toFixed(0)}% · {data.cluster_analysis.n_clusters}개 클러스터
+            </span>
+          </div>
+          <p className="text-xs text-zinc-400 pb-1">{data.cluster_analysis.summary}</p>
+          <div className="space-y-2">
+            {data.cluster_analysis.clusters.map((c, i) => (
+              <ClusterCard key={c.id} cluster={c} rank={i} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 강점 / 약점 요약 배지 */}
       {(data.strengths.length > 0 || data.weaknesses.length > 0) && (
         <div className="grid grid-cols-2 gap-3">
@@ -182,7 +238,7 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
       </div>
 
       <p className="text-xs text-zinc-600 text-center">
-        총 {data.total_games}게임 기반 분석 · MVP.md 기반 10종 전술 패턴
+        총 {data.total_games}게임 기반 분석 · 10종 규칙 패턴 + K-Means(k=3) 군집화
       </p>
     </div>
   );

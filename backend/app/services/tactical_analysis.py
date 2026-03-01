@@ -25,8 +25,11 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 
+import numpy as np
 import chess
 import chess.pgn
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 from app.models.schemas import GameSummary
 
@@ -120,11 +123,15 @@ class TacticalAnalysisService:
             key=lambda x: x.score
         )[:3]
 
+        # --- K-Means 군집화 (게임 수 30 이상일 때만) -------------
+        cluster_analysis = self._kmeans_cluster_analysis(games, username) if len(games) >= 30 else None
+
         return {
             "total_games": len(games),
             "patterns": [self._to_dict(p) for p in patterns],
             "strengths": [self._to_dict(p) for p in strengths],
             "weaknesses": [self._to_dict(p) for p in weaknesses],
+            "cluster_analysis": cluster_analysis,
         }
 
     # ── 헬퍼 ────────────────────────────────────────────────
@@ -525,3 +532,220 @@ class TacticalAnalysisService:
             ))
 
         return results
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # K-Means 군집화 — 게임 Feature → 3 클러스터 → 강점/약점 해석
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    def _extract_game_features(
+        self, games: List[GameSummary], username: str
+    ) -> List[Dict[str, Any]]:
+        """
+        게임별 6-dim Feature 벡터 추출 (PGN 경량 파싱 — board.push 없음).
+        Features:
+          0 won            — 1.0 win / 0.5 draw / 0.0 loss
+          1 game_length    — 총 수 (0~80+ 범위, scaler가 정규화)
+          2 is_white       — 1.0 백 / 0.0 흑
+          3 is_familiar    — 1.0 (해당 오프닝 ≥4회) / 0.0
+          4 time_pressure  — 1.0 (내 수 중 클록 <30s 있음) / 0.0
+          5 quick_ratio    — 내 수 중 3초 이내 비율 (0.0–1.0)
+        """
+        # 오프닝 친숙도 계산
+        opening_counts: Counter = Counter(g.opening_name or "Unknown" for g in games)
+
+        rows = []
+        for g in games:
+            # 0. 결과
+            res = g.result.value if g.result else "loss"
+            won = 1.0 if res == "win" else (0.5 if res == "draw" else 0.0)
+
+            # 2. 색상
+            is_white = 1.0 if g.white.lower() == username.lower() else 0.0
+            is_my_white = bool(is_white)
+
+            # 3. 오프닝 친숙도
+            is_familiar = 1.0 if opening_counts.get(g.opening_name or "Unknown", 0) >= 4 else 0.0
+
+            # 1, 4, 5: PGN 경량 파싱 (comment만 읽고 board.push 없음)
+            game_length = _estimate_total_moves(g.pgn or "")
+            time_pressure = 0.0
+            quick_count = 0
+            total_clocked = 0
+
+            if g.pgn:
+                try:
+                    parsed = chess.pgn.read_game(io.StringIO(g.pgn))
+                    if parsed:
+                        move_num = 0
+                        for node in parsed.mainline():
+                            move_num += 1
+                            # 내 수인지 대략 판단 (1수=백, 2수=흑, ...)
+                            my_turn = (move_num % 2 == 1) if is_my_white else (move_num % 2 == 0)
+                            if not my_turn:
+                                continue
+                            clk = _parse_clock(node.comment or "")
+                            emt = _parse_emt(node.comment or "")
+                            if clk is not None and clk < 30.0:
+                                time_pressure = 1.0
+                            if emt is not None:
+                                total_clocked += 1
+                                if emt <= 3.0:
+                                    quick_count += 1
+                except Exception:
+                    pass
+
+            quick_ratio = quick_count / total_clocked if total_clocked >= 5 else 0.5
+
+            rows.append({
+                "game": g,
+                "features": [won, float(game_length), is_white, is_familiar, time_pressure, quick_ratio],
+            })
+
+        return rows
+
+    def _kmeans_cluster_analysis(
+        self, games: List[GameSummary], username: str, n_clusters: int = 3
+    ) -> Optional[Dict[str, Any]]:
+        """
+        K-Means (k=3) 으로 게임을 군집화하고 각 클러스터의 특성을 해석.
+        반환 구조:
+          {
+            "n_clusters": 3,
+            "feature_names": [...],
+            "clusters": [
+              { "id": 0, "n_games": N, "win_rate": 45.2, "label": "시간 압박 게임",
+                "key_traits": ["시간 압박 빈번", "빠른 응수"], "is_weakness": True,
+                "description": "..." }
+            ],
+            "summary": "...",
+            "top_weakness": "...",
+            "top_strength": "..."
+          }
+        """
+        FEATURE_NAMES = ["결과", "게임 길이", "백 플레이", "친숙한 오프닝", "시간 압박", "빠른 응수"]
+
+        rows = self._extract_game_features(games, username)
+        if len(rows) < 10:
+            return None
+
+        X = np.array([r["features"] for r in rows], dtype=float)
+
+        # NaN/Inf 제거
+        X = np.nan_to_num(X, nan=0.5, posinf=1.0, neginf=0.0)
+        X = np.clip(X, 0.0, 1.0)
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # K-Means (여러 init 시도로 안정성 확보)
+        km = KMeans(n_clusters=n_clusters, n_init=20, random_state=42, max_iter=300)
+        labels = km.fit_predict(X_scaled)
+
+        # ── 클러스터별 통계 계산 ────────────────────────────
+        overall_win_rate = float(np.mean(X[:, 0]) * 100)
+        cluster_stats = []
+
+        centers_orig = scaler.inverse_transform(km.cluster_centers_)
+
+        # Feature 해석 규칙 (feature_idx, high_label, low_label, threshold)
+        TRAIT_RULES = [
+            # (idx, high_trait, low_trait, high_threshold)
+            (1, "장기전 위주", "단기전 위주", 40),
+            (4, "시간 압박 빈번", "여유로운 시간", 0.5),
+            (5, "직관적 빠른 응수", "신중한 수 선택", 0.5),
+            (2, "백 게임 위주", "흑 게임 위주", 0.6),
+            (3, "익숙한 오프닝", "새로운 오프닝", 0.5),
+        ]
+
+        # 클러스터 이름 후보 (승률 + 지배적 feature 기반)
+        CLUSTER_NAME_MAP = {
+            ("시간 압박 빈번", "직관적 빠른 응수"): ("⏱️ 시간 압박 게임", "시간이 부족한 상황에서 빠르게 수를 두는 패턴"),
+            ("시간 압박 빈번",): ("⏱️ 시간 압박 게임", "클록이 30초 이하로 떨어지는 상황이 잦은 게임"),
+            ("직관적 빠른 응수",): ("⚡ 직관적 플레이", "대부분의 수를 3초 이내 직관으로 두는 게임"),
+            ("장기전 위주",): ("👑 엔드게임 전투", "40수 이상 이어지는 장기전 위주 게임"),
+            ("단기전 위주",): ("♟️ 오프닝·전술 결전", "25수 이하 단기간에 승부가 나는 게임"),
+            ("익숙한 오프닝",): ("📚 단골 오프닝 게임", "자주 두는 오프닝 레퍼토리 게임"),
+            ("새로운 오프닝",): ("🎲 낯선 오프닝 게임", "처음 접하거나 드물게 두는 오프닝 게임"),
+            ("백 게임 위주",): ("⬜ 백(선수) 게임", "백으로 진행된 게임 위주 클러스터"),
+            ("흑 게임 위주",): ("⬛ 흑(후수) 게임", "흑으로 진행된 게임 위주 클러스터"),
+        }
+
+        for cid in range(n_clusters):
+            mask = labels == cid
+            n_games = int(mask.sum())
+            if n_games == 0:
+                continue
+
+            c_feats = X[mask]
+            win_rate = float(np.mean(c_feats[:, 0]) * 100)
+            center = centers_orig[cid]
+
+            # 지배적 특성 추출
+            traits: List[str] = []
+            for idx, high_t, low_t, threshold in TRAIT_RULES:
+                val = center[idx]
+                if idx == 1:   # 게임 길이 — 절대값 비교
+                    if val >= threshold:
+                        traits.append(high_t)
+                    elif val <= 25:
+                        traits.append(low_t)
+                else:           # 0~1 비율 값
+                    if val >= threshold + 0.15:
+                        traits.append(high_t)
+                    elif val <= threshold - 0.15:
+                        traits.append(low_t)
+
+            # 이름 결정 — 가장 많이 일치하는 규칙
+            best_name = None
+            best_desc = None
+            for key_traits, (name, desc) in CLUSTER_NAME_MAP.items():
+                if all(t in traits for t in key_traits):
+                    if best_name is None or len(key_traits) > len(best_name):
+                        best_name = name
+                        best_desc = desc
+
+            if best_name is None:
+                best_name = f"🎯 패턴 그룹 {cid + 1}"
+                best_desc = "명확한 단일 특성이 없는 혼합 게임 패턴"
+
+            is_weakness = win_rate < max(35, overall_win_rate - 8)
+            is_strength = win_rate > min(65, overall_win_rate + 8)
+
+            cluster_stats.append({
+                "id": cid,
+                "n_games": n_games,
+                "win_rate": round(win_rate, 1),
+                "label": best_name,
+                "description": best_desc,
+                "key_traits": traits[:3],
+                "is_weakness": is_weakness,
+                "is_strength": is_strength,
+                "center": {FEATURE_NAMES[i]: round(float(center[i]), 3) for i in range(len(FEATURE_NAMES))},
+            })
+
+        # 승률 순 정렬
+        cluster_stats.sort(key=lambda c: c["win_rate"], reverse=True)
+
+        weaknesses_c = [c for c in cluster_stats if c["is_weakness"]]
+        strengths_c  = [c for c in cluster_stats if c["is_strength"]]
+
+        # 요약 문장
+        top_w = weaknesses_c[0]["label"] if weaknesses_c else None
+        top_s = strengths_c[0]["label"] if strengths_c else None
+
+        summary_parts = []
+        if top_s:
+            summary_parts.append(f"{top_s} 유형에서 강세")
+        if top_w:
+            summary_parts.append(f"{top_w} 유형에서 약세")
+        summary = " · ".join(summary_parts) if summary_parts else "게임 패턴이 고르게 분포됨"
+
+        return {
+            "n_clusters": n_clusters,
+            "feature_names": FEATURE_NAMES,
+            "clusters": cluster_stats,
+            "overall_win_rate": round(overall_win_rate, 1),
+            "summary": summary,
+            "top_weakness": top_w,
+            "top_strength": top_s,
+        }
+
