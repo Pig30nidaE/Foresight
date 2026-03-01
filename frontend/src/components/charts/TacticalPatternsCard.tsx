@@ -1,7 +1,7 @@
 "use client";
 
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from "recharts";
-import type { TacticalAnalysis, TacticalPattern, ClusterInfo } from "@/types";
+import type { TacticalAnalysis, TacticalPattern, ClusterInfo, XGBoostProfile } from "@/types";
 
 interface Props {
   data?: TacticalAnalysis;
@@ -23,6 +23,66 @@ const CATEGORY_BG: Record<string, string> = {
   endgame: "bg-purple-400/10 border-purple-400/30",
   balance: "bg-zinc-700/30 border-zinc-600/30",
 };
+
+// XGBoost 블런더 프로파일 섹션
+function XGBoostProfileSection({ profile }: { profile: XGBoostProfile }) {
+  const risk = profile.blunder_game_rate;
+  const riskColor = risk >= 35 ? "text-red-400" : risk >= 20 ? "text-amber-400" : "text-emerald-400";
+  const riskBg = risk >= 35 ? "bg-red-500" : risk >= 20 ? "bg-amber-500" : "bg-emerald-500";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-zinc-500 uppercase tracking-wider font-bold">
+          🧬 XGBoost 블런더 리스크 프로파일
+        </p>
+        <span className="text-xs text-zinc-600">
+          정확도 {profile.model_accuracy.toFixed(0)}% · {profile.games_analyzed}게임
+        </span>
+      </div>
+
+      {/* 블런더 게임 비율 게이지 */}
+      <div className="rounded-xl border border-zinc-700 bg-zinc-900/40 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-zinc-400">블런더성 패배 비율</span>
+          <span className={`text-sm font-bold ${riskColor}`}>{risk.toFixed(0)}%</span>
+        </div>
+        <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${riskBg}`}
+            style={{ width: `${Math.min(risk, 100)}%` }}
+          />
+        </div>
+        <p className="text-xs text-zinc-500">{profile.description}</p>
+      </div>
+
+      {/* 상위 위험 요소 */}
+      <div className="space-y-1.5">
+        <p className="text-xs text-zinc-600 font-medium">상위 위험 요소</p>
+        {profile.top_risk_factors.map((f, i) => (
+          <div key={f.feature} className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-2.5 space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-zinc-500 w-4">#{i + 1}</span>
+                <span className="text-xs font-semibold text-zinc-200">{f.feature}</span>
+              </div>
+              <span className="text-xs font-bold text-amber-400">{f.importance.toFixed(0)}%</span>
+            </div>
+            <div className="w-full bg-zinc-800 rounded-full h-1 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-amber-500"
+                style={{ width: `${Math.min(f.importance * 3, 100)}%` }}
+              />
+            </div>
+            {f.description && (
+              <p className="text-xs text-zinc-500 leading-snug">{f.description}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // K-Means 군집 카드
 function ClusterCard({ cluster, rank }: { cluster: ClusterInfo; rank: number }) {
@@ -189,6 +249,11 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
         </div>
       )}
 
+      {/* XGBoost 블런더 리스크 프로파일 */}
+      {data.xgboost_profile && (
+        <XGBoostProfileSection profile={data.xgboost_profile} />
+      )}
+
       {/* 강점 / 약점 요약 배지 */}
       {(data.strengths.length > 0 || data.weaknesses.length > 0) && (
         <div className="grid grid-cols-2 gap-3">
@@ -238,7 +303,7 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
       </div>
 
       <p className="text-xs text-zinc-600 text-center">
-        총 {data.total_games}게임 기반 분석 · 10종 규칙 패턴 + K-Means(k=3) 군집화
+        총 {data.total_games}게임 기반 분석 · 20종 패턴 · K-Means(k=3) · XGBoost 블런더 분류
       </p>
     </div>
   );

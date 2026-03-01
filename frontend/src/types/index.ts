@@ -202,11 +202,32 @@ export interface ClusterAnalysis {
   top_strength: string | null;
 }
 
+export interface XGBoostRiskFactor {
+  feature: string;
+  importance: number;
+  description: string;
+}
+
+export interface XGBoostFeatureImportance {
+  feature: string;
+  importance: number;
+}
+
+export interface XGBoostProfile {
+  blunder_game_rate: number;
+  top_risk_factors: XGBoostRiskFactor[];
+  feature_importances: XGBoostFeatureImportance[];
+  model_accuracy: number;
+  games_analyzed: number;
+  description: string;
+}
+
 export interface TacticalAnalysis {
   total_games: number;
   patterns: TacticalPattern[];
   strengths: TacticalPattern[];
   weaknesses: TacticalPattern[];
   cluster_analysis: ClusterAnalysis | null;
+  xgboost_profile: XGBoostProfile | null;
 }
 
