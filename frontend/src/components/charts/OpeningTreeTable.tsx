@@ -42,7 +42,7 @@ export default function OpeningTreeTable({ data }: Props) {
     });
   };
 
-  const TOP_N = 5;
+  const TOP_N = 10;
   const topNodes = showAll ? data : data.slice(0, TOP_N);
   const rows = flatten(topNodes, expanded);
 

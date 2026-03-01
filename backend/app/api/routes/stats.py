@@ -9,11 +9,13 @@ from app.services.chessdotcom import ChessDotComService
 from app.services.lichess import LichessService
 from app.services.analysis import AnalysisService
 from app.services.pgn_parser import parse_games_bulk
+from app.services.tactical_analysis import TacticalAnalysisService
 
 router = APIRouter()
 chessdotcom_svc = ChessDotComService()
 lichess_svc = LichessService()
 analysis_svc = AnalysisService()
+tactical_svc = TacticalAnalysisService()
 
 
 @router.get("/first-moves/{platform}/{username}")
@@ -88,7 +90,7 @@ async def get_best_worst_openings(
     username: str,
     time_class: str = Query(default="blitz"),
     max_games: int = Query(default=200),
-    min_games: int = Query(default=5),
+    min_games: int = Query(default=10),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
 ):
@@ -143,5 +145,32 @@ async def get_time_pressure(
 
         parsed = parse_games_bulk(games, pressure_threshold=pressure_threshold)
         return analysis_svc.get_time_pressure_stats(parsed, username)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tactical-patterns/{platform}/{username}")
+async def get_tactical_patterns(
+    platform: Platform,
+    username: str,
+    time_class: str = Query(default="blitz"),
+    max_games: int = Query(default=200, le=2000),
+    since_ms: Optional[int] = Query(default=None),
+    until_ms: Optional[int] = Query(default=None),
+):
+    """
+    ML 전술 패턴 분석 — MVP.md 기반
+    시간 압박, 즉각 반응, 핀/포크/백랭크 등 다양한 전술적 패턴을 분석합니다.
+    """
+    try:
+        if platform == Platform.chessdotcom:
+            since_ts = since_ms // 1000 if since_ms else None
+            until_ts = until_ms // 1000 if until_ms else None
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
+        else:
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
+
+        games = [g for g in games if g.time_class == time_class]
+        return tactical_svc.analyze(games, username)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
