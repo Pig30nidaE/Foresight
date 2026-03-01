@@ -79,6 +79,7 @@ export const getOpponentAnalysis = async (
 ): Promise<OpponentAnalysis> => {
   const { data } = await api.get(`/analysis/opponent/${platform}/${username}`, {
     params: { time_class: timeClass },
+    timeout: 120_000, // Stockfish + LightGBM 분석은 최대 ~60s — 여유있게 2분
   });
   return data;
 };
