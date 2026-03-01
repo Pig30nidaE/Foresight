@@ -4,6 +4,8 @@ MVP 섹션 1, 2, 3 대응
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+import asyncio
+import functools
 from app.models.schemas import Platform
 from app.services.chessdotcom import ChessDotComService
 from app.services.lichess import LichessService
@@ -171,6 +173,9 @@ async def get_tactical_patterns(
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         games = [g for g in games if g.time_class == time_class]
-        return tactical_svc.analyze(games, username)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, functools.partial(tactical_svc.analyze, games, username)
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

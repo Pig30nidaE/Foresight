@@ -57,10 +57,10 @@ from app.models.schemas import GameSummary
 # ── 상수 ──────────────────────────────────────────────────────
 STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
 STRENGTH_THRESHOLD = 55
-SF_DEPTH = 10
-SF_BUDGET_GAMES = 25
-SF_BUDGET_MOVES = 40
-BOARD_BUDGET_GAMES = 120
+SF_DEPTH = 8            # 10→8: blitz 분석에 충분, 속도 2-3배 개선
+SF_BUDGET_GAMES = 15    # 25→15: 엔진 분석 대상 게임 수 축소
+SF_BUDGET_MOVES = 30    # 40→30: 중반까지만 분석
+BOARD_BUDGET_GAMES = 80  # 120→80: 보드 루프 게임 수 축소
 BLUNDER_CP = 150   # centipawn 손실 ≥150 → 블런더
 
 # ── 시계 파싱 ────────────────────────────────────────────────
@@ -132,6 +132,99 @@ class StockfishHelper:
     def available(self) -> bool:
         return self._available
 
+    def _eval_one(
+        self,
+        engine: chess.engine.SimpleEngine,
+        pgn_str: str,
+        username: str,
+        max_moves: int = SF_BUDGET_MOVES,
+        depth: int = SF_DEPTH,
+    ) -> List[Dict]:
+        """이미 열린 엔진으로 게임 1개 분석 (내부용)."""
+        game = _parse_game(pgn_str)
+        if not game:
+            return []
+        white_name = game.headers.get("White", "").lower()
+        black_name = game.headers.get("Black", "").lower()
+        uname = username.lower()
+        results = []
+        board = game.board()
+        prev_cp: Optional[float] = None
+        try:
+            for node in list(game.mainline())[: max_moves * 2]:
+                if board.is_game_over():
+                    break
+                info = engine.analyse(
+                    board,
+                    chess.engine.Limit(depth=depth),
+                    info=chess.engine.INFO_SCORE,
+                )
+                score = info.get("score")
+                if score is None:
+                    prev_cp = None
+                    try:
+                        board.push(node.move)
+                    except Exception:
+                        break
+                    continue
+                rel = score.relative
+                if rel.is_mate():
+                    cp_now = 2000.0 if (rel.mate() > 0) else -2000.0
+                else:
+                    cp_now = float(rel.cp or 0)
+                move_side = board.turn
+                is_my_move = (
+                    (move_side == chess.WHITE and white_name == uname)
+                    or (move_side == chess.BLACK and black_name == uname)
+                )
+                cp_loss = 0.0
+                is_blunder = False
+                if prev_cp is not None and is_my_move:
+                    cp_loss = prev_cp - cp_now
+                    is_blunder = cp_loss >= BLUNDER_CP
+                results.append({
+                    "move_no": board.fullmove_number,
+                    "color": "white" if move_side == chess.WHITE else "black",
+                    "is_my_move": is_my_move,
+                    "cp_before": prev_cp,
+                    "cp_after": cp_now,
+                    "cp_loss": cp_loss,
+                    "is_blunder": is_blunder,
+                    "clk": _parse_clock(node.comment or ""),
+                })
+                prev_cp = -cp_now
+                try:
+                    board.push(node.move)
+                except Exception:
+                    break
+        except Exception:
+            pass
+        return results
+
+    def eval_batch(
+        self,
+        games: List,
+        username: str,
+        max_moves: int = SF_BUDGET_MOVES,
+        depth: int = SF_DEPTH,
+    ) -> Dict[str, List[Dict]]:
+        """엔진을 1번만 열어 여러 게임을 배치 분석. {game_id: [moves]}."""
+        if not self._available:
+            return {}
+        result: Dict[str, List[Dict]] = {}
+        try:
+            with chess.engine.SimpleEngine.popen_uci(self.path) as engine:
+                engine.configure({"Threads": 1, "Hash": 32})
+                for g in games:
+                    if g.pgn:
+                        result[g.game_id] = self._eval_one(
+                            engine, g.pgn, username, max_moves, depth
+                        )
+        except Exception:
+            pass
+        return result
+
+    # 하위 호환용 단일 게임 분석 (eval_batch 사용 권장)
     def eval_moves(
         self,
         pgn_str: str,
@@ -139,76 +232,15 @@ class StockfishHelper:
         max_moves: int = SF_BUDGET_MOVES,
         depth: int = SF_DEPTH,
     ) -> List[Dict]:
-        """각 수의 centipawn 평가 변화 목록 반환."""
+        """각 수의 centipawn 평가 변화 목록 반환 (단일 게임용)."""
         if not self._available:
             return []
-        game = _parse_game(pgn_str)
-        if not game:
-            return []
-
-        white_name = game.headers.get("White", "").lower()
-        black_name = game.headers.get("Black", "").lower()
-        uname = username.lower()
-
-        results = []
         try:
             with chess.engine.SimpleEngine.popen_uci(self.path) as engine:
-                engine.configure({"Threads": 1, "Hash": 16})
-                board = game.board()
-                prev_cp: Optional[float] = None
-
-                for node in list(game.mainline())[: max_moves * 2]:
-                    if board.is_game_over():
-                        break
-                    info = engine.analyse(
-                        board,
-                        chess.engine.Limit(depth=depth),
-                        info=chess.engine.INFO_SCORE,
-                    )
-                    score = info.get("score")
-                    if score is None:
-                        prev_cp = None
-                        try:
-                            board.push(node.move)
-                        except Exception:
-                            break
-                        continue
-
-                    rel = score.relative
-                    if rel.is_mate():
-                        cp_now = 2000.0 if (rel.mate() > 0) else -2000.0
-                    else:
-                        cp_now = float(rel.cp or 0)
-
-                    move_side = board.turn
-                    is_my_move = (
-                        (move_side == chess.WHITE and white_name == uname)
-                        or (move_side == chess.BLACK and black_name == uname)
-                    )
-                    cp_loss = 0.0
-                    is_blunder = False
-                    if prev_cp is not None and is_my_move:
-                        cp_loss = prev_cp - cp_now
-                        is_blunder = cp_loss >= BLUNDER_CP
-
-                    results.append({
-                        "move_no": board.fullmove_number,
-                        "color": "white" if move_side == chess.WHITE else "black",
-                        "is_my_move": is_my_move,
-                        "cp_before": prev_cp,
-                        "cp_after": cp_now,
-                        "cp_loss": cp_loss,
-                        "is_blunder": is_blunder,
-                        "clk": _parse_clock(node.comment or ""),
-                    })
-                    prev_cp = -cp_now
-                    try:
-                        board.push(node.move)
-                    except Exception:
-                        break
+                engine.configure({"Threads": 1, "Hash": 32})
+                return self._eval_one(engine, pgn_str, username, max_moves, depth)
         except Exception:
-            pass
-        return results
+            return []
 
 
 _sf = StockfishHelper()
@@ -232,11 +264,8 @@ class TacticalAnalysisService:
         board_games = games[:max_board_games]
         sf_games = games[:SF_BUDGET_GAMES] if _sf.available else []
 
-        # Stockfish 분석 (한 번만 실행)
-        sf_cache: Dict[str, List[Dict]] = {}
-        for g in sf_games:
-            if g.pgn:
-                sf_cache[g.game_id] = _sf.eval_moves(g.pgn, username)
+        # Stockfish 분석 — 엔진 1번만 열어 배치 처리
+        sf_cache: Dict[str, List[Dict]] = _sf.eval_batch(sf_games, username)
 
         patterns: List[PatternResult] = []
 
