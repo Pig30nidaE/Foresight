@@ -179,9 +179,34 @@ export interface TacticalPattern {
   category: "time" | "position" | "opening" | "endgame" | "balance";
 }
 
+// K-Means 군집화 결과
+export interface ClusterInfo {
+  id: number;
+  n_games: number;
+  win_rate: number;
+  label: string;
+  description: string;
+  key_traits: string[];
+  is_weakness: boolean;
+  is_strength: boolean;
+  center: Record<string, number>;
+}
+
+export interface ClusterAnalysis {
+  n_clusters: number;
+  feature_names: string[];
+  clusters: ClusterInfo[];
+  overall_win_rate: number;
+  summary: string;
+  top_weakness: string | null;
+  top_strength: string | null;
+}
+
 export interface TacticalAnalysis {
   total_games: number;
   patterns: TacticalPattern[];
   strengths: TacticalPattern[];
   weaknesses: TacticalPattern[];
+  cluster_analysis: ClusterAnalysis | null;
 }
+
