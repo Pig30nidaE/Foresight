@@ -68,3 +68,4 @@ class PerformanceSummary(BaseModel):
     draws: int
     win_rate: float
     top_openings: List[OpeningStats] = []
+    recent_form: List[str] = []  # 최근 게임 결과 (최신순): ["win","loss","draw",...]
