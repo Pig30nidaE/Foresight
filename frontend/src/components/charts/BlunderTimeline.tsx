@@ -91,7 +91,7 @@ export default function BlunderTimeline({ data }: Props) {
       {phaseData && phaseData.length > 0 && (
         <div>
           <p className="text-xs text-zinc-500 mb-2">페이즈별 시간 압박 비율</p>
-          <ResponsiveContainer width="100%" height={110}>
+          <ResponsiveContainer width="100%" height={160}>
             <BarChart data={phaseData} margin={{ left: -15, right: 4, top: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
               <XAxis dataKey="phase" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
@@ -118,7 +118,7 @@ export default function BlunderTimeline({ data }: Props) {
         <p className="text-xs text-zinc-500 mb-2">
           수 번호별 시간 압박 비율{isMock ? " (예시)" : ""}
         </p>
-        <ResponsiveContainer width="100%" height={160}>
+        <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={moveData} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
             <defs>
               <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">

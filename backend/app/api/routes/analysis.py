@@ -1,18 +1,14 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
-import asyncio
-import functools
 from app.models.schemas import PerformanceSummary, Platform
 from app.services.chessdotcom import ChessDotComService
 from app.services.lichess import LichessService
 from app.services.analysis import AnalysisService
-from app.services.opponent_analysis import OpponentAnalysisService
 
 router = APIRouter()
 chessdotcom_svc = ChessDotComService()
 lichess_svc = LichessService()
 analysis_svc = AnalysisService()
-opponent_svc = OpponentAnalysisService()
 
 
 @router.get("/performance/{platform}/{username}", response_model=PerformanceSummary)
@@ -68,14 +64,11 @@ async def get_opponent_analysis(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=200, ge=20, le=500),
+    max_games: int = Query(default=50, ge=10, le=200),
 ):
     """
-    대회 준비용 상대 분석 (ML 기반 완전 재설계)
-    - Stockfish 스냅샷 (게임당 3위치, 페이즈별 cp_loss)
-    - LightGBM: 블런더 트리거 피처 중요도 추출
-    - K-Means: 플레이 스타일 군집화 (결과 변수 제외)
-    - 오프닝 ECO 그룹별 약점 + 구체적 준비 조언
+    상대 플레이어 분석 (대회 준비용)
+    - 상대의 자주 쓰는 오프닝, 약점 분석
     """
     try:
         if platform == Platform.chessdotcom:
@@ -83,10 +76,25 @@ async def get_opponent_analysis(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class)
 
-        games = [g for g in games if g.time_class == time_class]
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, functools.partial(opponent_svc.analyze, games, username)
-        )
+        df = analysis_svc.build_dataframe(games)
+        if not df.empty and time_class:
+            df = df[df["time_class"] == time_class]
+
+        openings = analysis_svc.get_opening_stats(df, top_n=10)
+        trend = analysis_svc.get_result_trend(df)
+
+        total = len(df)
+        wins = len(df[df["result"] == "win"]) if total else 0
+        losses = len(df[df["result"] == "loss"]) if total else 0
+
+        return {
+            "username": username,
+            "platform": platform,
+            "total_games_analyzed": total,
+            "win_rate": round(wins / total * 100, 1) if total else 0,
+            "loss_rate": round(losses / total * 100, 1) if total else 0,
+            "frequent_openings": openings,
+            "result_trend": trend[-20:],  # 최근 20게임 트렌드
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
