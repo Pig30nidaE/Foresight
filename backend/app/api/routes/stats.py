@@ -2,6 +2,7 @@
 첫 수 선호도, 오프닝 트리, 수 품질 분석 엔드포인트
 MVP 섹션 1, 2, 3 대응
 """
+import logging
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.models.schemas import Platform
@@ -10,6 +11,8 @@ from app.shared.services.lichess import LichessService
 from app.features.dashboard.services.analysis import AnalysisService
 from app.shared.services.pgn_parser import parse_games_bulk
 from app.features.dashboard.services.tactical_analysis import TacticalAnalysisService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 chessdotcom_svc = ChessDotComService()
@@ -32,6 +35,7 @@ async def get_first_move_stats(
     since_ms / until_ms (Unix ms) 로 기간 필터 가능.
     """
     try:
+        logger.info(f"[First Moves] {platform}:{username} (timeClass={time_class})")
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
             until_ts = until_ms // 1000 if until_ms else None
@@ -39,12 +43,21 @@ async def get_first_move_stats(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
+        logger.info(f"  → API returned {len(games)} games")
+        
         df = analysis_svc.build_dataframe(games)
+        logger.info(f"  → DataFrame: {len(df)} rows, columns={list(df.columns) if not df.empty else 'EMPTY'}")
+        
         if not df.empty:
+            logger.info(f"  → Before filter: {df['time_class'].value_counts().to_dict() if 'time_class' in df.columns else 'NO time_class COLUMN'}")
             df = df[df["time_class"] == time_class]
+            logger.info(f"  → After filter ({time_class}): {len(df)} rows")
 
-        return analysis_svc.get_first_move_stats(df, username.lower())
+        result = analysis_svc.get_first_move_stats(df, username.lower())
+        logger.info(f"  → Result: white={len(result['white'])}, black={len(result['black'])}, total_games={result.get('total_games', 'N/A')}")
+        return result
     except Exception as e:
+        logger.error(f"  → ERROR: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
