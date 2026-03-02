@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from "recharts";
-import type { TacticalAnalysis, TacticalPattern, ClusterInfo, XGBoostProfile, AiInsights } from "@/types";
+import type { TacticalAnalysis, TacticalPattern, ClusterInfo, XGBoostProfile } from "@/types";
 import PatternGameListModal from "@/features/dashboard/components/modals/PatternGameListModal";
 
 // Chess.com 게임 URL → 분석 URL 변환
@@ -17,8 +17,6 @@ function toAnalysisUrl(url: string): string {
 interface Props {
   data?: TacticalAnalysis;
   isLoading?: boolean;
-  aiInsights?: AiInsights | null;
-  isLoadingInsights?: boolean;
 }
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -128,7 +126,7 @@ function XGBoostProfileSection({ profile }: { profile: XGBoostProfile }) {
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-zinc-500 uppercase tracking-wider font-bold">🧬 XGBoost 블런더 리스크</p>
+        <p className="text-xs text-zinc-500 uppercase tracking-wider font-bold">🔴 블런더 리스크 분석</p>
         <span className="text-xs text-zinc-600">{profile.model_accuracy.toFixed(0)}% 정확도 · {profile.games_analyzed}게임</span>
       </div>
       <div className="rounded-xl border border-zinc-700 bg-zinc-900/40 p-3.5 space-y-2">
@@ -253,7 +251,7 @@ function PatternCard({ p, highlight, onClick }: { p: TacticalPattern; highlight:
 }
 
 // ─── 메인 컴포넌트 ───────────────────────────────────────────
-export default function TacticalPatternsCard({ data, isLoading, aiInsights, isLoadingInsights }: Props) {
+export default function TacticalPatternsCard({ data, isLoading }: Props) {
   const [selectedPattern, setSelectedPattern] = useState<TacticalPattern | null>(null);
 
   if (isLoading || !data) {
@@ -276,9 +274,6 @@ export default function TacticalPatternsCard({ data, isLoading, aiInsights, isLo
     <>
       <PatternGameListModal pattern={selectedPattern} onClose={() => setSelectedPattern(null)} />
       <div className="space-y-6">
-
-        {/* AI 코치 (최상단) */}
-        <AiInsightsSection insights={aiInsights} isLoading={isLoadingInsights} />
 
         {/* 레이더 차트 */}
         {radarData.length >= 4 && (
@@ -329,8 +324,8 @@ export default function TacticalPatternsCard({ data, isLoading, aiInsights, isLo
         {data.cluster_analysis && (
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-zinc-500 uppercase tracking-wider font-bold">🤖 K-Means 게임 스타일 군집화</p>
-              <span className="text-xs text-zinc-600">전체 {data.cluster_analysis.overall_win_rate.toFixed(0)}% · {data.cluster_analysis.n_clusters}개 클러스터</span>
+              <p className="text-xs text-zinc-500 uppercase tracking-wider font-bold">🎲 게임 스타일 분석</p>
+              <span className="text-xs text-zinc-600">전체 {data.cluster_analysis.overall_win_rate.toFixed(0)}% · {data.cluster_analysis.n_clusters}개 유형</span>
             </div>
             <p className="text-xs text-zinc-400 pb-0.5">{data.cluster_analysis.summary}</p>
             <div className="space-y-2">{data.cluster_analysis.clusters.map((c) => <ClusterCard key={c.id} cluster={c} />)}</div>
@@ -359,8 +354,8 @@ export default function TacticalPatternsCard({ data, isLoading, aiInsights, isLo
 
         <p className="text-xs text-zinc-600 text-center">
           총 {data.total_games}게임 · {data.patterns.length}종 패턴
-          {data.xgboost_profile ? " · XGBoost(leakage-free)" : ""}
-          {data.cluster_analysis ? " · K-Means" : ""}
+          {data.xgboost_profile ? " · 블런더 리스크 포함" : ""}
+          {data.cluster_analysis ? " · 스타일 분석 포함" : ""}
         </p>
       </div>
     </>

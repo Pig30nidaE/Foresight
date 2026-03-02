@@ -330,8 +330,6 @@ class TacticalAnalysisService:
                                         "잔여 시계가 가장 낮았던 게임 (시간 압박 실수)"),
             "즉각 반응 패턴":         ("즉각 응수 비율이 가장 높은 게임 (직관 발동)",
                                         "즉각 응수 비율이 가장 높은 게임 (직관 실수)"),
-            "틸트(Tilt) 저항력":      ("가장 긴 연패 직후 회복해 이긴 게임",
-                                        "가장 긴 연패 직후 추가로 진 게임"),
             "우위 유지력":            ("가장 큰 cp 우위를 유지하며 이긴 게임",
                                         "가장 큰 cp 우위를 날려 역전된 게임"),
             "기물 희생 정확도":       ("가장 큰 기물(퀸·룩)을 희생하고 성공한 게임",
@@ -890,28 +888,6 @@ class TacticalAnalysisService:
                 representative_games=disc_ok_games_list + disc_bad_games_list,
             ))
 
-        if back_rank >= 2 or analyzed >= 40:
-            s = max(20, min(90, 100 - back_rank * 7))
-            results.append(PatternResult(
-                label="백랭크 수비", icon="🏰",
-                description="룩·퀸에 의한 백랭크 체크 허용 빈도",
-                score=s, is_strength=s >= 65, games_analyzed=analyzed,
-                detail=f"백랭크 체크 허용 {back_rank}회 ({analyzed}게임)",
-                category="position",
-                representative_games=backrank_games,
-            ))
-
-        if zw_miss >= 2 or analyzed >= 30:
-            s = max(20, min(90, 100 - zw_miss * 8))
-            results.append(PatternResult(
-                label="사이수(Zwischenzug) 발견", icon="♻️",
-                description="기물 교환 중 먼저 체크를 낼 기회를 놓친 빈도",
-                score=s, is_strength=s >= 65, games_analyzed=analyzed,
-                detail=f"사이수 기회 미활용 {zw_miss}회 ({analyzed}게임)",
-                category="position",
-                representative_games=zw_games,
-            ))
-
         return results
 
     # ────────────────────────────────────────────────────────
@@ -978,13 +954,26 @@ class TacticalAnalysisService:
                             sf_data = sf_cache.get(g.game_id, [])
                             if sf_data:
                                 mn = board.fullmove_number
-                                after = [m for m in sf_data if m["move_no"] >= mn and m["is_my_move"]]
-                                sac_ok_flag = (
-                                    len(after) > 0 and
-                                    sum(m["cp_loss"] for m in after[:5]) / len(after[:5]) < 80
-                                )
+                                # 희생 수 자체의 cp_loss 확인 (Stockfish 승인 여부)
+                                sac_eval = [m for m in sf_data
+                                            if m["move_no"] == mn and m["is_my_move"]]
+                                if sac_eval:
+                                    # cp_loss < 100 → 엔진이 희생을 최선수/준최선으로 인정
+                                    sac_ok_flag = sac_eval[0].get("cp_loss", 999) < 100
+                                else:
+                                    # 해당 수 분석 미포함 시 후속 5수 정확도로 대체 판단
+                                    after = [m for m in sf_data
+                                             if m["move_no"] > mn and m["is_my_move"]]
+                                    sac_ok_flag = (
+                                        len(after) > 0 and
+                                        sum(m["cp_loss"] for m in after[:5]) / len(after[:5]) < 80
+                                    )
                             else:
-                                sac_ok_flag = g.result.value == "win"
+                                # Stockfish 없음: 게임 승리 + 25수 이상 지속 (공격이 효과적이었음)
+                                sac_ok_flag = (
+                                    g.result.value == "win" and
+                                    _estimate_total_moves(g.pgn or "") >= 25
+                                )
 
                     # 13. Closed Position
                     if is_my and board.fullmove_number >= 10:
@@ -1107,12 +1096,27 @@ class TacticalAnalysisService:
             oc_wr = _win_rate(oc_games, username)
             sc_wr = _win_rate(same_castle, username) if same_castle else 50.0
             diff = oc_wr - sc_wr
-            s = max(0, min(100, int(oc_wr)))
+            # SF 공격 정확도: 15~30수 구간의 내 수 평균 cp_loss < 90인 게임 비율
+            if sf_cache:
+                attack_accurate = sum(
+                    1 for g, _ in opp_castle
+                    if (mv := [m for m in sf_cache.get(g.game_id, [])
+                                if m["is_my_move"] and 15 <= m["move_no"] <= 30])
+                    and (sum(m["cp_loss"] for m in mv) / len(mv)) < 90
+                )
+                attack_rate = attack_accurate / len(opp_castle) * 100
+                s = max(0, min(100, int(attack_rate * 0.55 + oc_wr * 0.45)))
+                is_str = attack_rate >= 45 and oc_wr >= 45
+                detail_sfx = f" · SF공격 {attack_rate:.0f}%"
+            else:
+                s = max(0, min(100, int(oc_wr)))
+                is_str = oc_wr >= 50
+                detail_sfx = ""
             results.append(PatternResult(
                 label="반대 방향 캐슬링 난전", icon="🏹",
                 description="서로 반대쪽으로 캐슬링한 폰 스톰 상황 승률",
-                score=s, is_strength=oc_wr >= 50, games_analyzed=len(opp_castle),
-                detail=f"반대 캐슬 {len(opp_castle)}게임 → {oc_wr:.0f}% | 같은 방향 {sc_wr:.0f}% ({diff:+.0f}%p)",
+                score=s, is_strength=is_str, games_analyzed=len(opp_castle),
+                detail=f"반대 캐슬 {len(opp_castle)}게임 → {oc_wr:.0f}% | 같은 방향 {sc_wr:.0f}% ({diff:+.0f}%p){detail_sfx}",
                 category="position",
                 representative_games=opp_castle,
             ))
@@ -1259,7 +1263,7 @@ class TacticalAnalysisService:
             if had_qe:
                 total_moves = float(_estimate_total_moves(g.pgn or ""))
                 moves_after = max(total_moves - qe_move_no, 1.0)  # 퀸 교환 후 플레이 수
-                qe_games.append((g, moves_after))
+                qe_games.append((g, float(qe_move_no)))  # 퀸 교환 수(move_no) 저장 → SF 엔드게임 품질 계산용
             else:
                 nonqe_games.append(g)
 
@@ -1304,12 +1308,33 @@ class TacticalAnalysisService:
             qe_wr = _win_rate(qe_list, username)
             nq_wr = _win_rate(nonqe_games, username) if nonqe_games else 50.0
             diff = qe_wr - nq_wr
-            s = max(0, min(100, int(qe_wr)))
+            # SF 엔드게임 품질: 퀸 교환 수 이후 내 수의 평균 cp_loss
+            if sf_cache:
+                eg_losses = []
+                for g, qe_mn in qe_games:
+                    mv = [m for m in sf_cache.get(g.game_id, [])
+                          if m["is_my_move"] and m["move_no"] > int(qe_mn)]
+                    if mv:
+                        eg_losses.append(sum(m["cp_loss"] for m in mv) / len(mv))
+                if eg_losses:
+                    avg_eg_loss = sum(eg_losses) / len(eg_losses)
+                    eg_score = max(0, min(100, int(100 - avg_eg_loss * 0.45)))
+                    s = max(0, min(100, int(eg_score * 0.6 + qe_wr * 0.4)))
+                    is_str = avg_eg_loss < 85 and qe_wr >= 45
+                    detail_sfx = f" · SF손실 {avg_eg_loss:.0f}cp"
+                else:
+                    s = max(0, min(100, int(qe_wr)))
+                    is_str = qe_wr >= 50
+                    detail_sfx = ""
+            else:
+                s = max(0, min(100, int(qe_wr)))
+                is_str = qe_wr >= 50
+                detail_sfx = ""
             results.append(PatternResult(
                 label="퀸 교환 후 이해도", icon="👸",
                 description="퀸이 교환된 엔드게임 전환 시점의 승률",
-                score=s, is_strength=qe_wr >= 50, games_analyzed=len(qe_games),
-                detail=f"퀸 교환 {len(qe_games)}게임 → {qe_wr:.0f}% | 퀸 유지 {nq_wr:.0f}% ({diff:+.0f}%p)",
+                score=s, is_strength=is_str, games_analyzed=len(qe_games),
+                detail=f"퀸 교환 {len(qe_games)}게임 → {qe_wr:.0f}% | 퀸 유지 {nq_wr:.0f}% ({diff:+.0f}%p){detail_sfx}",
                 category="endgame",
                 representative_games=qe_games,
             ))

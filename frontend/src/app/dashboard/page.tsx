@@ -9,7 +9,6 @@ import {
   getBestWorstOpenings,
   getTimePressure,
   getTacticalPatterns,
-  getAiInsights,
 } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
 import { Suspense, useState, useEffect, useMemo } from "react";
@@ -119,21 +118,12 @@ function DashboardContent() {
     staleTime: 120_000,
   });
 
-  // 전술 패턴 분석 (ML 기반)
+  // 전술 패턴 분석
   const { data: tacticalPatterns, isLoading: loadingTactical } = useQuery({
     queryKey: ["tactical-patterns", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
     queryFn: () => getTacticalPatterns(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
     enabled,
     staleTime: 180_000,
-    retry: 1,
-  });
-
-  // AI 코치 인사이트 (GPT-4o-mini 또는 규칙 기반 fallback)
-  const { data: aiInsightsData, isLoading: loadingAI } = useQuery({
-    queryKey: ["ai-insights", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getAiInsights(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
-    enabled: enabled && !!tacticalPatterns,
-    staleTime: 300_000,
     retry: 1,
   });
 
@@ -296,7 +286,7 @@ function DashboardContent() {
                 <div className="flex flex-wrap gap-3 text-sm text-zinc-400 mt-1">
                   {profile.rating_bullet != null && (
                     <span className="flex items-center gap-1">
-                      <span className="text-yellow-500">&#9889;</span>
+                      <span className="text-yellow-500">🔫</span>
                       <span className="text-zinc-500">Bullet</span>
                       <span className="text-white font-semibold">{profile.rating_bullet}</span>
                     </span>
@@ -410,12 +400,10 @@ function DashboardContent() {
               {/* ── Section 4 – 전술 패턴 분석 ── */}
               <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                <SectionHeader title="전술 패턴 분석" desc="ML 기반 10종 전술 패턴 강점 · 약점 분석" />
+                <SectionHeader title="전술 패턴 분석" desc="게임 패턴 기반 강점 · 약점 분석" />
                 <TacticalPatternsCard
                   data={tacticalPatterns}
                   isLoading={loadingTactical}
-                  aiInsights={aiInsightsData?.insights}
-                  isLoadingInsights={loadingAI}
                 />
               </section>
             </div>
