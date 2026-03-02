@@ -132,10 +132,13 @@ class ChessDotComService:
         games: List[GameSummary] = []
         HARD_CAP = 5000
         using_time_filter = since_ts is not None or until_ts is not None
+        # 시간 필터 없을 때는 max_games 개수만큼만 수집 (성능 보호)
+        # 시간 필터가 있을 때는 해당 구간 내 모든 게임을 수집 (최대 HARD_CAP)
+        effective_cap = HARD_CAP if using_time_filter else max(max_games, 100)
 
         async with httpx.AsyncClient(timeout=20) as client:
             for archive_url in archives:
-                if len(games) >= HARD_CAP:
+                if len(games) >= effective_cap:
                     break
 
                 # since_ts 가 있으면 해당 월 이전 아카이브는 건너뜀
@@ -156,7 +159,7 @@ class ChessDotComService:
                         monthly, key=lambda g: g.get("end_time", 0), reverse=True
                     )
                     for raw in monthly_sorted:
-                        if len(games) >= HARD_CAP:
+                        if len(games) >= effective_cap:
                             break
                         end_time = raw.get("end_time", 0)
                         if since_ts is not None and end_time < since_ts:

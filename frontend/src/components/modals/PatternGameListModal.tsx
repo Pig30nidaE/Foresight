@@ -9,6 +9,17 @@ interface Props {
   onClose: () => void;
 }
 
+// Chess.com 게임 URL → 분석 URL 변환
+// https://www.chess.com/game/live/12345 → https://www.chess.com/analysis/game/live/12345/analysis
+// https://lichess.org/GAMEID            → https://lichess.org/GAMEID#analysis
+function toAnalysisUrl(url: string): string {
+  if (!url) return url;
+  const cdotcom = url.match(/^(https?:\/\/(?:www\.)?chess\.com)\/game\/(live|daily)\/(\w+)/);
+  if (cdotcom) return `${cdotcom[1]}/analysis/game/${cdotcom[2]}/${cdotcom[3]}/analysis`;
+  if (/lichess\.org\/[A-Za-z0-9]+(?:\?|#|$)/.test(url)) return url.replace(/(\?.*)?$/, "#analysis");
+  return url;
+}
+
 const RESULT_BADGE: Record<string, { label: string; cls: string }> = {
   win:  { label: "승리", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" },
   loss: { label: "패배", cls: "bg-red-500/20 text-red-300 border-red-500/30" },
@@ -27,7 +38,7 @@ function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
 
   return (
     <a
-      href={game.url}
+      href={toAnalysisUrl(game.url)}
       target="_blank"
       rel="noopener noreferrer"
       className="group flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60
@@ -167,7 +178,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-zinc-800/60 flex items-center justify-between">
-          <p className="text-xs text-zinc-600">클릭하여 Chess.com / Lichess에서 게임 분석</p>
+          <p className="text-xs text-zinc-600">클릭하여 분석 보드에서 게임 리뷰</p>
           <button
             onClick={onClose}
             className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-600"

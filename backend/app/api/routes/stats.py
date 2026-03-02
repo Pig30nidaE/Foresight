@@ -23,7 +23,7 @@ async def get_first_move_stats(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=200),
+    max_games: int = Query(default=1000),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
 ):
