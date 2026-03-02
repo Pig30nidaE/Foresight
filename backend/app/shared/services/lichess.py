@@ -4,10 +4,19 @@ Docs: https://lichess.org/api
 공개 게임은 토큰 없이 접근 가능, 자신의 게임은 OAuth 토큰 필요
 """
 import httpx
+from datetime import datetime, timezone
 from typing import List, Optional
 from app.core.config import settings
 from app.models.schemas import PlayerProfile, GameSummary, GameResult, Platform
 from app.shared.services import opening_db
+
+
+def _lichess_ts_to_iso(ts: object) -> str:
+    """Lichess createdAt (Unix 밀리초 정수) → ISO 8601 문자열."""
+    try:
+        return datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc).isoformat()
+    except (TypeError, ValueError, OSError):
+        return ""
 
 
 class LichessService:
@@ -144,6 +153,6 @@ class LichessService:
             opening_eco=eco_code,
             opening_name=opening_name,
             pgn=raw.get("pgn"),
-            played_at=str(raw.get("createdAt", "")),
+            played_at=_lichess_ts_to_iso(raw.get("createdAt")),
             url=f"https://lichess.org/{raw.get('id', '')}",
         )

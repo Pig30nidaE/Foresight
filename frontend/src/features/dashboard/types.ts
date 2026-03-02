@@ -18,6 +18,7 @@ export interface FirstMoveEntry {
 export interface PatternGameItem {
   url: string;
   result: "win" | "loss" | "draw";
+  is_success?: boolean;          // true=패턴 성공(승리), false=패턴 실패(패배/무)
   opening_eco?: string | null;
   opening_name?: string | null;
   played_at?: string | null;
