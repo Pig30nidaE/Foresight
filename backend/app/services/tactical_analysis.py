@@ -709,6 +709,16 @@ class TacticalAnalysisService:
         zw_miss = 0
         analyzed = 0
 
+        # 패턴별 게임 추적 — 해당 패턴이 실제 발생한 게임만 수집
+        pin_bad_games:  List[Tuple[GameSummary, float]] = []
+        pin_ok_games:   List[Tuple[GameSummary, float]] = []
+        fork_bad_games: List[Tuple[GameSummary, float]] = []
+        fork_ok_games:  List[Tuple[GameSummary, float]] = []
+        disc_ok_games_list:  List[Tuple[GameSummary, float]] = []
+        disc_bad_games_list: List[Tuple[GameSummary, float]] = []
+        backrank_games: List[Tuple[GameSummary, float]] = []
+        zw_games:       List[Tuple[GameSummary, float]] = []
+
         for g in games:
             if not g.pgn:
                 continue
@@ -721,6 +731,13 @@ class TacticalAnalysisService:
             board = parsed.board()
             analyzed += 1
 
+            # 게임 내 패턴 발생 횟수
+            g_pin_bad = g_pin_total = 0
+            g_fork_ev = g_fork_fail = 0
+            g_disc_ok = g_disc_miss = 0
+            g_back = 0
+            g_zw = 0
+
             for node in parsed.mainline():
                 is_my = board.turn == my_color
                 move = node.move
@@ -728,9 +745,11 @@ class TacticalAnalysisService:
                     # 7. Pin
                     if is_my and board.is_pinned(my_color, move.from_square):
                         pin_total += 1
+                        g_pin_total += 1
                         board.push(move)
                         if board.is_check():
                             pin_bad += 1
+                            g_pin_bad += 1
                         board.pop()
 
                     # 8. Fork (나이트 포크)
@@ -746,10 +765,13 @@ class TacticalAnalysisService:
                                 pc = board.piece_at(move.from_square)
                                 if pc and pc.piece_type in (chess.KING, chess.QUEEN):
                                     fork_evaded += 1
+                                    g_fork_ev += 1
                                 elif board.is_capture(move) and move.to_square == kn_sq:
                                     fork_evaded += 1
+                                    g_fork_ev += 1
                                 else:
                                     fork_failed += 1
+                                    g_fork_fail += 1
 
                     # 9. Discovered Attack
                     if is_my:
@@ -765,8 +787,10 @@ class TacticalAnalysisService:
                                     tgt = board.piece_at(move.to_square)
                                     if (tgt and tgt.color == opp_color) or board.gives_check(move):
                                         disc_ok += 1
+                                        g_disc_ok += 1
                                     else:
                                         disc_miss += 1
+                                        g_disc_miss += 1
                                     break
 
                     # 10. Back-Rank
@@ -781,6 +805,7 @@ class TacticalAnalysisService:
                                         cp = board.piece_at(ch_sq)
                                         if cp and cp.piece_type in (chess.ROOK, chess.QUEEN):
                                             back_rank += 1
+                                            g_back += 1
                                             break
                         board.pop()
 
@@ -790,6 +815,7 @@ class TacticalAnalysisService:
                                        if board.gives_check(m) and not board.is_capture(m)]
                         if check_moves:
                             zw_miss += 1
+                            g_zw += 1
 
                     board.push(move)
                 except Exception:
@@ -797,6 +823,35 @@ class TacticalAnalysisService:
                         board.push(move)
                     except Exception:
                         break
+
+            # 게임별 결과 → 대표 게임 리스트에 추가
+            # 점수 = 발생 횟수 (높을수록 해당 패턴이 더 두드러진 게임)
+            if g_pin_total > 0:
+                severity = g_pin_bad / g_pin_total * 100
+                if g_pin_bad > 0:
+                    pin_bad_games.append((g, severity + g_pin_bad))
+                else:
+                    pin_ok_games.append((g, float(g_pin_total)))
+
+            g_fork_total = g_fork_ev + g_fork_fail
+            if g_fork_total > 0:
+                if g_fork_fail > 0:
+                    fork_bad_games.append((g, float(g_fork_fail)))
+                else:
+                    fork_ok_games.append((g, float(g_fork_ev)))
+
+            g_disc_total = g_disc_ok + g_disc_miss
+            if g_disc_total > 0:
+                if g_disc_ok > 0:
+                    disc_ok_games_list.append((g, float(g_disc_ok)))
+                if g_disc_miss > 0:
+                    disc_bad_games_list.append((g, float(g_disc_miss)))
+
+            if g_back > 0:
+                backrank_games.append((g, float(g_back)))
+
+            if g_zw > 0:
+                zw_games.append((g, float(g_zw)))
 
         results: List[PatternResult] = []
 
@@ -808,6 +863,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=s >= 60, games_analyzed=analyzed,
                 detail=f"핀 상황 {pin_total}회 중 체크 허용 {pin_bad}회",
                 category="position",
+                representative_games=pin_bad_games + pin_ok_games,
             ))
 
         fork_total = fork_evaded + fork_failed
@@ -819,6 +875,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=s >= 60, games_analyzed=analyzed,
                 detail=f"포크 위협 {fork_total}회 → 회피 {fork_evaded}회 ({s}%)",
                 category="position",
+                representative_games=fork_bad_games + fork_ok_games,
             ))
 
         disc_total = disc_ok + disc_miss
@@ -830,6 +887,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=s >= 55, games_analyzed=analyzed,
                 detail=f"발견 공격 기회 {disc_total}회 → 활용 {disc_ok}회 ({s}%)",
                 category="position",
+                representative_games=disc_ok_games_list + disc_bad_games_list,
             ))
 
         if back_rank >= 2 or analyzed >= 40:
@@ -840,6 +898,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=s >= 65, games_analyzed=analyzed,
                 detail=f"백랭크 체크 허용 {back_rank}회 ({analyzed}게임)",
                 category="position",
+                representative_games=backrank_games,
             ))
 
         if zw_miss >= 2 or analyzed >= 30:
@@ -850,6 +909,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=s >= 65, games_analyzed=analyzed,
                 detail=f"사이수 기회 미활용 {zw_miss}회 ({analyzed}게임)",
                 category="position",
+                representative_games=zw_games,
             ))
 
         return results
@@ -869,6 +929,8 @@ class TacticalAnalysisService:
         # (game, sacrifice_piece_value) — 더 비싼 기물 희생일수록 관련도 높음
         sac_ok_games: List[Tuple[GameSummary, float]] = []
         sac_bad_games: List[Tuple[GameSummary, float]] = []
+        # 닫힌 포지션 게임 추적
+        closed_games: List[Tuple[GameSummary, float]] = []
         analyzed = 0
 
         # 기물 가치표 (chess.py piece_type → centipawn 근사)
@@ -895,6 +957,7 @@ class TacticalAnalysisService:
             sac_flag = False
             sac_ok_flag = False
             max_sac_val = 0.0   # 게임 내 가장 값비싼 희생의 기물 가치
+            g_closed_bad = g_closed_total = 0
 
             for node in parsed.mainline():
                 is_my = board.turn == my_color
@@ -932,6 +995,7 @@ class TacticalAnalysisService:
                         )
                         if blocked >= 3:
                             closed_total += 1
+                            g_closed_total += 1
                             src_pc = board.piece_at(move.from_square)
                             if src_pc and src_pc.piece_type == chess.PAWN:
                                 dest = move.to_square
@@ -941,17 +1005,20 @@ class TacticalAnalysisService:
                                 )
                                 if not supported:
                                     closed_bad += 1
+                                    g_closed_bad += 1
 
                     # 14. Opposite-side Castling
                     uci = move.uci()
-                    if uci == "e1g1":
-                        (my_cs := "king") if is_my else setattr(type('_', (), {})(), '_', opp_cs := "king")
-                    elif uci == "e1c1":
-                        (my_cs := "queen") if is_my else setattr(type('_', (), {})(), '_', opp_cs := "queen")
-                    elif uci == "e8g8":
-                        (my_cs := "king") if is_my else setattr(type('_', (), {})(), '_', opp_cs := "king")
-                    elif uci == "e8c8":
-                        (my_cs := "queen") if is_my else setattr(type('_', (), {})(), '_', opp_cs := "queen")
+                    if uci in ("e1g1", "e8g8"):   # 킹사이드 캐슬링
+                        if is_my:
+                            my_cs = "king"
+                        else:
+                            opp_cs = "king"
+                    elif uci in ("e1c1", "e8c8"): # 퀸사이드 캐슬링
+                        if is_my:
+                            my_cs = "queen"
+                        else:
+                            opp_cs = "queen"
 
                     # 15. IQP
                     if board.fullmove_number == 20:
@@ -986,6 +1053,11 @@ class TacticalAnalysisService:
                     sac_bad += 1
                     sac_bad_games.append((g, sac_val))
 
+            # 닫힌 포지션 - 무리한 폰 전진이 있었던 게임일수록 관련도 높음
+            if g_closed_total > 0:
+                bad_ratio = g_closed_bad / g_closed_total
+                closed_games.append((g, bad_ratio * 100 + g_closed_bad))
+
             game_len = float(_estimate_total_moves(g.pgn or ""))
             opp = my_cs is not None and opp_cs is not None and my_cs != opp_cs
             if opp:
@@ -1019,12 +1091,15 @@ class TacticalAnalysisService:
         if closed_total >= 5:
             bad_rate = closed_bad / closed_total * 100
             s = max(20, min(90, int(100 - bad_rate * 2)))
+            # 무리한 폰 전진이 많았던 게임을 앞에, 인내심을 발휘한 게임을 뒤에
+            closed_sorted = sorted(closed_games, key=lambda x: x[1], reverse=True)
             results.append(PatternResult(
                 label="닫힌 포지션 인내심", icon="🧱",
                 description="폰이 맞물린 닫힌 구조에서 무리한 폰 전진 빈도",
                 score=s, is_strength=s >= 60, games_analyzed=analyzed,
                 detail=f"닫힌 상황 {closed_total}회 중 무리한 폰 전진 {closed_bad}회",
                 category="position",
+                representative_games=closed_sorted,
             ))
 
         if len(opp_castle) >= 5:
@@ -1086,6 +1161,14 @@ class TacticalAnalysisService:
         hunt_ok = hunt_miss = 0
         analyzed = 0
 
+        # 패턴별 게임 추적
+        ht_ok_games:      List[Tuple[GameSummary, float]] = []
+        ht_bad_games:     List[Tuple[GameSummary, float]] = []
+        promo_ok_games:   List[Tuple[GameSummary, float]] = []
+        promo_miss_games: List[Tuple[GameSummary, float]] = []
+        hunt_ok_games:    List[Tuple[GameSummary, float]] = []
+        hunt_miss_games:  List[Tuple[GameSummary, float]] = []
+
         for g in games:
             if not g.pgn:
                 continue
@@ -1100,6 +1183,8 @@ class TacticalAnalysisService:
             had_qe = False
             qe_move_no = 0
             hunt_result: Optional[bool] = None
+            g_ht_ok = g_ht_bad = 0
+            g_promo_ok = g_promo_miss = 0
 
             for node in parsed.mainline():
                 is_my = board.turn == my_color
@@ -1124,8 +1209,10 @@ class TacticalAnalysisService:
                             )
                             if after < attacked:
                                 ht_ok += 1
+                                g_ht_ok += 1
                             else:
                                 ht_bad += 1
+                                g_ht_bad += 1
 
                     # 18. Queen Exchange
                     if (board.is_capture(move)
@@ -1148,8 +1235,10 @@ class TacticalAnalysisService:
                         src_pc = board.piece_at(move.from_square)
                         if src_pc and src_pc.piece_type == chess.PAWN:
                             promo_ok += 1
+                            g_promo_ok += 1
                         else:
                             promo_miss += 1
+                            g_promo_miss += 1
 
                     # 20. King Hunt
                     if is_my:
@@ -1173,10 +1262,27 @@ class TacticalAnalysisService:
                 qe_games.append((g, moves_after))
             else:
                 nonqe_games.append(g)
+
             if hunt_result is True:
                 hunt_ok += 1
+                hunt_ok_games.append((g, 1.0))
             elif hunt_result is False:
                 hunt_miss += 1
+                hunt_miss_games.append((g, 1.0))
+
+            g_ht_total = g_ht_ok + g_ht_bad
+            if g_ht_total > 0:
+                if g_ht_bad > 0:
+                    ht_bad_games.append((g, float(g_ht_bad)))
+                else:
+                    ht_ok_games.append((g, float(g_ht_ok)))
+
+            g_promo_total = g_promo_ok + g_promo_miss
+            if g_promo_total > 0:
+                if g_promo_miss > 0:
+                    promo_miss_games.append((g, float(g_promo_miss)))
+                else:
+                    promo_ok_games.append((g, float(g_promo_ok)))
 
         results: List[PatternResult] = []
 
@@ -1190,6 +1296,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"고긴장 {ht_total}회: 개선 {ht_ok} / 악화 {ht_bad} ({rate:.0f}%)",
                 category="endgame",
+                representative_games=ht_bad_games + ht_ok_games,
             ))
 
         if len(qe_games) >= 5:
@@ -1217,6 +1324,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=rate >= 60, games_analyzed=analyzed,
                 detail=f"승급 레이스 {pr_total}회: 정확 {promo_ok} / 미흡 {promo_miss} ({rate:.0f}%)",
                 category="endgame",
+                representative_games=promo_miss_games + promo_ok_games,
             ))
 
         hunt_total = hunt_ok + hunt_miss
@@ -1229,6 +1337,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"킹 헌트 기회 {hunt_total}회: 마무리 {hunt_ok} / 놓침 {hunt_miss} ({rate:.0f}%)",
                 category="endgame",
+                representative_games=hunt_ok_games + hunt_miss_games,
             ))
 
         # ── 보너스: 흑백 밸런스 ─────────────────────────────
