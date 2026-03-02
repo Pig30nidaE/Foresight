@@ -111,13 +111,13 @@ class LichessService:
             import json
             try:
                 raw = json.loads(line)
-                games.append(self._parse_game(raw, username))
+                games.append(self._parse_game(raw, username, perf_type))
             except Exception:
                 continue
 
         return games
 
-    def _parse_game(self, raw: dict, username: str) -> GameSummary:
+    def _parse_game(self, raw: dict, username: str, perf_type: Optional[str] = None) -> GameSummary:
         players = raw.get("players", {})
         white = players.get("white", {})
         black = players.get("black", {})
@@ -134,7 +134,9 @@ class LichessService:
             result = GameResult.loss
 
         opening = raw.get("opening", {})
-        speed = raw.get("speed", "")  # bullet, blitz, rapid, classical
+        # perf_type 파라미터로 받았다면 사용 (이미 필터된 데이터)
+        # 아니면 응답의 speed 필드 사용
+        speed = perf_type or raw.get("speed", "")
 
         eco_code: Optional[str] = opening.get("eco")
         # Lichess가 제공하는 이름이 우선 (이미 동일 DB 사용)
