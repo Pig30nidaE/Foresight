@@ -174,3 +174,40 @@ async def get_tactical_patterns(
         return tactical_svc.analyze(games, username)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tactical-patterns/{platform}/{username}/ai-insights")
+async def get_tactical_ai_insights(
+    platform: Platform,
+    username: str,
+    time_class: str = Query(default="blitz"),
+    max_games: int = Query(default=200, le=2000),
+    since_ms: Optional[int] = Query(default=None),
+    until_ms: Optional[int] = Query(default=None),
+):
+    """
+    AI 코치 인사이트 — GPT-4o-mini 기반 한국어 자연어 분석.
+    OPENAI_API_KEY 없으면 규칙 기반 폴백을 반환합니다.
+    """
+    try:
+        if platform == Platform.chessdotcom:
+            since_ts = since_ms // 1000 if since_ms else None
+            until_ts = until_ms // 1000 if until_ms else None
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
+        else:
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
+
+        games = [g for g in games if g.time_class == time_class]
+        analysis = tactical_svc.analyze(games, username)
+
+        from app.services.ai_insights import generate_tactical_insights
+        insights = await generate_tactical_insights(analysis, username)
+
+        return {
+            "username":    username,
+            "platform":    platform,
+            "total_games": analysis.get("total_games", 0),
+            "insights":    insights,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
