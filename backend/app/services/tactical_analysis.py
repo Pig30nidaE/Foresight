@@ -296,8 +296,8 @@ class TacticalAnalysisService:
         patterns: List[PatternResult] = []
 
         # ── Time & Psychology (1–6) ─────────────────────────
-        for fn in [self._p1, self._p2, self._p3]:
-            p = fn(games, username)
+        for fn in [self._p1, self._p2]:
+            p = fn(games, username, sf_cache)
             if p:
                 patterns.append(p)
         p = self._p4(games, username, sf_cache)
@@ -311,7 +311,7 @@ class TacticalAnalysisService:
             patterns.append(p)
 
         # ── Tactical Motifs (7–11) ──────────────────────────
-        patterns.extend(self._p7_to_p11(board_games, username))
+        patterns.extend(self._p7_to_p11(board_games, username, sf_cache))
 
         # ── Positional & Material (12–16) ───────────────────
         patterns.extend(self._p12_to_p16(board_games, username, sf_cache))
@@ -427,9 +427,13 @@ class TacticalAnalysisService:
     # ────────────────────────────────────────────────────────
     # 1. Time Trouble
     # ────────────────────────────────────────────────────────
-    def _p1(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
-        pressure: List[Tuple[GameSummary, float]] = []  # (game, 1/min_clock) 낮은 시계 = 고관련도
+    def _p1(self, games: List[GameSummary], username: str,
+            sf_cache: Optional[Dict] = None) -> Optional[PatternResult]:
+        """잔여 60초 미만 압박 수의 SF cp_loss vs 일반 상황 비교 — 승률은 보조 지표."""
+        pressure: List[Tuple[GameSummary, float]] = []  # (game, 1/min_clock)
         normal: List[GameSummary] = []
+        pressure_losses: List[float] = []   # SF: 압박 수 cp_loss
+        normal_losses:   List[float] = []   # SF: 일반 수 cp_loss
         for g in games:
             if not g.pgn:
                 continue
@@ -440,19 +444,27 @@ class TacticalAnalysisService:
             min_clk = float("inf")
             had = False
             board = parsed.board()
+            sf_data = (sf_cache or {}).get(g.game_id, [])
+            sf_by_mn: Dict[int, Dict] = {m["move_no"]: m for m in sf_data if m["is_my_move"]}
             for node in parsed.mainline():
                 my_turn = (board.turn == chess.WHITE) == is_white
                 clk = _parse_clock(node.comment or "")
-                if my_turn and clk is not None and clk < 60.0:
-                    had = True
-                    if clk < min_clk:
-                        min_clk = clk
+                if my_turn:
+                    mn = board.fullmove_number
+                    sf_mv = sf_by_mn.get(mn)
+                    if clk is not None and clk < 60.0:
+                        had = True
+                        if clk < min_clk:
+                            min_clk = clk
+                        if sf_mv:
+                            pressure_losses.append(sf_mv["cp_loss"])
+                    elif sf_mv and clk is not None:
+                        normal_losses.append(sf_mv["cp_loss"])
                 try:
                     board.push(node.move)
                 except Exception:
                     break
             if had:
-                # relevance = 1/min_clk: 시계가 낮을수록 관련도 높음
                 pressure.append((g, 1.0 / max(min_clk, 0.1)))
             else:
                 normal.append(g)
@@ -461,14 +473,27 @@ class TacticalAnalysisService:
         pressure_games = [g for g, _ in pressure]
         pr = _win_rate(pressure_games, username)
         nr = _win_rate(normal, username) if normal else 50.0
-        diff = pr - nr
-        score = max(0, min(100, int(pr)))
+        win_diff = pr - nr
+        if pressure_losses and normal_losses:
+            avg_p = sum(pressure_losses) / len(pressure_losses)
+            avg_n = sum(normal_losses) / len(normal_losses)
+            # 압박/일반 cp_loss 비율: 1.0 = 동일 품질, 2.0 = 2배 저하
+            loss_ratio = avg_p / max(avg_n, 1.0)
+            quality_score = max(0, min(100, int(100 - (loss_ratio - 1.0) * 80)))
+            score = max(0, min(100, int(quality_score * 0.6 + pr * 0.4)))
+            is_str = loss_ratio < 1.4 and pr >= 40
+            detail = (f"압박 {len(pressure)}게임 → {pr:.0f}% | "
+                      f"SF손실 압박 {avg_p:.0f}cp / 일반 {avg_n:.0f}cp (×{loss_ratio:.1f})")
+        else:
+            score = max(0, min(100, int(pr)))
+            is_str = (pr >= 45 and win_diff >= -10)
+            detail = f"압박 {len(pressure)}게임 → {pr:.0f}% | 일반 {nr:.0f}% ({win_diff:+.0f}%p)"
         return PatternResult(
             label="시간 압박 대응", icon="⏱️",
-            description="잔여시간 60초 미만 상황에서의 최종 승률",
-            score=score, is_strength=(pr >= 45 and diff >= -10),
+            description="잔여시간 60초 미만 상황의 수 품질(SF cp_loss) + 승률 복합 지표",
+            score=score, is_strength=is_str,
             games_analyzed=len(pressure),
-            detail=f"압박 {len(pressure)}게임 → {pr:.0f}% | 일반 {nr:.0f}% ({diff:+.0f}%p)",
+            detail=detail,
             category="time",
             representative_games=pressure,
         )
@@ -476,9 +501,13 @@ class TacticalAnalysisService:
     # ────────────────────────────────────────────────────────
     # 2. Instant Response
     # ────────────────────────────────────────────────────────
-    def _p2(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
-        quick_games: List[Tuple[GameSummary, float]] = []  # (game, quick_ratio)
+    def _p2(self, games: List[GameSummary], username: str,
+            sf_cache: Optional[Dict] = None) -> Optional[PatternResult]:
+        """3초 이내 즉각 응수의 SF cp_loss vs 신중한 수 비교 — 직관 정확도 측정."""
+        quick_games: List[Tuple[GameSummary, float]] = []
         slow_games: List[GameSummary] = []
+        quick_losses: List[float] = []   # SF: 빠른 수(≤3s) cp_loss
+        slow_losses:  List[float] = []   # SF: 신중한 수(>3s) cp_loss
         for g in games:
             if not g.pgn:
                 continue
@@ -489,21 +518,31 @@ class TacticalAnalysisService:
             qc = tot = 0
             prev_clk: Optional[float] = None
             board = parsed.board()
+            sf_data = (sf_cache or {}).get(g.game_id, [])
+            sf_by_mn: Dict[int, Dict] = {m["move_no"]: m for m in sf_data if m["is_my_move"]}
             for node in parsed.mainline():
                 my_turn = (board.turn == chess.WHITE) == is_white
                 clk = _parse_clock(node.comment or "")
                 emt = _parse_emt(node.comment or "")
                 if my_turn:
+                    mn = board.fullmove_number
+                    sf_mv = sf_by_mn.get(mn)
                     if emt is not None:
                         tot += 1
-                        if emt <= 3.0:
+                        is_quick = emt <= 3.0
+                        if is_quick:
                             qc += 1
+                        if sf_mv:
+                            (quick_losses if is_quick else slow_losses).append(sf_mv["cp_loss"])
                     elif clk is not None and prev_clk is not None:
                         spent = prev_clk - clk
                         if 0 < spent:
                             tot += 1
-                            if spent <= 3.0:
+                            is_quick = spent <= 3.0
+                            if is_quick:
                                 qc += 1
+                            if sf_mv:
+                                (quick_losses if is_quick else slow_losses).append(sf_mv["cp_loss"])
                     prev_clk = clk
                 try:
                     board.push(node.move)
@@ -512,7 +551,7 @@ class TacticalAnalysisService:
             if tot >= 10:
                 ratio = qc / tot
                 if ratio >= 0.3:
-                    quick_games.append((g, ratio))  # ratio가 높을수록 직관 플레이 극명
+                    quick_games.append((g, ratio))
                 else:
                     slow_games.append(g)
         if len(quick_games) < 5:
@@ -520,14 +559,27 @@ class TacticalAnalysisService:
         qg_list = [g for g, _ in quick_games]
         qr = _win_rate(qg_list, username)
         sr = _win_rate(slow_games, username) if slow_games else 50.0
-        diff = qr - sr
-        score = max(0, min(100, int(qr)))
+        win_diff = qr - sr
+        if quick_losses and slow_losses:
+            avg_q = sum(quick_losses) / len(quick_losses)
+            avg_s = sum(slow_losses) / len(slow_losses)
+            # 빠른 수/신중한 수 cp_loss 비율: 1.0 = 직관도 정확, 2.0 = 직관이 2배 부정확
+            q_ratio = avg_q / max(avg_s, 1.0)
+            quality_score = max(0, min(100, int(100 - (q_ratio - 1.0) * 70)))
+            score = max(0, min(100, int(quality_score * 0.6 + qr * 0.4)))
+            is_str = q_ratio < 1.3 and qr >= 45
+            detail = (f"직관 게임 {len(quick_games)}개 → {qr:.0f}% | "
+                      f"SF손실 빠른수 {avg_q:.0f}cp / 신중 {avg_s:.0f}cp (×{q_ratio:.1f})")
+        else:
+            score = max(0, min(100, int(qr)))
+            is_str = score >= STRENGTH_THRESHOLD
+            detail = f"직관 게임 {len(quick_games)}개 → {qr:.0f}% | 신중 {sr:.0f}% ({win_diff:+.0f}%p)"
         return PatternResult(
             label="즉각 반응 패턴", icon="⚡",
-            description="수를 3초 이내 직관으로 두는 게임(30%+)의 승률 — 직관력",
-            score=score, is_strength=score >= STRENGTH_THRESHOLD,
+            description="3초 이내 즉각 응수의 수 품질(SF cp_loss) vs 신중한 수 비교",
+            score=score, is_strength=is_str,
             games_analyzed=len(quick_games),
-            detail=f"직관 게임 {len(quick_games)}개 → {qr:.0f}% | 신중 {sr:.0f}% ({diff:+.0f}%p)",
+            detail=detail,
             category="time",
             representative_games=quick_games,
         )
@@ -728,6 +780,8 @@ class TacticalAnalysisService:
             opp_color = not my_color
             board = parsed.board()
             analyzed += 1
+            sf_data = (sf_cache or {}).get(g.game_id, [])
+            sf_by_mn: Dict[int, Dict] = {m["move_no"]: m for m in sf_data if m["is_my_move"]}
 
             # 게임 내 패턴 발생 횟수
             g_pin_bad = g_pin_total = 0
@@ -750,7 +804,7 @@ class TacticalAnalysisService:
                             g_pin_bad += 1
                         board.pop()
 
-                    # 8. Fork (나이트 포크)
+                    # 8. Fork (나이트 포크) — 포크 회피/교환 직후 수 SF 검증
                     if is_my:
                         opp_kn = board.pieces(chess.KNIGHT, opp_color)
                         my_king = board.king(my_color)
@@ -764,14 +818,23 @@ class TacticalAnalysisService:
                                 if pc and pc.piece_type in (chess.KING, chess.QUEEN):
                                     fork_evaded += 1
                                     g_fork_ev += 1
+                                    sf_mv = sf_by_mn.get(board.fullmove_number)
+                                    if sf_mv:
+                                        fork_use_losses.append(sf_mv["cp_loss"])
                                 elif board.is_capture(move) and move.to_square == kn_sq:
                                     fork_evaded += 1
                                     g_fork_ev += 1
+                                    sf_mv = sf_by_mn.get(board.fullmove_number)
+                                    if sf_mv:
+                                        fork_use_losses.append(sf_mv["cp_loss"])
                                 else:
                                     fork_failed += 1
                                     g_fork_fail += 1
+                                    sf_mv = sf_by_mn.get(board.fullmove_number)
+                                    if sf_mv:
+                                        fork_miss_losses.append(sf_mv["cp_loss"])
 
-                    # 9. Discovered Attack
+                    # 9. Discovered Attack — 활용 직후 수 SF 검증
                     if is_my:
                         my_sliders = (
                             list(board.pieces(chess.BISHOP, my_color))
@@ -783,12 +846,18 @@ class TacticalAnalysisService:
                             for sq in my_sliders:
                                 if chess.BB_SQUARES[opp_king] & board.attacks(sq):
                                     tgt = board.piece_at(move.to_square)
+                                    mn = board.fullmove_number
+                                    sf_mv = sf_by_mn.get(mn)
                                     if (tgt and tgt.color == opp_color) or board.gives_check(move):
                                         disc_ok += 1
                                         g_disc_ok += 1
+                                        if sf_mv:
+                                            disc_use_losses.append(sf_mv["cp_loss"])
                                     else:
                                         disc_miss += 1
                                         g_disc_miss += 1
+                                        if sf_mv:
+                                            disc_miss_losses.append(sf_mv["cp_loss"])
                                     break
 
                     # 10. Back-Rank
@@ -866,24 +935,50 @@ class TacticalAnalysisService:
 
         fork_total = fork_evaded + fork_failed
         if fork_total >= 3:
-            s = max(0, min(100, int(fork_evaded / fork_total * 100)))
+            if fork_use_losses and fork_miss_losses:
+                avg_use = sum(fork_use_losses) / len(fork_use_losses)
+                avg_miss = sum(fork_miss_losses) / len(fork_miss_losses)
+                # 포크 회피/교환 직후 cp_loss가 놓친 경우보다 작으면 실질적 활용
+                q_ratio = avg_use / max(avg_miss, 1.0)
+                s_q = max(0, min(100, int(100 - (q_ratio - 0.5) * 60)))
+                s_base = max(0, min(100, int(fork_evaded / fork_total * 100)))
+                s = max(0, min(100, int(s_q * 0.6 + s_base * 0.4)))
+                is_str = q_ratio < 0.8 and s_base >= 50
+                detail_sfx = f" | SF활용 {avg_use:.0f}cp / 놀친 {avg_miss:.0f}cp"
+            else:
+                s = max(0, min(100, int(fork_evaded / fork_total * 100)))
+                is_str = s >= 60
+                detail_sfx = ""
             results.append(PatternResult(
                 label="포크(Fork) 회피", icon="🐴",
-                description="상대 나이트의 킹+퀸 동시 공격에 대한 회피율",
-                score=s, is_strength=s >= 60, games_analyzed=analyzed,
-                detail=f"포크 위협 {fork_total}회 → 회피 {fork_evaded}회 ({s}%)",
+                description="상대 나이트의 킹+퀸 동시 공격에 대한 회피율 + SF 수 품질 검증",
+                score=s, is_strength=is_str, games_analyzed=analyzed,
+                detail=f"포크 위협 {fork_total}회 → 회피 {fork_evaded}회 ({int(fork_evaded/fork_total*100)}%){detail_sfx}",
                 category="position",
                 representative_games=fork_bad_games + fork_ok_games,
             ))
 
         disc_total = disc_ok + disc_miss
         if disc_total >= 3:
-            s = max(0, min(100, int(disc_ok / disc_total * 100)))
+            if disc_use_losses and disc_miss_losses:
+                avg_use = sum(disc_use_losses) / len(disc_use_losses)
+                avg_miss = sum(disc_miss_losses) / len(disc_miss_losses)
+                # 활용 시 cp_loss가 작을수록(= 좋은 수) 진짜 활용
+                ratio = avg_use / max(avg_miss, 1.0)
+                s_q = max(0, min(100, int(100 - (ratio - 0.5) * 60)))
+                s_base = max(0, min(100, int(disc_ok / disc_total * 100)))
+                s = max(0, min(100, int(s_q * 0.6 + s_base * 0.4)))
+                is_str = ratio < 0.85 and s_base >= 45
+                detail_sfx = f" | SF활용 {avg_use:.0f}cp / 놀친 {avg_miss:.0f}cp"
+            else:
+                s = max(0, min(100, int(disc_ok / disc_total * 100)))
+                is_str = s >= 55
+                detail_sfx = ""
             results.append(PatternResult(
                 label="발견 공격 인지", icon="🔍",
-                description="공격선이 열린 순간을 활용한 비율 (Discovered Attack)",
-                score=s, is_strength=s >= 55, games_analyzed=analyzed,
-                detail=f"발견 공격 기회 {disc_total}회 → 활용 {disc_ok}회 ({s}%)",
+                description="공격선이 열린 순간을 활용한 비율 + SF 수 품질 검증 (Discovered Attack)",
+                score=s, is_strength=is_str, games_analyzed=analyzed,
+                detail=f"발견 공격 기회 {disc_total}회 → 활용 {disc_ok}회 ({int(disc_ok/disc_total*100)}%){detail_sfx}",
                 category="position",
                 representative_games=disc_ok_games_list + disc_bad_games_list,
             ))
@@ -1079,14 +1174,37 @@ class TacticalAnalysisService:
 
         if closed_total >= 5:
             bad_rate = closed_bad / closed_total * 100
-            s = max(20, min(90, int(100 - bad_rate * 2)))
-            # 무리한 폰 전진이 많았던 게임을 앞에, 인내심을 발휘한 게임을 뒤에
+            # SF: 뵤힌 폰 전진 직후 cp_loss vs 안전한 수 평균 비교
+            if sf_cache:
+                # 닫힌 상황 중 게임별 평균 cp_loss
+                closed_sf_losses = []
+                for g, bad_ratio in closed_games:
+                    mv = [m for m in sf_cache.get(g.game_id, [])
+                          if m["is_my_move"] and 10 <= m["move_no"] <= 30]
+                    if mv:
+                        closed_sf_losses.append(sum(m["cp_loss"] for m in mv) / len(mv))
+                if closed_sf_losses:
+                    avg_cl = sum(closed_sf_losses) / len(closed_sf_losses)
+                    # cp_loss가 클수록 불필요한 수 많음
+                    sf_score = max(0, min(100, int(100 - avg_cl * 0.6)))
+                    base_s = max(20, min(90, int(100 - bad_rate * 2)))
+                    s = max(0, min(100, int(sf_score * 0.5 + base_s * 0.5)))
+                    is_str = avg_cl < 80 and bad_rate < 40
+                    detail_sfx = f" | SF손실 {avg_cl:.0f}cp"
+                else:
+                    s = max(20, min(90, int(100 - bad_rate * 2)))
+                    is_str = s >= 60
+                    detail_sfx = ""
+            else:
+                s = max(20, min(90, int(100 - bad_rate * 2)))
+                is_str = s >= 60
+                detail_sfx = ""
             closed_sorted = sorted(closed_games, key=lambda x: x[1], reverse=True)
             results.append(PatternResult(
                 label="닫힌 포지션 인내심", icon="🧱",
-                description="폰이 맞물린 닫힌 구조에서 무리한 폰 전진 빈도",
-                score=s, is_strength=s >= 60, games_analyzed=analyzed,
-                detail=f"닫힌 상황 {closed_total}회 중 무리한 폰 전진 {closed_bad}회",
+                description="폰이 맞물린 구조에서 불필요한 폰 전진 빈도 + SF cp_loss 복합",
+                score=s, is_strength=is_str, games_analyzed=analyzed,
+                detail=f"닫힌 상황 {closed_total}회 중 무리한 폰 전진 {closed_bad}회 ({bad_rate:.0f}%){detail_sfx}",
                 category="position",
                 representative_games=closed_sorted,
             ))
@@ -1125,13 +1243,42 @@ class TacticalAnalysisService:
             iq_games = [g for g, _ in iqp_g]
             iq_wr = _win_rate(iq_games, username)
             ni_wr = _win_rate(no_iqp_g, username) if no_iqp_g else 50.0
-            diff = iq_wr - ni_wr
-            s = max(0, min(100, int(iq_wr)))
+            win_diff = iq_wr - ni_wr
+            # SF: IQP 구조 20~35수 평균 cp_loss vs 비IQP 동일 구간
+            if sf_cache:
+                iq_losses, ni_losses = [], []
+                for g, _ in iqp_g:
+                    mv = [m for m in sf_cache.get(g.game_id, [])
+                          if m["is_my_move"] and 20 <= m["move_no"] <= 35]
+                    if mv:
+                        iq_losses.append(sum(m["cp_loss"] for m in mv) / len(mv))
+                for g in no_iqp_g:
+                    mv = [m for m in sf_cache.get(g.game_id, [])
+                          if m["is_my_move"] and 20 <= m["move_no"] <= 35]
+                    if mv:
+                        ni_losses.append(sum(m["cp_loss"] for m in mv) / len(mv))
+                if iq_losses and ni_losses:
+                    avg_iq = sum(iq_losses) / len(iq_losses)
+                    avg_ni = sum(ni_losses) / len(ni_losses)
+                    # IQP 시 cp_loss가 작으면 포지션 이해가 좋으미로 강점
+                    loss_ratio = avg_iq / max(avg_ni, 1.0)
+                    s_q = max(0, min(100, int(100 - (loss_ratio - 1.0) * 80)))
+                    s = max(0, min(100, int(s_q * 0.55 + iq_wr * 0.45)))
+                    is_str = loss_ratio < 1.15 and iq_wr >= 45
+                    detail_sfx = f" | SF손실 IQP {avg_iq:.0f}cp / 비IQP {avg_ni:.0f}cp"
+                else:
+                    s = max(0, min(100, int(iq_wr)))
+                    is_str = iq_wr >= 50
+                    detail_sfx = ""
+            else:
+                s = max(0, min(100, int(iq_wr)))
+                is_str = iq_wr >= 50
+                detail_sfx = ""
             results.append(PatternResult(
                 label="IQP 구조 이해", icon="♟️",
-                description="고립 퀸 폰(IQP) 구조일 때의 공수 밸런스 승률",
-                score=s, is_strength=iq_wr >= 50, games_analyzed=len(iqp_g),
-                detail=f"IQP {len(iqp_g)}게임 → {iq_wr:.0f}% | 비IQP {ni_wr:.0f}% ({diff:+.0f}%p)",
+                description="고립 퀸 폰(IQP) 구조에서 SF cp_loss + 승률 복합 지표",
+                score=s, is_strength=is_str, games_analyzed=len(iqp_g),
+                detail=f"IQP {len(iqp_g)}게임 → {iq_wr:.0f}% | 비IQP {ni_wr:.0f}% ({win_diff:+.0f}%p){detail_sfx}",
                 category="position",
                 representative_games=iqp_g,
             ))
@@ -1140,14 +1287,43 @@ class TacticalAnalysisService:
             bp_games = [g for g, _ in bp_g]
             bp_wr = _win_rate(bp_games, username)
             nb_wr = _win_rate(no_bp_g, username) if no_bp_g else 50.0
-            diff = bp_wr - nb_wr
-            s = max(0, min(100, int(bp_wr)))
+            win_diff = bp_wr - nb_wr
+            # SF: 비숍 쌍 보유 구간(15~25수) 평균 cp_loss vs 비선보유 비교
+            if sf_cache:
+                bp_losses, nb_losses = [], []
+                for g, _ in bp_g:
+                    mv = [m for m in sf_cache.get(g.game_id, [])
+                          if m["is_my_move"] and 15 <= m["move_no"] <= 25]
+                    if mv:
+                        bp_losses.append(sum(m["cp_loss"] for m in mv) / len(mv))
+                for g in no_bp_g:
+                    mv = [m for m in sf_cache.get(g.game_id, [])
+                          if m["is_my_move"] and 15 <= m["move_no"] <= 25]
+                    if mv:
+                        nb_losses.append(sum(m["cp_loss"] for m in mv) / len(mv))
+                if bp_losses and nb_losses:
+                    avg_bp = sum(bp_losses) / len(bp_losses)
+                    avg_nb = sum(nb_losses) / len(nb_losses)
+                    # 비숍 쌍 유지 시 cp_loss가 작으면 실질적 활용
+                    loss_ratio = avg_bp / max(avg_nb, 1.0)
+                    s_q = max(0, min(100, int(100 - (loss_ratio - 1.0) * 80)))
+                    s = max(0, min(100, int(s_q * 0.5 + bp_wr * 0.5)))
+                    is_str = loss_ratio < 1.1 and bp_wr >= 50
+                    detail_sfx = f" | SF손실 유지 {avg_bp:.0f}cp / 미보유 {avg_nb:.0f}cp"
+                else:
+                    s = max(0, min(100, int(bp_wr)))
+                    is_str = bp_wr >= 55 and win_diff >= 0
+                    detail_sfx = ""
+            else:
+                s = max(0, min(100, int(bp_wr)))
+                is_str = bp_wr >= 55 and win_diff >= 0
+                detail_sfx = ""
             results.append(PatternResult(
                 label="비숍 쌍 활용", icon="🔷",
-                description="비숍 쌍을 20수까지 유지한 게임의 승률",
-                score=s, is_strength=bp_wr >= 55 and diff >= 0,
+                description="비숍 쌍 보유 시 SF cp_loss + 승률 복합 지표",
+                score=s, is_strength=is_str,
                 games_analyzed=len(bp_g),
-                detail=f"비숍 쌍 유지 {len(bp_g)}게임 → {bp_wr:.0f}% | 비보유 {nb_wr:.0f}% ({diff:+.0f}%p)",
+                detail=f"비숍 쌍 유지 {len(bp_g)}게임 → {bp_wr:.0f}% | 비보유 {nb_wr:.0f}% ({win_diff:+.0f}%p){detail_sfx}",
                 category="position",
                 representative_games=bp_g,
             ))
@@ -1292,13 +1468,41 @@ class TacticalAnalysisService:
 
         ht_total = ht_ok + ht_bad
         if ht_total >= 5:
-            rate = ht_ok / ht_total * 100
-            s = max(0, min(100, int(rate)))
+            base_rate = ht_ok / ht_total * 100
+            # SF: 개선한 수(이득) 다음 cp_loss vs 악화한 수 다음 cp_loss 비교
+            if sf_cache:
+                ht_ok_sf:  List[float] = []
+                ht_bad_sf: List[float] = []
+                for g, _ in ht_ok_games:
+                    mv = [m for m in sf_cache.get(g.game_id, []) if m["is_my_move"]]
+                    if mv:
+                        ht_ok_sf.append(sum(m["cp_loss"] for m in mv) / len(mv))
+                for g, _ in ht_bad_games:
+                    mv = [m for m in sf_cache.get(g.game_id, []) if m["is_my_move"]]
+                    if mv:
+                        ht_bad_sf.append(sum(m["cp_loss"] for m in mv) / len(mv))
+                if ht_ok_sf and ht_bad_sf:
+                    avg_ok = sum(ht_ok_sf) / len(ht_ok_sf)
+                    avg_bad = sum(ht_bad_sf) / len(ht_bad_sf)
+                    # 개선 게임의 cp_loss < 악화 게임 cp_loss 이면 진짜 대첫력
+                    ratio = avg_ok / max(avg_bad, 1.0)
+                    sf_score = max(0, min(100, int(100 - ratio * 50)))
+                    s = max(0, min(100, int(sf_score * 0.55 + base_rate * 0.45)))
+                    is_str = ratio < 0.9 and base_rate >= 50
+                    detail_sfx = f" | SF개선 {avg_ok:.0f}cp / 악화 {avg_bad:.0f}cp"
+                else:
+                    s = max(0, min(100, int(base_rate)))
+                    is_str = base_rate >= 55
+                    detail_sfx = ""
+            else:
+                s = max(0, min(100, int(base_rate)))
+                is_str = base_rate >= 55
+                detail_sfx = ""
             results.append(PatternResult(
                 label="높은 긴장도 대처", icon="🌪️",
-                description="3개+ 기물이 동시 공격받는 복잡한 상황에서 수를 개선한 비율",
-                score=s, is_strength=rate >= 55, games_analyzed=analyzed,
-                detail=f"고긴장 {ht_total}회: 개선 {ht_ok} / 악화 {ht_bad} ({rate:.0f}%)",
+                description="3개+ 기물 동시 공격 복잡 상황에서 수 개선 비율 + SF cp_loss 복합",
+                score=s, is_strength=is_str, games_analyzed=analyzed,
+                detail=f"고긴장 {ht_total}회: 개선 {ht_ok} / 악화 {ht_bad} ({base_rate:.0f}%){detail_sfx}",
                 category="endgame",
                 representative_games=ht_bad_games + ht_ok_games,
             ))
@@ -1341,26 +1545,70 @@ class TacticalAnalysisService:
 
         pr_total = promo_ok + promo_miss
         if pr_total >= 3:
-            rate = promo_ok / pr_total * 100
-            s = max(0, min(100, int(rate)))
+            base_rate = promo_ok / pr_total * 100
+            # SF: 승급 수 직접 cp_loss 소/대 판별
+            if sf_cache:
+                promo_sf_ok = sum(
+                    1 for g, _ in promo_ok_games
+                    if any(m["cp_loss"] < 80
+                           for m in sf_cache.get(g.game_id, [])
+                           if m["is_my_move"])
+                )
+                promo_sf_miss = sum(
+                    1 for g, _ in promo_miss_games
+                    if any(m["cp_loss"] >= 80
+                           for m in sf_cache.get(g.game_id, [])
+                           if m["is_my_move"])
+                )
+                sf_conf = (promo_sf_ok + promo_sf_miss) / max(pr_total, 1) * 100
+                s = max(0, min(100, int(base_rate * 0.6 + sf_conf * 0.4)))
+                is_str = base_rate >= 55 and sf_conf >= 45
+                detail_sfx = f" | SF확인 {sf_conf:.0f}%"
+            else:
+                s = max(0, min(100, int(base_rate)))
+                is_str = base_rate >= 60
+                detail_sfx = ""
             results.append(PatternResult(
                 label="폰 승급 레이스", icon="🏃",
-                description="양측이 승급 경쟁할 때 폰을 정확히 전진한 비율",
-                score=s, is_strength=rate >= 60, games_analyzed=analyzed,
-                detail=f"승급 레이스 {pr_total}회: 정확 {promo_ok} / 미흡 {promo_miss} ({rate:.0f}%)",
+                description="승급 경쟁 시 폰 전진 정확도 (board 판정) + SF cp_loss 복합",
+                score=s, is_strength=is_str, games_analyzed=analyzed,
+                detail=f"승급 레이스 {pr_total}회: 정확 {promo_ok} / 미흡 {promo_miss} ({base_rate:.0f}%){detail_sfx}",
                 category="endgame",
                 representative_games=promo_miss_games + promo_ok_games,
             ))
 
         hunt_total = hunt_ok + hunt_miss
         if hunt_total >= 3:
-            rate = hunt_ok / hunt_total * 100
-            s = max(0, min(100, int(rate)))
+            base_rate = hunt_ok / hunt_total * 100
+            # SF: 마무리 수(체크/공격) 직후 cp_loss로 진짜 직접적 이득인지 확인
+            if sf_cache:
+                hunt_sf_losses = []
+                for g, _ in hunt_ok_games:
+                    mv = [m for m in sf_cache.get(g.game_id, []) if m["is_my_move"]]
+                    # 마지막 10수 중 나의 수 평균 cp_loss
+                    if mv:
+                        tail = mv[-10:] if len(mv) > 10 else mv
+                        hunt_sf_losses.append(sum(m["cp_loss"] for m in tail) / len(tail))
+                if hunt_sf_losses:
+                    avg_hunt = sum(hunt_sf_losses) / len(hunt_sf_losses)
+                    # 마무리 구간 cp_loss가 작으면 투지력 있는 코너
+                    sf_score = max(0, min(100, int(100 - avg_hunt * 0.5)))
+                    s = max(0, min(100, int(sf_score * 0.6 + base_rate * 0.4)))
+                    is_str = avg_hunt < 80 and base_rate >= 50
+                    detail_sfx = f" | SF마무리 {avg_hunt:.0f}cp"
+                else:
+                    s = max(0, min(100, int(base_rate)))
+                    is_str = base_rate >= 55
+                    detail_sfx = ""
+            else:
+                s = max(0, min(100, int(base_rate)))
+                is_str = base_rate >= 55
+                detail_sfx = ""
             results.append(PatternResult(
                 label="킹 헌트 마무리", icon="🎯",
-                description="상대 킹이 중앙으로 나왔을 때 체크/공격으로 마무리한 비율",
-                score=s, is_strength=rate >= 55, games_analyzed=analyzed,
-                detail=f"킹 헌트 기회 {hunt_total}회: 마무리 {hunt_ok} / 놓침 {hunt_miss} ({rate:.0f}%)",
+                description="상대 킹 중앙 노요 시 발공 마무리력 (board+SF 복합)",
+                score=s, is_strength=is_str, games_analyzed=analyzed,
+                detail=f"킹 헌트 기회 {hunt_total}회: 마무리 {hunt_ok} / 놓침 {hunt_miss} ({base_rate:.0f}%){detail_sfx}",
                 category="endgame",
                 representative_games=hunt_ok_games + hunt_miss_games,
             ))
