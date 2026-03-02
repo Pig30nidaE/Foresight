@@ -31,6 +31,14 @@ _CATEGORY_ENDS = {
 }
 
 
+def _unix_to_iso(ts: object) -> str:
+    """Chess.com end_time (Unix 초 정수) → ISO 8601 문자열."""
+    try:
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
+    except (TypeError, ValueError, OSError):
+        return ""
+
+
 def _opening_name_from_url(eco_url: str) -> str:
     """
     https://www.chess.com/openings/Queens-Pawn-Opening-Chigorin-Variation
