@@ -141,7 +141,7 @@ class AnalysisService:
         PGN에서 추출한 실제 첫 수(e4/d4/c4/Nf3 등)로 집계
         """
         if df.empty:
-            return {"white": [], "black": []}
+            return {"white": [], "black": [], "total_games": 0}
 
         white_rows = df[df["white"].str.lower() == username].copy() if "white" in df.columns else pd.DataFrame()
         black_rows = df[df["black"].str.lower() == username].copy() if "black" in df.columns else pd.DataFrame()
