@@ -95,6 +95,7 @@ export interface OpeningTreeNode {
   losses: number;
   draws: number;
   win_rate: number;
+  top_games?: PatternGameItem[];
   children?: OpeningTreeNode[];
 }
 

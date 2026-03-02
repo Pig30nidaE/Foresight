@@ -46,6 +46,7 @@ class AnalysisService:
                 "played_at": g.played_at,
                 "white_move1": white1,
                 "black_move1": black1,
+                "url": g.url,
             })
         return pd.DataFrame(rows)
 
@@ -220,12 +221,23 @@ class AnalysisService:
                     "name": base_name,
                     "games": 0, "wins": 0, "losses": 0, "draws": 0,
                     "children": {},
+                    "games_list": [],
                 }
             node = base_tree[base_name]
             node["games"] += 1
             if result == "win":  node["wins"]   += 1
             elif result == "loss": node["losses"] += 1
             else: node["draws"] += 1
+            game_url = row.get("url")
+            if game_url:
+                node["games_list"].append({
+                    "url": game_url,
+                    "result": result,
+                    "opening_name": name if name else base_name,
+                    "played_at": row.get("played_at"),
+                    "white": row.get("white"),
+                    "black": row.get("black"),
+                })
 
             # Level 2 — 풀 이름 + ECO3 를 키로 사용
             child_key = f"{eco3}:{name}" if name else eco3
@@ -235,12 +247,22 @@ class AnalysisService:
                     "eco_prefix": eco3,
                     "name": name if name else eco3,
                     "games": 0, "wins": 0, "losses": 0, "draws": 0,
+                    "games_list": [],
                 }
             child = children[child_key]
             child["games"] += 1
             if result == "win":    child["wins"]   += 1
             elif result == "loss": child["losses"] += 1
             else:                  child["draws"]  += 1
+            if game_url:
+                child["games_list"].append({
+                    "url": game_url,
+                    "result": result,
+                    "opening_name": name if name else base_name,
+                    "played_at": row.get("played_at"),
+                    "white": row.get("white"),
+                    "black": row.get("black"),
+                })
 
         # 직렬화
         result_list = []
@@ -257,6 +279,7 @@ class AnalysisService:
                 "losses": node["losses"],
                 "draws": node["draws"],
                 "win_rate": round(node["wins"] / total * 100, 1) if total else 0,
+                "top_games": node["games_list"][:20],
                 "children": [
                     {
                         "eco_prefix": c["eco_prefix"],
@@ -266,6 +289,7 @@ class AnalysisService:
                         "losses": c["losses"],
                         "draws": c["draws"],
                         "win_rate": round(c["wins"] / c["games"] * 100, 1) if c["games"] else 0,
+                        "top_games": c["games_list"][:20],
                     }
                     for c in children_sorted
                 ],
