@@ -40,7 +40,7 @@ out/
 *.p12
 
 # IDE
-.vscode/settings.json
+.vscode/
 .idea/
 *.swp
 *.swo
