@@ -277,17 +277,54 @@ class AnalysisService:
     ) -> dict:
         """
         MVP 섹션 2-B: 베스트/워스트 오프닝 요약
+
+        qualified 집합이 2개 미만이면 min_games 임계값을 점진적으로 완화하여
+        서로 다른 best/worst를 확보한다. 오프닝이 단 1종류뿐이면
+        worst=None 을 반환해 "데이터 부족" 상태를 프론트에 정직하게 알린다.
         """
         if df.empty:
             return {"best": None, "worst": None, "all": []}
 
         stats = self.get_opening_stats(df, top_n=50)
-        qualified = [s for s in stats if s.games >= min_games]
-        if not qualified:
-            return {"best": None, "worst": None, "all": stats[:10]}
+        if not stats:
+            return {"best": None, "worst": None, "all": []}
 
-        best = max(qualified, key=lambda x: x.win_rate)
-        worst = min(qualified, key=lambda x: x.win_rate)
+        # qualified 가 2개 이상이 될 때까지 min_games 를 낮춘다
+        qualified = [s for s in stats if s.games >= min_games]
+        if len(qualified) < 2:
+            for fallback in [5, 3, 1]:
+                qualified = [s for s in stats if s.games >= fallback]
+                if len(qualified) >= 2:
+                    break
+
+        # 유일 오프닝(best == worst)인 경우: best만 반환
+        if len(qualified) == 1:
+            sole = qualified[0]
+            return {
+                "best": {
+                    "eco": sole.eco,
+                    "name": sole.name,
+                    "win_rate": sole.win_rate,
+                    "games": sole.games,
+                },
+                "worst": None,
+                "all": [
+                    {
+                        "eco": sole.eco,
+                        "name": sole.name,
+                        "games": sole.games,
+                        "win_rate": sole.win_rate,
+                        "wins": sole.wins,
+                        "losses": sole.losses,
+                        "draws": sole.draws,
+                    }
+                ],
+            }
+
+        best  = max(qualified, key=lambda x: x.win_rate)
+        # worst 는 best 와 ECO가 다른 항목 중에서 선택
+        rest  = [s for s in qualified if s.eco != best.eco] or qualified
+        worst = min(rest, key=lambda x: x.win_rate)
 
         return {
             "best": {
