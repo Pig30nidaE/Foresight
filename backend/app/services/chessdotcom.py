@@ -122,19 +122,21 @@ class ChessDotComService:
         max_games: int = 100,
         since_ts: Optional[int] = None,   # Unix seconds (inclusive lower bound)
         until_ts: Optional[int] = None,   # Unix seconds (inclusive upper bound)
+        time_class: Optional[str] = None, # 수집 단계에서 타임클래스 필터링 (bullet/blitz/rapid 등)
     ) -> List[GameSummary]:
         """
         아카이브 API를 기반으로 게임 조회.
+        time_class 를 지정하면 수집 단계에서 필터링하여 cap 을 의미 있게 만듦.
         since_ts/until_ts 가 주어지면 시간 범위로 필터링. (seconds)
-        시간 필터 없을 때는 최신 max_games 개만 반환.
         """
         archives = await self._get_archives(username)
         games: List[GameSummary] = []
         HARD_CAP = 5000
         using_time_filter = since_ts is not None or until_ts is not None
-        # 시간 필터 없을 때는 max_games 개수만큼만 수집 (성능 보호)
-        # 시간 필터가 있을 때는 해당 구간 내 모든 게임을 수집 (최대 HARD_CAP)
-        effective_cap = HARD_CAP if using_time_filter else max(max_games, 100)
+        # 전체 기간(필터 없음)  → 모든 게임 조회 필요 → HARD_CAP 사용
+        # 날짜 범위 지정 시    → 날짜 필터가 이미 제한, max_games 는 호출자 의도 존중
+        # 단, max_games 가 없거나 0이면 HARD_CAP 으로 폴백
+        effective_cap = max(max_games, 1) if using_time_filter else HARD_CAP
 
         async with httpx.AsyncClient(timeout=20) as client:
             for archive_url in archives:
@@ -165,6 +167,9 @@ class ChessDotComService:
                         if since_ts is not None and end_time < since_ts:
                             continue
                         if until_ts is not None and end_time > until_ts:
+                            continue
+                        # 수집 단계 타임클래스 필터 — 관계없는 타임클래스가 cap 을 낭비하지 않도록
+                        if time_class and raw.get("time_class", "") != time_class:
                             continue
                         games.append(self._parse_game(raw, username))
                 except Exception:
