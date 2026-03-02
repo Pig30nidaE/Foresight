@@ -126,6 +126,7 @@ def _to_dict(p: PatternResult) -> dict:
             {
                 "url":          g.url,
                 "result":       g.result.value,
+                "is_success":   g.result.value == "win",
                 "opening_eco":  g.opening_eco,
                 "opening_name": g.opening_name,
                 "played_at":    g.played_at,

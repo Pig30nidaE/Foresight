@@ -32,9 +32,24 @@ const RESULT_DOT: Record<string, string> = {
   draw: "bg-zinc-400",
 };
 
+const SUCCESS_BADGE = {
+  success: "text-emerald-400",
+  failure: "text-red-400",
+  draw:    "text-zinc-400",
+} as const;
+
 function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
   const badge = RESULT_BADGE[game.result] ?? RESULT_BADGE.draw;
   const dot   = RESULT_DOT[game.result]  ?? RESULT_DOT.draw;
+
+  const successCls =
+    game.result === "draw"    ? SUCCESS_BADGE.draw
+    : game.is_success         ? SUCCESS_BADGE.success
+    : SUCCESS_BADGE.failure;
+  const successLabel =
+    game.result === "draw"    ? "— 무승부"
+    : game.is_success         ? "✓ 성공"
+    : "✗ 실패";
 
   return (
     <a
@@ -68,6 +83,11 @@ function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
           )}
         </p>
       </div>
+
+      {/* 패턴 성공/실패 */}
+      <span className={`text-xs font-bold shrink-0 ${successCls}`}>
+        {successLabel}
+      </span>
 
       {/* Result badge */}
       <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 font-semibold ${badge.cls}`}>
