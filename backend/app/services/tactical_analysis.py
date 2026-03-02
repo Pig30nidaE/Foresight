@@ -105,7 +105,8 @@ class PatternResult:
     games_analyzed: int
     detail: str
     category: str     # time | position | opening | endgame | balance
-    example_game: Optional[dict] = None   # {url, result, opening_eco, opening_name, played_at}
+    example_game: Optional[dict] = None        # {url, result, opening_eco, opening_name, played_at}
+    representative_games: Optional[List] = None  # List[GameSummary] — 패턴과 직접 관련된 게임 풀 (직렬화 제외)
 
 
 def _to_dict(p: PatternResult) -> dict:
@@ -311,8 +312,16 @@ class TacticalAnalysisService:
                     "played_at": g.played_at,
                 }
             for pattern in patterns:
-                pattern.example_game = _pick_eg(wins_u if pattern.is_strength else losses_u) \
-                    or _pick_eg(games_with_url)
+                # 패턴 전용 게임 풀 우선 → 없으면 전역 풀 폴백
+                rep = [g for g in (pattern.representative_games or []) if g.url]
+                if rep:
+                    preferred = [g for g in rep if g.result.value == ("win" if pattern.is_strength else "loss")]
+                    pattern.example_game = _pick_eg(preferred or rep)
+                else:
+                    pattern.example_game = (
+                        _pick_eg(wins_u if pattern.is_strength else losses_u)
+                        or _pick_eg(games_with_url)
+                    )
 
         strengths = sorted(
             [p for p in patterns if p.is_strength], key=lambda x: x.score, reverse=True
@@ -371,6 +380,7 @@ class TacticalAnalysisService:
             games_analyzed=len(pressure),
             detail=f"압박 {len(pressure)}게임 → {pr:.0f}% | 일반 {nr:.0f}% ({diff:+.0f}%p)",
             category="time",
+            representative_games=pressure,
         )
 
     # ────────────────────────────────────────────────────────
@@ -423,6 +433,7 @@ class TacticalAnalysisService:
             games_analyzed=len(quick_games),
             detail=f"직관 게임 {len(quick_games)}개 → {qr:.0f}% | 신중 {sr:.0f}% ({diff:+.0f}%p)",
             category="time",
+            representative_games=quick_games,
         )
 
     # ────────────────────────────────────────────────────────
@@ -455,6 +466,7 @@ class TacticalAnalysisService:
             games_analyzed=len(after_loss),
             detail=f"패배 후 {len(after_loss)}게임 → {al_wr:.0f}% | 일반 {nm_wr:.0f}% ({diff:+.0f}%p)",
             category="time",
+            representative_games=after_loss,
         )
 
     # ────────────────────────────────────────────────────────
@@ -476,8 +488,11 @@ class TacticalAnalysisService:
                 games_analyzed=total,
                 detail=f"장기전 {total}게임: 승 {len(wins_long)} / 패 {len(loss_long)} ({rate:.0f}%)",
                 category="time",
+                representative_games=wins_long + loss_long,
             )
         won_adv = lost_adv = 0
+        won_adv_games: List[GameSummary] = []
+        lost_adv_games: List[GameSummary] = []
         for g in games:
             moves = sf_cache.get(g.game_id, [])
             if not moves:
@@ -487,8 +502,10 @@ class TacticalAnalysisService:
             if ever_win:
                 if g.result.value == "loss":
                     lost_adv += 1
+                    lost_adv_games.append(g)
                 elif g.result.value == "win":
                     won_adv += 1
+                    won_adv_games.append(g)
         total = won_adv + lost_adv
         if total < 3:
             return None
@@ -501,6 +518,7 @@ class TacticalAnalysisService:
             games_analyzed=total,
             detail=f"우위 게임 {total}개: 유지 {won_adv} / 역전패 {lost_adv} ({rate:.0f}%)",
             category="time",
+            representative_games=won_adv_games + lost_adv_games,
         )
 
     # ────────────────────────────────────────────────────────
@@ -733,6 +751,8 @@ class TacticalAnalysisService:
         no_iqp_g: List[GameSummary] = []
         bp_g: List[GameSummary] = []
         no_bp_g: List[GameSummary] = []
+        sac_ok_games: List[GameSummary] = []
+        sac_bad_games: List[GameSummary] = []
         analyzed = 0
 
         for g in games:
@@ -834,8 +854,10 @@ class TacticalAnalysisService:
             if sac_flag:
                 if sac_ok_flag:
                     sac_ok += 1
+                    sac_ok_games.append(g)
                 else:
                     sac_bad += 1
+                    sac_bad_games.append(g)
 
             opp = my_cs is not None and opp_cs is not None and my_cs != opp_cs
             (opp_castle if opp else same_castle).append(g)
@@ -854,6 +876,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"희생 {sac_total}회: 유효 {sac_ok} / 무효 {sac_bad} ({rate:.0f}%)",
                 category="position",
+                representative_games=sac_ok_games + sac_bad_games,
             ))
 
         if closed_total >= 5:
@@ -878,6 +901,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=oc_wr >= 50, games_analyzed=len(opp_castle),
                 detail=f"반대 캐슬 {len(opp_castle)}게임 → {oc_wr:.0f}% | 같은 방향 {sc_wr:.0f}% ({diff:+.0f}%p)",
                 category="position",
+                representative_games=opp_castle,
             ))
 
         if len(iqp_g) >= 5:
@@ -891,6 +915,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=iq_wr >= 50, games_analyzed=len(iqp_g),
                 detail=f"IQP {len(iqp_g)}게임 → {iq_wr:.0f}% | 비IQP {ni_wr:.0f}% ({diff:+.0f}%p)",
                 category="position",
+                representative_games=iqp_g,
             ))
 
         if len(bp_g) >= 5:
@@ -905,6 +930,7 @@ class TacticalAnalysisService:
                 games_analyzed=len(bp_g),
                 detail=f"비숍 쌍 유지 {len(bp_g)}게임 → {bp_wr:.0f}% | 비보유 {nb_wr:.0f}% ({diff:+.0f}%p)",
                 category="position",
+                representative_games=bp_g,
             ))
 
         return results
@@ -1069,6 +1095,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=diff <= 12, games_analyzed=len(all_games),
                 detail=f"백 {w_wr:.0f}% | 흑 {b_wr:.0f}% ({'백' if w_wr >= b_wr else '흑'} 우위 {diff:.0f}%p)",
                 category="balance",
+                representative_games=wg if w_wr <= b_wr else bg,
             ))
 
         # ── 보너스: 오프닝 레퍼토리 ─────────────────────────
@@ -1087,6 +1114,7 @@ class TacticalAnalysisService:
                 games_analyzed=len(familiar),
                 detail=f"단골 {fam_wr:.0f}% vs 새 {fres_wr:.0f}% ({diff:+.0f}%p)",
                 category="opening",
+                representative_games=familiar,
             ))
 
         return results
