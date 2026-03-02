@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { TacticalPattern, PatternGameItem } from "@/types";
 
 interface Props {
@@ -71,10 +72,15 @@ function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
 export default function PatternGameListModal({ pattern, onClose }: Props) {
   // ESC 키 닫기
   useEffect(() => {
+    if (!pattern) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose, pattern]);
 
   if (!pattern) return null;
 
@@ -87,10 +93,10 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
     pattern.score >= 65 ? "bg-emerald-500" :
     pattern.score >= 45 ? "bg-amber-500"   : "bg-red-500";
 
-  return (
+  const modal = (
     /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
       onClick={onClose}
     >
       {/* Panel */}
@@ -172,4 +178,6 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
