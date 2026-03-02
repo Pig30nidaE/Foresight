@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     LICHESS_BASE_URL: str = "https://lichess.org/api"
     CHESSDOTCOM_BASE_URL: str = "https://api.chess.com/pub"
 
+    # OpenAI
+    OPENAI_API_KEY: str = ""
+
     class Config:
         env_file = ".env"
         case_sensitive = True

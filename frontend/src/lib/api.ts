@@ -12,6 +12,7 @@ import type {
   TimePressureStats,
   MoveQualityStats,
   TacticalAnalysis,
+  AiInsightsResponse,
 } from "@/types";
 
 const api = axios.create({
@@ -173,6 +174,23 @@ export const getTacticalPatterns = async (
   if (untilMs) params.until_ms = untilMs;
   const { data } = await api.get(`/stats/tactical-patterns/${platform}/${username}`, { params });
   return data as TacticalAnalysis;
+};
+
+export const getAiInsights = async (
+  platform: Platform,
+  username: string,
+  timeClass: TimeClass = "blitz",
+  sinceMs?: number,
+  untilMs?: number,
+): Promise<AiInsightsResponse> => {
+  const params: Record<string, unknown> = { time_class: timeClass };
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  const { data } = await api.get(
+    `/stats/tactical-patterns/${platform}/${username}/ai-insights`,
+    { params, timeout: 60_000 },
+  );
+  return data as AiInsightsResponse;
 };
 
 export default api;

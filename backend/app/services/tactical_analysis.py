@@ -119,6 +119,23 @@ def _to_dict(p: PatternResult) -> dict:
     # example_hint를 example_game 내부에 삽입
     if d["example_game"] and p.example_hint:
         d["example_game"] = {**d["example_game"], "hint": p.example_hint}
+    # 대표 게임 상위 8개 직렬화 (패턴 모달 표시용)
+    if p.representative_games:
+        top = sorted(p.representative_games, key=lambda x: x[1], reverse=True)[:8]
+        d["top_games"] = [
+            {
+                "url":          g.url,
+                "result":       g.result.value,
+                "opening_eco":  g.opening_eco,
+                "opening_name": g.opening_name,
+                "played_at":    g.played_at,
+                "white":        g.white,
+                "black":        g.black,
+            }
+            for g, _ in top if g.url
+        ]
+    else:
+        d["top_games"] = []
     return d
 
 
@@ -379,7 +396,19 @@ class TacticalAnalysisService:
         )[:3]
 
         cluster = self._kmeans(games, username) if len(games) >= 30 else None
-        xgb_profile = self._xgboost_profile(games, username) if len(games) >= 40 else None
+
+        # Blunder 게임 집합 계산 (XGBoost 레이블용, data-leakage 방지)
+        blunder_game_ids: set = {
+            gid for gid, moves in sf_cache.items()
+            if sum(1 for m in moves if m.get("is_blunder") and m["is_my_move"]) >= 2
+        }
+        # Stockfish 없거나 부족하면 프록시: 20수 이하 패배
+        if len(blunder_game_ids) < 5:
+            blunder_game_ids |= {
+                g.game_id for g in games
+                if g.result.value == "loss" and _estimate_total_moves(g.pgn or "") <= 20
+            }
+        xgb_profile = self._xgboost_profile(games, username, blunder_game_ids) if len(games) >= 40 else None
 
         return {
             "total_games": len(games),
@@ -1246,15 +1275,17 @@ class TacticalAnalysisService:
     # K-Means 군집화
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     def _extract_game_features(self, games, username):
+        """게임 행동 피처 추출 — 결과(won/lost) 제외하여 K-Means leakage 방지."""
         opening_counts = Counter(g.opening_name or "Unknown" for g in games)
         rows = []
         for g in games:
             res = g.result.value if g.result else "loss"
-            won = 1.0 if res == "win" else (0.5 if res == "draw" else 0.0)
+            # result_val은 클러스터링에 사용하지 않고 사후 win_rate 계산에만 사용
+            result_val = 1.0 if res == "win" else (0.5 if res == "draw" else 0.0)
             is_white = 1.0 if g.white.lower() == username.lower() else 0.0
             is_fam = 1.0 if opening_counts.get(g.opening_name or "Unknown", 0) >= 4 else 0.0
             gl = float(_estimate_total_moves(g.pgn or ""))
-            tp = 0.0; qc = tot = 0
+            tp = 0.0; qc = tot = 0; clks: List[float] = []; emt_sum = 0.0; emt_cnt = 0
             if g.pgn:
                 try:
                     parsed = chess.pgn.read_game(io.StringIO(g.pgn))
@@ -1265,50 +1296,67 @@ class TacticalAnalysisService:
                             my_turn = (mn % 2 == 1) if bool(is_white) else (mn % 2 == 0)
                             clk = _parse_clock(node.comment or "")
                             emt = _parse_emt(node.comment or "")
+                            if clk is not None:
+                                clks.append(clk)
                             if my_turn:
                                 if clk is not None and clk < 30.0:
                                     tp = 1.0
                                 if emt is not None:
-                                    tot += 1
+                                    tot += 1; emt_cnt += 1; emt_sum += emt
                                     if emt <= 3.0:
                                         qc += 1
                 except Exception:
                     pass
             qr = qc / tot if tot >= 5 else 0.5
-            rows.append({"game": g, "features": [won, gl, is_white, is_fam, tp, qr]})
+            avg_emt = emt_sum / emt_cnt if emt_cnt > 0 else 10.0
+            clk_var = float(np.std(clks)) if len(clks) >= 4 else 15.0
+            # features: 결과 제외한 행동 피처만
+            rows.append({
+                "game":       g,
+                "result_val": result_val,
+                "features":   [gl, is_white, is_fam, tp, qr, avg_emt, clk_var],
+            })
         return rows
 
     def _kmeans(self, games, username, n_clusters=3):
-        FEAT = ["결과", "게임 길이", "백 플레이", "친숙한 오프닝", "시간 압박", "빠른 응수"]
+        # 피처: 행동 피처만 (결과 제외 → leakage 방지)
+        FEAT = ["게임 길이", "백 플레이", "친숙 오프닝", "시간 압박", "빠른 응수", "평균 사고 시간", "시계 변동성"]
         rows = self._extract_game_features(games, username)
         if len(rows) < 10:
             return None
-        X = np.clip(np.nan_to_num(
+        X = np.nan_to_num(
             np.array([r["features"] for r in rows], dtype=float),
-            nan=0.5, posinf=1.0, neginf=0.0,
-        ), 0.0, 1.0)
+            nan=0.5, posinf=100.0, neginf=0.0,
+        )
+        # 클러스터링에서 결과를 사용하지 않음 — 사후 집계용 별도 배열
+        results_arr = np.array([r["result_val"] for r in rows])
         scaler = StandardScaler()
         X_s = scaler.fit_transform(X)
         km = KMeans(n_clusters=n_clusters, n_init=20, random_state=42, max_iter=300)
         labels = km.fit_predict(X_s)
         centers = scaler.inverse_transform(km.cluster_centers_)
-        overall_wr = float(np.mean(X[:, 0]) * 100)
+        overall_wr = float(np.mean(results_arr) * 100)  # 피처 행렬이 아닌 결과 배열로 계산
 
+        # idx: feature index (결과 제거 후 0-based)
+        # 0=게임길이, 1=백플레이, 2=친숙오프닝, 3=시간압박, 4=빠른응수, 5=평균사고시간, 6=시계변동성
         RULES = [
-            (1, "장기전 위주", "단기전 위주", 40),
-            (4, "시간 압박 빈번", "여유로운 시간", 0.5),
-            (5, "직관적 빠른 응수", "신중한 수 선택", 0.5),
-            (2, "백 게임 위주", "흑 게임 위주", 0.6),
-            (3, "익숙한 오프닝", "새로운 오프닝", 0.5),
+            (0, "장기전 위주",      "단기전 위주",     40),
+            (3, "시간 압박 빈번",   "여유로운 시간",   0.5),
+            (4, "직관적 빠른 응수", "신중한 수 선택", 0.5),
+            (1, "백 게임 위주",     "흑 게임 위주",    0.6),
+            (2, "익숙한 오프닝",    "새로운 오프닝",   0.5),
+            (5, "긴 사고 시간",     "매우 빠른 응수", 15.0),
         ]
         NAMES = {
-            ("시간 압박 빈번", "직관적 빠른 응수"): ("⏱️ 시간 압박 게임", "시간 부족+빠른 응수 패턴"),
-            ("시간 압박 빈번",): ("⏱️ 시간 압박 게임", "클록 30초 이하 빈발"),
-            ("직관적 빠른 응수",): ("⚡ 직관 플레이", "3초 이내 응수가 많은 게임"),
-            ("장기전 위주",): ("👑 엔드게임 전투", "40수+ 장기전"),
-            ("단기전 위주",): ("♟️ 오프닝 결전", "25수 이하 단기전"),
-            ("익숙한 오프닝",): ("📚 단골 오프닝", "익숙한 오프닝 레퍼토리"),
-            ("새로운 오프닝",): ("🎲 낯선 오프닝", "처음 접하는 오프닝"),
+            ("시간 압박 빈번", "직관적 빠른 응수"): ("⏱️ 시간 압박 게임",  "시간 부족 + 빠른 응수 패턴"),
+            ("시간 압박 빈번",):                   ("⏱️ 시간 압박 게임",  "클록 30초 이하 빈발"),
+            ("직관적 빠른 응수",):                 ("⚡ 직관 플레이",      "3초 이내 응수가 많은 게임"),
+            ("긴 사고 시간",   "장기전 위주"):      ("🧠 신중한 포지션플레이", "충분한 사고 + 장기전 패턴"),
+            ("장기전 위주",):                       ("👑 엔드게임 전투",    "40수+ 장기전"),
+            ("단기전 위주",):                       ("♟️ 오프닝 결전",      "25수 이하 단기전"),
+            ("익숙한 오프닝",):                     ("📚 단골 오프닝",      "익숙한 오프닝 레퍼토리"),
+            ("새로운 오프닝",):                     ("🎲 낯선 오프닝",      "처음 접하는 오프닝"),
+            ("매우 빠른 응수",):                    ("⚡ 초고속 직관",      "평균 3초 미만 응수"),
         }
         stats = []
         for cid in range(n_clusters):
@@ -1316,16 +1364,20 @@ class TacticalAnalysisService:
             n = int(mask.sum())
             if n == 0:
                 continue
-            wr = float(np.mean(X[mask, 0]) * 100)
+            # win_rate: 결과 배열로 사후 집계 (클러스터링과 무관)
+            wr = float(np.mean(results_arr[mask]) * 100)
             ctr = centers[cid]
             traits = []
             for idx, hi, lo, thr in RULES:
                 v = ctr[idx]
-                if idx == 1:
-                    if v >= thr: traits.append(hi)
+                if idx == 0:   # 게임 길이
+                    if v >= thr:  traits.append(hi)
                     elif v <= 25: traits.append(lo)
+                elif idx == 5: # avg_emt
+                    if v >= thr + 5:  traits.append(hi)
+                    elif v <= thr - 8: traits.append(lo)
                 else:
-                    if v >= thr + 0.15: traits.append(hi)
+                    if v >= thr + 0.15:  traits.append(hi)
                     elif v <= thr - 0.15: traits.append(lo)
             name = desc = None
             for key, (nm, ds) in NAMES.items():
@@ -1357,11 +1409,13 @@ class TacticalAnalysisService:
         }
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # XGBoost — 블런더 유발 게임 패턴 분류
+    # XGBoost — 블런더 유발 게임 패턴 분류 (data-leakage 제거)
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    def _xgboost_profile(self, games, username):
+    def _xgboost_profile(self, games, username, blunder_game_ids: set = None):
+        # `lost` 피처 제거 — 이전 버전의 data-leakage 원인
+        # 레이블: analyze()에서 미리 계산된 blunder_game_ids 사용
         FEAT = ["백 플레이", "게임 길이", "친숙 오프닝",
-                "시간 압박", "빠른 응수", "패배", "클록 변동성", "게임 단계"]
+                "시간 압박", "빠른 응수", "클록 변동성", "게임 단계"]
 
         opening_counts = Counter(g.opening_name or "Unknown" for g in games)
 
@@ -1392,19 +1446,23 @@ class TacticalAnalysisService:
                 except Exception:
                     pass
             qr = qc / tot if tot >= 5 else 0.5
-            lost = 1.0 if g.result.value == "loss" else 0.0
             clk_var = float(np.std(clks)) if len(clks) >= 4 else 15.0
             phase = 0.0 if gl < 20 else (1.0 if gl < 40 else 2.0)
-            return [is_white, gl, is_fam, tp, qr, lost, clk_var, phase]
+            # lost 피처 제거 — data-leakage 방지
+            return [is_white, gl, is_fam, tp, qr, clk_var, phase]
 
-        rows = [featurize(g) for g in games]
-        rows = [r for r in rows if r]
-        if len(rows) < 40:
+        blunder_ids = blunder_game_ids or set()
+        game_id_list = [g.game_id for g in games]
+        rows_raw = [featurize(g) for g in games]
+        valid_pairs = [(gid, r) for gid, r in zip(game_id_list, rows_raw) if r]
+        if len(valid_pairs) < 40:
             return None
+        valid_gids = [gid for gid, _ in valid_pairs]
+        rows = [r for _, r in valid_pairs]
 
         X = np.nan_to_num(np.array(rows, dtype=float))
-        # 레이블: 패배 + 게임이 35수 이하 (블런더성 조기 패배)
-        y = np.array([1 if (r[5] == 1.0 and r[1] <= 35) else 0 for r in rows])
+        # 레이블: Stockfish 블런더 게임 또는 프록시 (결과 피처 없음)
+        y = np.array([1 if gid in blunder_ids else 0 for gid in valid_gids])
         if y.sum() < 5 or (len(y) - y.sum()) < 5:
             return None
 
@@ -1427,14 +1485,13 @@ class TacticalAnalysisService:
         val_acc = float(np.mean(model.predict(X_v) == y_v) * 100) if len(X_v) > 0 else 0.0
 
         DESC = {
-            "시간 압박": "시간이 30초 이하로 떨어지면 블런더 확률 급증",
-            "빠른 응수": "직관적 빠른 응수가 많을수록 블런더성 패배 증가",
+            "시간 압박":   "시간이 30초 이하로 떨어지면 블런더 확률 급증",
+            "빠른 응수":   "직관적 빠른 응수가 많을수록 블런더성 패배 증가",
             "클록 변동성": "남은 시간이 불규칙할수록 집중력 저하",
-            "게임 단계": "오프닝/미들게임 초반에 승부가 나는 패턴",
-            "게임 길이": "단기로 끝나는 게임에서 블런더 집중 경향",
+            "게임 단계":   "오프닝/미들게임 초반에 승부가 나는 패턴",
+            "게임 길이":   "단기로 끝나는 게임에서 블런더 집중 경향",
             "친숙 오프닝": "낯선 오프닝에서 실수가 집중",
-            "패배": "연패 상황에서 블런더 패턴 심화",
-            "백 플레이": "특정 색 플레이 시 취약점",
+            "백 플레이":   "특정 색 플레이 시 취약점",
         }
         return {
             "blunder_game_rate": round(blunder_rate, 1),
@@ -1447,5 +1504,5 @@ class TacticalAnalysisService:
             ],
             "model_accuracy": round(val_acc, 1),
             "games_analyzed": len(rows),
-            "description": f"XGBoost 분류 모델 — 블런더성 패배 게임 비율 {blunder_rate:.0f}%",
+            "description": f"XGBoost — 블런더 유발 게임 예측 (leakage-free, {len(blunder_ids)}개 레이블)",
         }
