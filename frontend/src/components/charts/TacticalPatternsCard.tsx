@@ -229,9 +229,10 @@ function PatternCard({ p, highlight, onClick }: { p: TacticalPattern; highlight:
       <p className="text-xs text-zinc-500 leading-snug">{p.description}</p>
       <p className="text-xs text-zinc-400">{p.detail}</p>
       {p.example_game?.url && (
-        <div className="space-y-0.5" onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-0.5">
           {p.example_game.hint && <p className="text-[10px] text-zinc-600 leading-snug">{p.example_game.hint}</p>}
           <a href={p.example_game.url} target="_blank" rel="noopener noreferrer"
+             onClick={(e) => e.stopPropagation()}
              className="inline-flex items-center gap-1 text-xs text-emerald-400/80 hover:text-emerald-300 transition-colors">
             <span>♟ 예시 게임</span><span>→</span>
           </a>
