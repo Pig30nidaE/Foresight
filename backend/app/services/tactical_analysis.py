@@ -105,14 +105,21 @@ class PatternResult:
     games_analyzed: int
     detail: str
     category: str     # time | position | opening | endgame | balance
-    example_game: Optional[dict] = None        # {url, result, opening_eco, opening_name, played_at}
-    representative_games: Optional[List] = None  # List[GameSummary] — 패턴과 직접 관련된 게임 풀 (직렬화 제외)
+    example_game: Optional[dict] = None
+    # (GameSummary, relevance_score) — 관련도 높은 순 정렬, 직렬화 제외
+    representative_games: Optional[List[Tuple[Any, float]]] = None
+    # 예시 게임 선택 이유 (프론트 힌트 텍스트용)
+    example_hint: Optional[str] = None
 
 
 def _to_dict(p: PatternResult) -> dict:
-    return {k: getattr(p, k) for k in
+    d = {k: getattr(p, k) for k in
             ("label", "description", "icon", "score",
              "is_strength", "games_analyzed", "detail", "category", "example_game")}
+    # example_hint를 example_game 내부에 삽입
+    if d["example_game"] and p.example_hint:
+        d["example_game"] = {**d["example_game"], "hint": p.example_hint}
+    return d
 
 
 def _win_rate(games: List[GameSummary], username: str) -> float:
@@ -295,33 +302,74 @@ class TacticalAnalysisService:
         # ── Complexity & Transitions (17–20 + extras) ───────
         patterns.extend(self._p17_to_p20(board_games, username, sf_cache, games))
 
-        # ── 예시 게임 첨부 (URL 이 있는 게임 중 강점=승리, 약점=패배에서 픽) ──
+        # ── 예시 게임 첨부 ────────────────────────────────────────
+        # representative_games = List[(GameSummary, relevance_score)] 관련도 높은 순으로 정렬
         games_with_url = [g for g in games if g.url]
-        if games_with_url:
-            wins_u  = [g for g in games_with_url if g.result.value == "win"]
-            losses_u = [g for g in games_with_url if g.result.value == "loss"]
-            def _pick_eg(pool: List[GameSummary]) -> Optional[dict]:
-                if not pool:
-                    return None
-                g = pool[0]
-                return {
-                    "url": g.url,
-                    "result": g.result.value,
-                    "opening_eco": g.opening_eco,
-                    "opening_name": g.opening_name,
-                    "played_at": g.played_at,
-                }
-            for pattern in patterns:
-                # 패턴 전용 게임 풀 우선 → 없으면 전역 풀 폴백
-                rep = [g for g in (pattern.representative_games or []) if g.url]
-                if rep:
-                    preferred = [g for g in rep if g.result.value == ("win" if pattern.is_strength else "loss")]
-                    pattern.example_game = _pick_eg(preferred or rep)
-                else:
-                    pattern.example_game = (
-                        _pick_eg(wins_u if pattern.is_strength else losses_u)
-                        or _pick_eg(games_with_url)
-                    )
+
+        # 패턴 레이블 → 예시 게임 선택 이유 설명
+        _HINT_MAP: Dict[str, Tuple[str, str]] = {
+            # label: (강점일 때 hint, 약점일 때 hint)
+            "시간 압박 대응":         ("잔여 시계가 가장 낮았던 게임 (극한 시간 압박)",
+                                        "잔여 시계가 가장 낮았던 게임 (시간 압박 실수)"),
+            "즉각 반응 패턴":         ("즉각 응수 비율이 가장 높은 게임 (직관 발동)",
+                                        "즉각 응수 비율이 가장 높은 게임 (직관 실수)"),
+            "틸트(Tilt) 저항력":      ("가장 긴 연패 직후 회복해 이긴 게임",
+                                        "가장 긴 연패 직후 추가로 진 게임"),
+            "우위 유지력":            ("가장 큰 cp 우위를 유지하며 이긴 게임",
+                                        "가장 큰 cp 우위를 날려 역전된 게임"),
+            "기물 희생 정확도":       ("가장 큰 기물(퀸·룩)을 희생하고 성공한 게임",
+                                        "가장 큰 기물(퀸·룩)을 희생했다가 실패한 게임"),
+            "반대 방향 캐슬링 난전":  ("가장 긴 난전이 펼쳐진 반대 캐슬링 게임",
+                                        "가장 긴 난전이었지만 패배한 반대 캐슬링 게임"),
+            "IQP 구조 이해":          ("IQP 구조에서 공격력으로 이긴 게임",
+                                        "IQP 구조에서 처리 미흡으로 진 게임"),
+            "비숍 쌍 활용":           ("비숍 쌍을 끝까지 유지하며 이긴 게임",
+                                        "비숍 쌍을 유지했음에도 진 게임"),
+            "퀸 교환 후 이해도":      ("퀸 교환 후 가장 긴 엔드게임을 치른 게임",
+                                        "퀸 교환 후 엔드게임 처리가 미흡했던 게임"),
+            "오프닝 레퍼토리":        ("가장 많이 플레이한 익숙한 오프닝 게임",
+                                        "가장 많이 플레이했지만 진 익숙한 오프닝 게임"),
+            "흑백 밸런스":            ("더 약한 색(약점)으로 플레이한 게임",
+                                        "더 약한 색(약점)으로 플레이한 게임"),
+        }
+
+        def _eg_dict(g) -> dict:
+            return {
+                "url":          g.url,
+                "result":       g.result.value,
+                "opening_eco":  g.opening_eco,
+                "opening_name": g.opening_name,
+                "played_at":    g.played_at,
+            }
+
+        def _pick_best(scored: List[Tuple[Any, float]], prefer_result: str) -> Optional[dict]:
+            """관련도 내림차순 정렬, URL 있는 것 중 prefer_result 우선 선택."""
+            with_url = [(g, s) for g, s in scored if g.url]
+            if not with_url:
+                return None
+            # 관련도 높은 순
+            with_url.sort(key=lambda x: x[1], reverse=True)
+            # prefer_result 먼저
+            preferred = [(g, s) for g, s in with_url if g.result.value == prefer_result]
+            pick = (preferred or with_url)[0][0]
+            return _eg_dict(pick)
+
+        for pattern in patterns:
+            rep: List[Tuple[Any, float]] = pattern.representative_games or []
+            prefer = "win" if pattern.is_strength else "loss"
+            if rep:
+                pattern.example_game = _pick_best(rep, prefer)
+            else:
+                # 패턴 전용 풀 없는 경우(이동 레벨 집계) → 전역 폴백
+                fallback_pool = [
+                    (g, 1.0) for g in games_with_url
+                    if g.result.value == prefer
+                ]
+                pattern.example_game = _pick_best(fallback_pool or [(g, 1.0) for g in games_with_url], prefer)
+            # 힌트 설정
+            hints = _HINT_MAP.get(pattern.label)
+            if hints:
+                pattern.example_hint = hints[0] if pattern.is_strength else hints[1]
 
         strengths = sorted(
             [p for p in patterns if p.is_strength], key=lambda x: x.score, reverse=True
@@ -346,7 +394,8 @@ class TacticalAnalysisService:
     # 1. Time Trouble
     # ────────────────────────────────────────────────────────
     def _p1(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
-        pressure, normal = [], []
+        pressure: List[Tuple[GameSummary, float]] = []  # (game, 1/min_clock) 낮은 시계 = 고관련도
+        normal: List[GameSummary] = []
         for g in games:
             if not g.pgn:
                 continue
@@ -354,6 +403,7 @@ class TacticalAnalysisService:
             if not parsed:
                 continue
             is_white = g.white.lower() == username.lower()
+            min_clk = float("inf")
             had = False
             board = parsed.board()
             for node in parsed.mainline():
@@ -361,15 +411,21 @@ class TacticalAnalysisService:
                 clk = _parse_clock(node.comment or "")
                 if my_turn and clk is not None and clk < 60.0:
                     had = True
-                    break
+                    if clk < min_clk:
+                        min_clk = clk
                 try:
                     board.push(node.move)
                 except Exception:
                     break
-            (pressure if had else normal).append(g)
+            if had:
+                # relevance = 1/min_clk: 시계가 낮을수록 관련도 높음
+                pressure.append((g, 1.0 / max(min_clk, 0.1)))
+            else:
+                normal.append(g)
         if len(pressure) < 5:
             return None
-        pr = _win_rate(pressure, username)
+        pressure_games = [g for g, _ in pressure]
+        pr = _win_rate(pressure_games, username)
         nr = _win_rate(normal, username) if normal else 50.0
         diff = pr - nr
         score = max(0, min(100, int(pr)))
@@ -387,7 +443,8 @@ class TacticalAnalysisService:
     # 2. Instant Response
     # ────────────────────────────────────────────────────────
     def _p2(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
-        quick_games, slow_games = [], []
+        quick_games: List[Tuple[GameSummary, float]] = []  # (game, quick_ratio)
+        slow_games: List[GameSummary] = []
         for g in games:
             if not g.pgn:
                 continue
@@ -419,10 +476,15 @@ class TacticalAnalysisService:
                 except Exception:
                     break
             if tot >= 10:
-                (quick_games if qc / tot >= 0.3 else slow_games).append(g)
+                ratio = qc / tot
+                if ratio >= 0.3:
+                    quick_games.append((g, ratio))  # ratio가 높을수록 직관 플레이 극명
+                else:
+                    slow_games.append(g)
         if len(quick_games) < 5:
             return None
-        qr = _win_rate(quick_games, username)
+        qg_list = [g for g, _ in quick_games]
+        qr = _win_rate(qg_list, username)
         sr = _win_rate(slow_games, username) if slow_games else 50.0
         diff = qr - sr
         score = max(0, min(100, int(qr)))
@@ -446,16 +508,27 @@ class TacticalAnalysisService:
         )
         if len(sorted_g) < 10:
             return None
-        after_loss, normal = [], []
+        after_loss: List[Tuple[GameSummary, float]] = []  # (game, consecutive_loss_streak)
+        normal: List[GameSummary] = []
         prev_bad = False
+        streak = 0
         for i, g in enumerate(sorted_g):
             if i > 0:
-                (after_loss if prev_bad else normal).append(g)
+                if prev_bad:
+                    after_loss.append((g, float(streak)))  # streak 길수록 틸트 극명
+                else:
+                    normal.append(g)
             total_mv = _estimate_total_moves(g.pgn or "")
-            prev_bad = g.result.value == "loss" and total_mv >= 15
+            if g.result.value == "loss" and total_mv >= 15:
+                streak += 1
+                prev_bad = True
+            else:
+                streak = 0
+                prev_bad = False
         if len(after_loss) < 5:
             return None
-        al_wr = _win_rate(after_loss, username)
+        al_list = [g for g, _ in after_loss]
+        al_wr = _win_rate(al_list, username)
         nm_wr = _win_rate(normal, username) if normal else 50.0
         diff = al_wr - nm_wr
         score = max(0, min(100, int(50 + diff)))
@@ -481,6 +554,8 @@ class TacticalAnalysisService:
             if total < 5:
                 return None
             rate = len(wins_long) / total * 100
+            # 장기전일수록 관련도 높음 (더 긴 게임 = 우위처리 패턴이 더 극명)
+            scored = [(g, float(_estimate_total_moves(g.pgn or ""))) for g in wins_long + loss_long]
             return PatternResult(
                 label="우위 유지력", icon="📈",
                 description="장기전(30수+) 승률 — 우위 포기 패턴의 근사 지표",
@@ -488,24 +563,28 @@ class TacticalAnalysisService:
                 games_analyzed=total,
                 detail=f"장기전 {total}게임: 승 {len(wins_long)} / 패 {len(loss_long)} ({rate:.0f}%)",
                 category="time",
-                representative_games=wins_long + loss_long,
+                representative_games=scored,
             )
         won_adv = lost_adv = 0
-        won_adv_games: List[GameSummary] = []
-        lost_adv_games: List[GameSummary] = []
+        won_adv_games: List[Tuple[GameSummary, float]] = []   # (game, max_cp_advantage)
+        lost_adv_games: List[Tuple[GameSummary, float]] = []
         for g in games:
             moves = sf_cache.get(g.game_id, [])
             if not moves:
                 continue
             my_mvs = [m for m in moves if m["is_my_move"]]
-            ever_win = any(m["cp_before"] is not None and m["cp_before"] >= 300 for m in my_mvs)
-            if ever_win:
+            max_cp = max(
+                (m["cp_before"] for m in my_mvs if m["cp_before"] is not None),
+                default=0,
+            )
+            if max_cp >= 300:
+                relevance = max_cp / 100.0  # 더 큰 우위를 날렸을수록 극명
                 if g.result.value == "loss":
                     lost_adv += 1
-                    lost_adv_games.append(g)
+                    lost_adv_games.append((g, relevance))
                 elif g.result.value == "win":
                     won_adv += 1
-                    won_adv_games.append(g)
+                    won_adv_games.append((g, relevance))
         total = won_adv + lost_adv
         if total < 3:
             return None
@@ -745,15 +824,20 @@ class TacticalAnalysisService:
     def _p12_to_p16(self, games, username, sf_cache) -> List[PatternResult]:
         sac_ok = sac_bad = 0
         closed_bad = closed_total = 0
-        opp_castle: List[GameSummary] = []
+        opp_castle: List[Tuple[GameSummary, float]] = []   # (game, game_length)
         same_castle: List[GameSummary] = []
-        iqp_g: List[GameSummary] = []
+        iqp_g: List[Tuple[GameSummary, float]] = []        # (game, game_length)
         no_iqp_g: List[GameSummary] = []
-        bp_g: List[GameSummary] = []
+        bp_g: List[Tuple[GameSummary, float]] = []         # (game, game_length)
         no_bp_g: List[GameSummary] = []
-        sac_ok_games: List[GameSummary] = []
-        sac_bad_games: List[GameSummary] = []
+        # (game, sacrifice_piece_value) — 더 비싼 기물 희생일수록 관련도 높음
+        sac_ok_games: List[Tuple[GameSummary, float]] = []
+        sac_bad_games: List[Tuple[GameSummary, float]] = []
         analyzed = 0
+
+        # 기물 가치표 (chess.py piece_type → centipawn 근사)
+        _PIECE_VAL = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3,
+                      chess.ROOK: 5, chess.QUEEN: 9, chess.KING: 0}
 
         for g in games:
             if not g.pgn:
@@ -774,18 +858,24 @@ class TacticalAnalysisService:
             had_iqp = False
             sac_flag = False
             sac_ok_flag = False
+            max_sac_val = 0.0   # 게임 내 가장 값비싼 희생의 기물 가치
 
             for node in parsed.mainline():
                 is_my = board.turn == my_color
                 move = node.move
                 try:
-                    # 12. Sacrifice
+                    # 12. Sacrifice — 더 비싼 기물 희생일수록 패턴이 극명
                     if is_my:
                         tgt = board.piece_at(move.to_square)
                         src_pc = board.piece_at(move.from_square)
                         if (tgt and tgt.color == opp_color and src_pc
                                 and src_pc.piece_type > tgt.piece_type):
                             sac_flag = True
+                            # 희생 기물 가치 추적: 희생한 쪽(src) - 얻은 쪽(tgt) 차이
+                            val_diff = (_PIECE_VAL.get(src_pc.piece_type, 0)
+                                        - _PIECE_VAL.get(tgt.piece_type, 0))
+                            if val_diff > max_sac_val:
+                                max_sac_val = float(val_diff)
                             sf_data = sf_cache.get(g.game_id, [])
                             if sf_data:
                                 mn = board.fullmove_number
@@ -852,17 +942,28 @@ class TacticalAnalysisService:
                         break
 
             if sac_flag:
+                sac_val = max(max_sac_val, 1.0)
                 if sac_ok_flag:
                     sac_ok += 1
-                    sac_ok_games.append(g)
+                    sac_ok_games.append((g, sac_val))
                 else:
                     sac_bad += 1
-                    sac_bad_games.append(g)
+                    sac_bad_games.append((g, sac_val))
 
+            game_len = float(_estimate_total_moves(g.pgn or ""))
             opp = my_cs is not None and opp_cs is not None and my_cs != opp_cs
-            (opp_castle if opp else same_castle).append(g)
-            (iqp_g if had_iqp else no_iqp_g).append(g)
-            (bp_g if (had_bp and not lost_bp) else no_bp_g).append(g)
+            if opp:
+                opp_castle.append((g, game_len))
+            else:
+                same_castle.append(g)
+            if had_iqp:
+                iqp_g.append((g, game_len))
+            else:
+                no_iqp_g.append(g)
+            if had_bp and not lost_bp:
+                bp_g.append((g, game_len))
+            else:
+                no_bp_g.append(g)
 
         results: List[PatternResult] = []
 
@@ -891,7 +992,8 @@ class TacticalAnalysisService:
             ))
 
         if len(opp_castle) >= 5:
-            oc_wr = _win_rate(opp_castle, username)
+            oc_games = [g for g, _ in opp_castle]
+            oc_wr = _win_rate(oc_games, username)
             sc_wr = _win_rate(same_castle, username) if same_castle else 50.0
             diff = oc_wr - sc_wr
             s = max(0, min(100, int(oc_wr)))
@@ -905,7 +1007,8 @@ class TacticalAnalysisService:
             ))
 
         if len(iqp_g) >= 5:
-            iq_wr = _win_rate(iqp_g, username)
+            iq_games = [g for g, _ in iqp_g]
+            iq_wr = _win_rate(iq_games, username)
             ni_wr = _win_rate(no_iqp_g, username) if no_iqp_g else 50.0
             diff = iq_wr - ni_wr
             s = max(0, min(100, int(iq_wr)))
@@ -919,7 +1022,8 @@ class TacticalAnalysisService:
             ))
 
         if len(bp_g) >= 5:
-            bp_wr = _win_rate(bp_g, username)
+            bp_games = [g for g, _ in bp_g]
+            bp_wr = _win_rate(bp_games, username)
             nb_wr = _win_rate(no_bp_g, username) if no_bp_g else 50.0
             diff = bp_wr - nb_wr
             s = max(0, min(100, int(bp_wr)))
@@ -940,7 +1044,7 @@ class TacticalAnalysisService:
     # ────────────────────────────────────────────────────────
     def _p17_to_p20(self, games, username, sf_cache, all_games) -> List[PatternResult]:
         ht_ok = ht_bad = 0
-        qe_games: List[GameSummary] = []
+        qe_games: List[Tuple[GameSummary, float]] = []  # (game, moves_after_qe) — 퀸 교환 후 많이 플레이할수록 극명
         nonqe_games: List[GameSummary] = []
         promo_ok = promo_miss = 0
         hunt_ok = hunt_miss = 0
@@ -958,6 +1062,7 @@ class TacticalAnalysisService:
             board = parsed.board()
             analyzed += 1
             had_qe = False
+            qe_move_no = 0
             hunt_result: Optional[bool] = None
 
             for node in parsed.mainline():
@@ -992,7 +1097,9 @@ class TacticalAnalysisService:
                             and board.piece_at(move.from_square).piece_type == chess.QUEEN
                             and board.piece_at(move.to_square)
                             and board.piece_at(move.to_square).piece_type == chess.QUEEN):
-                        had_qe = True
+                        if not had_qe:
+                            had_qe = True
+                            qe_move_no = board.fullmove_number
 
                     # 19. Pawn Promotion Race
                     my_pw = list(board.pieces(chess.PAWN, my_color))
@@ -1024,7 +1131,12 @@ class TacticalAnalysisService:
                     except Exception:
                         break
 
-            (qe_games if had_qe else nonqe_games).append(g)
+            if had_qe:
+                total_moves = float(_estimate_total_moves(g.pgn or ""))
+                moves_after = max(total_moves - qe_move_no, 1.0)  # 퀸 교환 후 플레이 수
+                qe_games.append((g, moves_after))
+            else:
+                nonqe_games.append(g)
             if hunt_result is True:
                 hunt_ok += 1
             elif hunt_result is False:
@@ -1045,7 +1157,8 @@ class TacticalAnalysisService:
             ))
 
         if len(qe_games) >= 5:
-            qe_wr = _win_rate(qe_games, username)
+            qe_list = [g for g, _ in qe_games]
+            qe_wr = _win_rate(qe_list, username)
             nq_wr = _win_rate(nonqe_games, username) if nonqe_games else 50.0
             diff = qe_wr - nq_wr
             s = max(0, min(100, int(qe_wr)))
@@ -1055,6 +1168,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=qe_wr >= 50, games_analyzed=len(qe_games),
                 detail=f"퀸 교환 {len(qe_games)}게임 → {qe_wr:.0f}% | 퀸 유지 {nq_wr:.0f}% ({diff:+.0f}%p)",
                 category="endgame",
+                representative_games=qe_games,
             ))
 
         pr_total = promo_ok + promo_miss
@@ -1089,13 +1203,18 @@ class TacticalAnalysisService:
             b_wr = _win_rate(bg, username)
             diff = abs(w_wr - b_wr)
             s = max(0, min(100, 100 - int(diff * 2)))
+            # 약한 쪽 = 더 극명한 예시. 최근 게임일수록 관련도 높음(played_at 내림차순)
+            weaker = bg if w_wr > b_wr else wg
+            scored_weaker: List[Tuple[Any, float]] = [
+                (g, float(i)) for i, g in enumerate(reversed(weaker))
+            ]
             results.append(PatternResult(
                 label="흑백 밸런스", icon="⚖️",
                 description="백(선수) vs 흑(후수) 승률 차이 — 차이가 작을수록 균형",
                 score=s, is_strength=diff <= 12, games_analyzed=len(all_games),
                 detail=f"백 {w_wr:.0f}% | 흑 {b_wr:.0f}% ({'백' if w_wr >= b_wr else '흑'} 우위 {diff:.0f}%p)",
                 category="balance",
-                representative_games=wg if w_wr <= b_wr else bg,
+                representative_games=scored_weaker,
             ))
 
         # ── 보너스: 오프닝 레퍼토리 ─────────────────────────
@@ -1107,6 +1226,10 @@ class TacticalAnalysisService:
             fres_wr = _win_rate(fresh, username)
             diff = fam_wr - fres_wr
             s = max(0, min(100, int(fam_wr)))
+            # 익숙도 점수: 해당 오프닝 플레이 횟수가 많을수록 관련도 높음
+            scored_fam: List[Tuple[Any, float]] = [
+                (g, float(counts.get(g.opening_name or "Unknown", 0))) for g in familiar
+            ]
             results.append(PatternResult(
                 label="오프닝 레퍼토리", icon="📚",
                 description="익숙한 오프닝(10게임+) vs 새로운 오프닝 승률 — 준비도",
@@ -1114,7 +1237,7 @@ class TacticalAnalysisService:
                 games_analyzed=len(familiar),
                 detail=f"단골 {fam_wr:.0f}% vs 새 {fres_wr:.0f}% ({diff:+.0f}%p)",
                 category="opening",
-                representative_games=familiar,
+                representative_games=scored_fam,
             ))
 
         return results

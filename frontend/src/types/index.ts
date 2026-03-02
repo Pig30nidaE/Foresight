@@ -183,6 +183,7 @@ export interface TacticalPattern {
     opening_eco?: string | null;
     opening_name?: string | null;
     played_at?: string | null;
+    hint?: string | null;  // 이 게임이 선택된 이유
   } | null;
 }
 
