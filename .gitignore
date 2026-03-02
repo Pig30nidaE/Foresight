@@ -11,16 +11,33 @@ dist/
 venv/
 env/
 
+# Python tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+junit.xml
+
 # Node.js
 node_modules/
 .next/
 out/
 .npm
+*.tsbuildinfo
 
-# Environment
+# Environment — 예시 파일(.env.example)은 커밋 허용
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
+.env.development
+
+# Secrets / Certificates
+*.pem
+*.key
+*.crt
+*.p12
 
 # IDE
 .vscode/settings.json
@@ -30,12 +47,25 @@ out/
 
 # OS
 .DS_Store
+.DS_Store?
 Thumbs.db
+ehthumbs.db
 
-# Docker
+# Logs
 *.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Coverage
 htmlcov/
 .coverage
+.coverage.*
+
+# Docker
+*.env.docker
+
+# Cache / Generated
 backend/app/services/_eco_cache.json
+.cache/
