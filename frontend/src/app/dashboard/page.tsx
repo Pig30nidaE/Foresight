@@ -140,9 +140,9 @@ function DashboardContent() {
   const isLoading = loadingFirst || loadingTreeW || loadingTreeB || loadingBW || loadingTP;
 
   const totalGames = useMemo(() => {
-    const w = (firstMoves?.white ?? []).reduce((s, e) => s + e.games, 0);
-    const b = (firstMoves?.black ?? []).reduce((s, e) => s + e.games, 0);
-    return w + b;
+    // total_games: 백엔드가 첫수 필터 전 실제 집계한 전체 게임 수
+    // (firstMoves.white/black 합산은 첫수 5판 미만 오프닝을 제외해 0이 될 수 있음)
+    return firstMoves?.total_games ?? 0;
   }, [firstMoves]);
 
   const insufficientData = !loadingFirst && submitted !== "" && totalGames < 10;

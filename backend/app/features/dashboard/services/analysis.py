@@ -182,6 +182,7 @@ class AnalysisService:
         return {
             "white": first_move_stats(white_rows, "white_move1"),
             "black": first_move_stats(black_rows, "black_move1"),
+            "total_games": len(df),  # 필터 전 실제 전체 게임 수 (데이터 부족 판단 기준)
         }
 
     def get_opening_tree(self, df: pd.DataFrame, depth: int = 3) -> List[dict]:
