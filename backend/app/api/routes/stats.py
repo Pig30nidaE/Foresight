@@ -23,7 +23,7 @@ async def get_first_move_stats(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=1000),
+    max_games: int = Query(default=5000),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
 ):
@@ -35,7 +35,7 @@ async def get_first_move_stats(
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
             until_ts = until_ms // 1000 if until_ms else None
-            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
@@ -53,7 +53,7 @@ async def get_opening_tree(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=300),
+    max_games: int = Query(default=5000),
     depth: int = Query(default=3, ge=1, le=5),
     side: Optional[str] = Query(default=None, description="white | black — 특정 색 게임만 필터"),
     since_ms: Optional[int] = Query(default=None),
@@ -67,7 +67,7 @@ async def get_opening_tree(
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
             until_ts = until_ms // 1000 if until_ms else None
-            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
@@ -89,7 +89,7 @@ async def get_best_worst_openings(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=200),
+    max_games: int = Query(default=5000),
     min_games: int = Query(default=10),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
@@ -101,7 +101,7 @@ async def get_best_worst_openings(
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
             until_ts = until_ms // 1000 if until_ms else None
-            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
@@ -136,7 +136,7 @@ async def get_time_pressure(
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
             until_ts = until_ms // 1000 if until_ms else None
-            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
@@ -166,7 +166,7 @@ async def get_tactical_patterns(
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
             until_ts = until_ms // 1000 if until_ms else None
-            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
@@ -193,7 +193,7 @@ async def get_tactical_ai_insights(
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
             until_ts = until_ms // 1000 if until_ms else None
-            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts)
+            games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
