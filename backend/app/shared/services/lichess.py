@@ -7,7 +7,7 @@ import httpx
 from typing import List, Optional
 from app.core.config import settings
 from app.models.schemas import PlayerProfile, GameSummary, GameResult, Platform
-from app.services import opening_db
+from app.shared.services import opening_db
 
 
 class LichessService:

@@ -5,8 +5,8 @@ import re
 import pandas as pd
 from typing import List, Optional
 from app.models.schemas import GameSummary, OpeningStats, PerformanceSummary, Platform
-from app.services import opening_db
-from app.services.pgn_parser import ParsedGame, MoveData
+from app.shared.services import opening_db
+from app.shared.services.pgn_parser import ParsedGame, MoveData
 
 # PGN 첫 수 추출용 정규식
 _RE_HEADERS = re.compile(r'\[[^\]]+\]')

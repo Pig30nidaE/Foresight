@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from "recharts";
 import type { TacticalAnalysis, TacticalPattern, ClusterInfo, XGBoostProfile, AiInsights } from "@/types";
-import PatternGameListModal from "@/components/modals/PatternGameListModal";
+import PatternGameListModal from "@/features/dashboard/components/modals/PatternGameListModal";
 
 // Chess.com 게임 URL → 분석 URL 변환
 function toAnalysisUrl(url: string): string {

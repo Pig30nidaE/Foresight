@@ -4,8 +4,8 @@ import { useState, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getPerformanceSummary, getOpeningStats } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
-import StatCard from "@/components/ui/StatCard";
-import OpeningsChart from "@/components/charts/OpeningsChart";
+import StatCard from "@/shared/components/ui/StatCard";
+import OpeningsChart from "@/features/dashboard/components/charts/OpeningsChart";
 
 function AnalysisContent() {
   const [platform, setPlatform] = useState<Platform>("chess.com");

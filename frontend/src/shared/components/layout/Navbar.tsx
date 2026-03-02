@@ -4,9 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "대시보드" },
-  { href: "/analysis",  label: "내 게임 분석" },
-  { href: "/opponent",  label: "상대 분석" },
+  { href: "/dashboard",    label: "대시보드" },
+  { href: "/analysis",     label: "내 게임 분석" },
+  { href: "/opponent",     label: "상대 분석" },
+  { href: "/opening-tier", label: "오프닝 티어표" },
+  { href: "/community",    label: "커뮤니티" },
 ];
 
 export default function Navbar() {

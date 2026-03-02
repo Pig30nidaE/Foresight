@@ -13,18 +13,18 @@ import {
 } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
 import { Suspense, useState, useEffect, useMemo } from "react";
-import FirstMoveBar from "@/components/charts/FirstMoveBar";
-import OpeningTreeTable from "@/components/charts/OpeningTreeTable";
-import BestWorstCard from "@/components/charts/BestWorstCard";
-import BlunderTimeline from "@/components/charts/BlunderTimeline";
-import TacticalPatternsCard from "@/components/charts/TacticalPatternsCard";
-import SectionHeader from "@/components/ui/SectionHeader";
+import FirstMoveBar from "@/features/dashboard/components/charts/FirstMoveBar";
+import OpeningTreeTable from "@/features/dashboard/components/charts/OpeningTreeTable";
+import BestWorstCard from "@/features/dashboard/components/charts/BestWorstCard";
+import BlunderTimeline from "@/features/dashboard/components/charts/BlunderTimeline";
+import TacticalPatternsCard from "@/features/dashboard/components/charts/TacticalPatternsCard";
+import SectionHeader from "@/shared/components/ui/SectionHeader";
 import {
   FirstMovesSkeleton,
   OpeningTreeSkeleton,
   BestWorstSkeleton,
   TimelineSkeleton,
-} from "@/components/ui/SkeletonCard";
+} from "@/shared/components/ui/SkeletonCard";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
 
