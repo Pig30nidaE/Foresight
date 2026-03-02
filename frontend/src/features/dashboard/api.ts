@@ -29,7 +29,7 @@ export const getFirstMoveStats = async (
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
   const { data } = await api.get(`/stats/first-moves/${platform}/${username}`, { params });
-  return data as { white: FirstMoveEntry[]; black: FirstMoveEntry[] };
+  return data as { white: FirstMoveEntry[]; black: FirstMoveEntry[]; total_games: number };
 };
 
 // ────────────────────────────────────────────
