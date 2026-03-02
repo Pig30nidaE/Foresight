@@ -87,74 +87,77 @@ export default function BlunderTimeline({ data }: Props) {
         </div>
       )}
 
-      {/* 페이즈별 압박률 막대 */}
-      {phaseData && phaseData.length > 0 && (
+      {/* 페이즈별 + 수 번호별 나란히 시스터 */}
+      <div className={phaseData && phaseData.length > 0 ? "grid grid-cols-2 gap-4" : ""}>
+        {/* 페이즈별 압박률 막대 */}
+        {phaseData && phaseData.length > 0 && (
+          <div>
+            <p className="text-xs text-zinc-500 mb-2">페이즈별 시간 압박 비율</p>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={phaseData} margin={{ left: -15, right: 4, top: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis dataKey="phase" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => `${v}%`} tick={{ fill: "#71717a", fontSize: 11 }} domain={[0, 100]} />
+                <Tooltip
+                  formatter={(v) => [`${v}%`, "시간압박"]}
+                  contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                />
+                <Bar dataKey="pressure_pct" radius={[4, 4, 0, 0]}>
+                  {phaseData.map((entry, i) => (
+                    <Cell
+                      key={i}
+                      fill={entry.pressure_pct >= 40 ? "#ef4444" : entry.pressure_pct >= 20 ? "#f59e0b" : "#22c55e"}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* 수 번호별 압박률 곡선 */}
         <div>
-          <p className="text-xs text-zinc-500 mb-2">페이즈별 시간 압박 비율</p>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={phaseData} margin={{ left: -15, right: 4, top: 0, bottom: 0 }}>
+          <p className="text-xs text-zinc-500 mb-2">
+            수 번호별 시간 압박 비율{isMock ? " (예시)" : ""}
+          </p>
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={moveData} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
+              <defs>
+                <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-              <XAxis dataKey="phase" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-              <YAxis tickFormatter={(v) => `${v}%`} tick={{ fill: "#71717a", fontSize: 11 }} domain={[0, 100]} />
+              <XAxis
+                dataKey="move_number"
+                tickFormatter={(v) => `${v}수`}
+                tick={{ fill: "#71717a", fontSize: 11 }}
+              />
+              <YAxis
+                tickFormatter={(v) => `${v}%`}
+                tick={{ fill: "#71717a", fontSize: 11 }}
+                domain={[0, 100]}
+              />
               <Tooltip
-                formatter={(v) => [`${v}%`, "시간압박"]}
+                formatter={(v, name) => [
+                  `${v}${name === "pressure_pct" ? "%" : "초"}`,
+                  name === "pressure_pct" ? "시간압박" : "평균사고",
+                ]}
+                labelFormatter={(v) => `${v}수`}
                 contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
               />
-              <Bar dataKey="pressure_pct" radius={[4, 4, 0, 0]}>
-                {phaseData.map((entry, i) => (
-                  <Cell
-                    key={i}
-                    fill={entry.pressure_pct >= 40 ? "#ef4444" : entry.pressure_pct >= 20 ? "#f59e0b" : "#22c55e"}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
+              <Area
+                type="monotone"
+                dataKey="pressure_pct"
+                stroke="#ef4444"
+                strokeWidth={2}
+                fill="url(#pressureGrad)"
+                dot={false}
+              />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
-      )}
-
-      {/* 수 번호별 압박률 곡선 */}
-      <div>
-        <p className="text-xs text-zinc-500 mb-2">
-          수 번호별 시간 압박 비율{isMock ? " (예시)" : ""}
-        </p>
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={moveData} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
-            <defs>
-              <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-            <XAxis
-              dataKey="move_number"
-              tickFormatter={(v) => `${v}수`}
-              tick={{ fill: "#71717a", fontSize: 11 }}
-            />
-            <YAxis
-              tickFormatter={(v) => `${v}%`}
-              tick={{ fill: "#71717a", fontSize: 11 }}
-              domain={[0, 100]}
-            />
-            <Tooltip
-              formatter={(v, name) => [
-                `${v}${name === "pressure_pct" ? "%" : "초"}`,
-                name === "pressure_pct" ? "시간압박" : "평균사고",
-              ]}
-              labelFormatter={(v) => `${v}수`}
-              contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
-            />
-            <Area
-              type="monotone"
-              dataKey="pressure_pct"
-              stroke="#ef4444"
-              strokeWidth={2}
-              fill="url(#pressureGrad)"
-              dot={false}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
       </div>
     </div>
   );

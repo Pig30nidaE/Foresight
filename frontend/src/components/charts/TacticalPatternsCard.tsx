@@ -167,6 +167,17 @@ function PatternCard({ p, highlight }: { p: TacticalPattern; highlight: "strengt
       <ScoreBar score={p.score} />
       <p className="text-xs text-zinc-500 leading-snug">{p.description}</p>
       <p className="text-xs text-zinc-400">{p.detail}</p>
+      {p.example_game?.url && (
+        <a
+          href={p.example_game.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-emerald-400/80 hover:text-emerald-300 transition-colors mt-0.5"
+        >
+          <span>♟ 예시 게임 보기</span>
+          <span>→</span>
+        </a>
+      )}
     </div>
   );
 }
@@ -287,19 +298,21 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
       )}
 
       {/* 전체 패턴 리스트 */}
-      <div className="space-y-2">
-        <p className="text-xs text-zinc-600 uppercase tracking-wider">전체 패턴 ({data.patterns.length})</p>
-        {data.patterns.map((p) => (
-          <PatternCard
-            key={p.label}
-            p={p}
-            highlight={
-              strengthSet.has(p.label) ? "strength"
-              : weaknessSet.has(p.label) ? "weakness"
-              : null
-            }
-          />
-        ))}
+      <div>
+        <p className="text-xs text-zinc-600 uppercase tracking-wider mb-2">전체 패턴 ({data.patterns.length})</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          {data.patterns.map((p) => (
+            <PatternCard
+              key={p.label}
+              p={p}
+              highlight={
+                strengthSet.has(p.label) ? "strength"
+                : weaknessSet.has(p.label) ? "weakness"
+                : null
+              }
+            />
+          ))}
+        </div>
       </div>
 
       <p className="text-xs text-zinc-600 text-center">
