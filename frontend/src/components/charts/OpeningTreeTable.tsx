@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { OpeningTreeNode } from "@/types";
+import OpeningGameListModal from "@/components/modals/OpeningGameListModal";
 
 interface Props {
   data: OpeningTreeNode[];
@@ -29,6 +30,7 @@ const winColor = (r: number) =>
 export default function OpeningTreeTable({ data }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showAll, setShowAll] = useState(false);
+  const [selectedNode, setSelectedNode] = useState<OpeningTreeNode | null>(null);
 
   if (!data.length) {
     return <p className="text-zinc-500 text-sm py-3">오프닝 데이터가 없습니다.</p>;
@@ -51,18 +53,21 @@ export default function OpeningTreeTable({ data }: Props) {
       {rows.map(({ node, indent, isGroup }) => (
         <div
           key={`${indent}-${node.eco_prefix}-${node.name}`}
-          className={`group flex items-center justify-between py-1.5 px-2 rounded transition-colors ${
+          className={`group flex items-center justify-between py-1.5 px-2 rounded transition-colors cursor-pointer ${
             isGroup
-              ? "hover:bg-zinc-800/70 cursor-pointer bg-zinc-900/40"
-              : "hover:bg-zinc-800/40 cursor-default"
+              ? "hover:bg-zinc-800/70 bg-zinc-900/40"
+              : "hover:bg-zinc-800/40"
           }`}
           style={{ paddingLeft: indent * 20 + 8 }}
-          onClick={isGroup && node.children?.length ? () => toggle(node.name) : undefined}
+          onClick={() => setSelectedNode(node)}
         >
           {/* Name */}
           <div className="flex items-center gap-1.5 min-w-0">
             {isGroup && node.children?.length ? (
-              <span className="text-zinc-500 text-xs w-3 shrink-0">
+              <span
+                className="text-zinc-500 text-xs w-3 shrink-0 hover:text-zinc-300 transition-colors"
+                onClick={(e) => { e.stopPropagation(); toggle(node.name); }}
+              >
                 {expanded.has(node.name) ? "▾" : "▸"}
               </span>
             ) : (
@@ -113,6 +118,8 @@ export default function OpeningTreeTable({ data }: Props) {
           {showAll ? `▲ 접기` : `▼ 더 보기 (${data.length - TOP_N}개 더)`}
         </button>
       )}
+
+      <OpeningGameListModal node={selectedNode} onClose={() => setSelectedNode(null)} />
     </div>
   );
 }
