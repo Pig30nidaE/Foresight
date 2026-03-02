@@ -164,7 +164,7 @@ class AnalysisService:
                 losses = int(row.get("loss", 0))
                 draws  = int(row.get("draw", 0))
                 total  = wins + losses + draws
-                if total < 10:
+                if total < 5:
                     continue
                 result.append({
                     "eco": move,                          # 재사용 필드: 실제 수

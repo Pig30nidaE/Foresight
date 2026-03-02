@@ -5,6 +5,15 @@ import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tool
 import type { TacticalAnalysis, TacticalPattern, ClusterInfo, XGBoostProfile, AiInsights } from "@/types";
 import PatternGameListModal from "@/components/modals/PatternGameListModal";
 
+// Chess.com 게임 URL → 분석 URL 변환
+function toAnalysisUrl(url: string): string {
+  if (!url) return url;
+  const cdotcom = url.match(/^(https?:\/\/(?:www\.)?chess\.com)\/game\/(live|daily)\/(\w+)/);
+  if (cdotcom) return `${cdotcom[1]}/analysis/game/${cdotcom[2]}/${cdotcom[3]}/analysis`;
+  if (/lichess\.org\/[A-Za-z0-9]+(?:\?|#|$)/.test(url)) return url.replace(/(\?.*)?$/, "#analysis");
+  return url;
+}
+
 interface Props {
   data?: TacticalAnalysis;
   isLoading?: boolean;
@@ -231,7 +240,7 @@ function PatternCard({ p, highlight, onClick }: { p: TacticalPattern; highlight:
       {p.example_game?.url && (
         <div className="space-y-0.5">
           {p.example_game.hint && <p className="text-[10px] text-zinc-600 leading-snug">{p.example_game.hint}</p>}
-          <a href={p.example_game.url} target="_blank" rel="noopener noreferrer"
+          <a href={toAnalysisUrl(p.example_game.url)} target="_blank" rel="noopener noreferrer"
              onClick={(e) => e.stopPropagation()}
              className="inline-flex items-center gap-1 text-xs text-emerald-400/80 hover:text-emerald-300 transition-colors">
             <span>♟ 예시 게임</span><span>→</span>
