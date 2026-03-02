@@ -105,12 +105,13 @@ class PatternResult:
     games_analyzed: int
     detail: str
     category: str     # time | position | opening | endgame | balance
+    example_game: Optional[dict] = None   # {url, result, opening_eco, opening_name, played_at}
 
 
 def _to_dict(p: PatternResult) -> dict:
     return {k: getattr(p, k) for k in
             ("label", "description", "icon", "score",
-             "is_strength", "games_analyzed", "detail", "category")}
+             "is_strength", "games_analyzed", "detail", "category", "example_game")}
 
 
 def _win_rate(games: List[GameSummary], username: str) -> float:
@@ -292,6 +293,26 @@ class TacticalAnalysisService:
 
         # ── Complexity & Transitions (17–20 + extras) ───────
         patterns.extend(self._p17_to_p20(board_games, username, sf_cache, games))
+
+        # ── 예시 게임 첨부 (URL 이 있는 게임 중 강점=승리, 약점=패배에서 픽) ──
+        games_with_url = [g for g in games if g.url]
+        if games_with_url:
+            wins_u  = [g for g in games_with_url if g.result.value == "win"]
+            losses_u = [g for g in games_with_url if g.result.value == "loss"]
+            def _pick_eg(pool: List[GameSummary]) -> Optional[dict]:
+                if not pool:
+                    return None
+                g = pool[0]
+                return {
+                    "url": g.url,
+                    "result": g.result.value,
+                    "opening_eco": g.opening_eco,
+                    "opening_name": g.opening_name,
+                    "played_at": g.played_at,
+                }
+            for pattern in patterns:
+                pattern.example_game = _pick_eg(wins_u if pattern.is_strength else losses_u) \
+                    or _pick_eg(games_with_url)
 
         strengths = sorted(
             [p for p in patterns if p.is_strength], key=lambda x: x.score, reverse=True

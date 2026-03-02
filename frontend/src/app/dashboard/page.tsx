@@ -52,6 +52,8 @@ function DashboardContent() {
   const [period, setPeriod] = useState<Period>("3m");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [pendingFrom, setPendingFrom] = useState("");
+  const [pendingTo, setPendingTo] = useState("");
   const [treeViewSide, setTreeViewSide] = useState<"white" | "black">("white");
 
   const sinceMs = useMemo(() => {
@@ -133,7 +135,7 @@ function DashboardContent() {
     return w + b;
   }, [firstMoves]);
 
-  const insufficientData = !loadingFirst && submitted !== "" && totalGames > 0 && totalGames < 10;
+  const insufficientData = !loadingFirst && submitted !== "" && totalGames < 10;
 
   const tcGameCount = (tc: TimeClass): number | undefined => {
     if (!profile) return undefined;
@@ -229,17 +231,25 @@ function DashboardContent() {
             <div className="flex items-center gap-2 text-xs text-zinc-400">
               <input
                 type="date"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
+                value={pendingFrom}
+                onChange={(e) => setPendingFrom(e.target.value)}
                 className="bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
               />
               <span>~</span>
               <input
                 type="date"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
+                value={pendingTo}
+                onChange={(e) => setPendingTo(e.target.value)}
                 className="bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
               />
+              <button
+                type="button"
+                onClick={() => { setCustomFrom(pendingFrom); setCustomTo(pendingTo); }}
+                disabled={!pendingFrom}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-md font-medium transition-colors"
+              >
+                적용
+              </button>
             </div>
           )}
         </div>
@@ -309,11 +319,15 @@ function DashboardContent() {
             <div className="space-y-6 animate-fade-in">
               {/* 10게임 미만 블러 오버레이 */}
               {insufficientData && (
-                <div className="relative bg-zinc-900 border border-amber-700/50 rounded-2xl p-6 text-center">
-                  <span className="text-amber-400 text-sm font-medium">
-                    ⚠️ 데이터 부족 — 현재 필터 기준 게임 수가 10게임 미만입니다.
-                  </span>
-                  <p className="text-zinc-500 text-xs mt-1">기간 범위를 늘리거나 다른 타임클래스를 선택해 보세요.</p>
+                <div className="flex items-center gap-3 bg-amber-950/40 border border-amber-700/50 rounded-2xl px-5 py-4">
+                  <span className="text-2xl leading-none select-none">⚠️</span>
+                  <div>
+                    <p className="font-semibold text-amber-300 text-sm">데이터 부족 — 분석 불가</p>
+                    <p className="text-amber-400/70 text-xs mt-0.5">
+                      현재 {totalGames}게임 · 최소 10게임이 있어야 정확한 분석이 가능합니다.
+                      기간을 늘리거나 다른 타임클래스를 선택해 보세요.
+                    </p>
+                  </div>
                 </div>
               )}
 

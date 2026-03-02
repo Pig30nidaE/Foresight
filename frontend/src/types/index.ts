@@ -177,6 +177,13 @@ export interface TacticalPattern {
   games_analyzed: number;
   detail: string;
   category: "time" | "position" | "opening" | "endgame" | "balance";
+  example_game?: {
+    url: string;
+    result: "win" | "loss" | "draw";
+    opening_eco?: string | null;
+    opening_name?: string | null;
+    played_at?: string | null;
+  } | null;
 }
 
 // K-Means 군집화 결과
