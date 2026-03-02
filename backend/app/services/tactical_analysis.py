@@ -378,11 +378,18 @@ class TacticalAnalysisService:
                 pattern.example_game = _pick_best(rep, prefer)
             else:
                 # 패턴 전용 풀 없는 경우(이동 레벨 집계) → 전역 폴백
-                fallback_pool = [
+                fallback_pool: List[Tuple[Any, float]] = [
                     (g, 1.0) for g in games_with_url
                     if g.result.value == prefer
                 ]
-                pattern.example_game = _pick_best(fallback_pool or [(g, 1.0) for g in games_with_url], prefer)
+                if not fallback_pool:
+                    fallback_pool = [(g, 1.0) for g in games_with_url]
+                pattern.example_game = _pick_best(fallback_pool, prefer)
+                # top_games 모달용으로도 폴백 풀 저장 (최대 20개)
+                # prefer_result 순으로 정렬: 원하는 결과 먼저, 나머지 뒤
+                preferred_fb = [(g, s) for g, s in fallback_pool if g.result.value == prefer]
+                others_fb    = [(g, s) for g, s in fallback_pool if g.result.value != prefer]
+                pattern.representative_games = (preferred_fb + others_fb)[:20]
             # 힌트 설정
             hints = _HINT_MAP.get(pattern.label)
             if hints:
