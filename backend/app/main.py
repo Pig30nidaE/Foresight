@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routes import player, games, analysis, stats, engine
-from app.services import opening_db
+from app.api.routes import player, games, analysis, stats, engine, opening_tier, community
+from app.shared.services import opening_db
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,8 @@ app.include_router(games.router, prefix="/api/v1/games", tags=["Games"])
 app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["Analysis"])
 app.include_router(stats.router, prefix="/api/v1/stats", tags=["Stats"])
 app.include_router(engine.router, prefix="/api/v1/engine", tags=["Engine"])
+app.include_router(opening_tier.router, prefix="/api/v1/opening-tier", tags=["Opening Tier"])
+app.include_router(community.router, prefix="/api/v1/community", tags=["Community"])
 
 
 @app.get("/health", tags=["Health"])

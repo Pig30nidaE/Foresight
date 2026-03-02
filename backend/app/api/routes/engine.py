@@ -21,8 +21,8 @@ from functools import partial
 from fastapi import APIRouter, HTTPException, Query
 
 from app.models.schemas import Platform
-from app.services.chessdotcom import ChessDotComService
-from app.services.lichess import LichessService
+from app.shared.services.chessdotcom import ChessDotComService
+from app.shared.services.lichess import LichessService
 from app.ml.move_classifier import analyze_games_sync
 
 logger = logging.getLogger(__name__)

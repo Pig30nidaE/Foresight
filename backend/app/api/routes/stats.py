@@ -5,11 +5,11 @@ MVP 섹션 1, 2, 3 대응
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.models.schemas import Platform
-from app.services.chessdotcom import ChessDotComService
-from app.services.lichess import LichessService
-from app.services.analysis import AnalysisService
-from app.services.pgn_parser import parse_games_bulk
-from app.services.tactical_analysis import TacticalAnalysisService
+from app.shared.services.chessdotcom import ChessDotComService
+from app.shared.services.lichess import LichessService
+from app.features.dashboard.services.analysis import AnalysisService
+from app.shared.services.pgn_parser import parse_games_bulk
+from app.features.dashboard.services.tactical_analysis import TacticalAnalysisService
 
 router = APIRouter()
 chessdotcom_svc = ChessDotComService()
@@ -200,7 +200,7 @@ async def get_tactical_ai_insights(
         games = [g for g in games if g.time_class == time_class]
         analysis = tactical_svc.analyze(games, username)
 
-        from app.services.ai_insights import generate_tactical_insights
+        from app.features.dashboard.services.ai_insights import generate_tactical_insights
         insights = await generate_tactical_insights(analysis, username)
 
         return {

@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from app.models.schemas import GameSummary, Platform
-from app.services.chessdotcom import ChessDotComService
-from app.services.lichess import LichessService
+from app.shared.services.chessdotcom import ChessDotComService
+from app.shared.services.lichess import LichessService
 
 router = APIRouter()
 chessdotcom_svc = ChessDotComService()

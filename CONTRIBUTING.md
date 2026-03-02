@@ -28,31 +28,36 @@
 Foresight/
 ├── backend/                    # FastAPI 서버 (Python 3.11)
 │   └── app/
-│       ├── api/routes/         # HTTP 엔드포인트 (5개 라우터)
+│       ├── api/routes/         # HTTP 엔드포인트 (라우터)
 │       ├── core/               # 설정 (config.py)
 │       ├── ml/                 # Stockfish 엔진 래퍼 + 수 분류기
 │       ├── models/             # Pydantic 스키마
-│       └── services/           # 비즈니스 로직 레이어
-└── frontend/                   # Next.js 16 (App Router, TypeScript)
-    └── src/
-        ├── app/                # 페이지 라우트
-        ├── components/         # 재사용 UI 컴포넌트
-        ├── lib/api.ts          # Axios 기반 API 클라이언트 (단일 진실)
-        └── types/index.ts      # 공용 TypeScript 타입 (단일 진실)
+│       ├── shared/services/    # 공유 비즈니스 로직 (체스닷컴, 리체스, PGN 등)
+│       └── features/           # 기능별 서비스 (dashboard, opponent, opening_tier …)
+├── frontend/                   # Next.js 16 (App Router, TypeScript)
+│   └── src/
+│       ├── app/                # 페이지 라우트
+│       ├── features/           # 기능별 컴포넌트 + 타입 + API
+│       ├── shared/             # 공유 컴포넌트 / 타입 / lib
+│       ├── lib/api.ts          # 하위 호환 배럴 re-export
+│       └── types/index.ts      # 하위 호환 배럴 re-export
+└── STRUCTURE_CHANGES.md        # 폴더 구조 변경 이력 및 소유 영역 문서
 ```
+
+> **자세한 폴더 구조 및 개발자 소유 영역은 [STRUCTURE_CHANGES.md](./STRUCTURE_CHANGES.md)를 참고하세요.**
 
 ### 데이터 흐름
 
 ```
 External APIs (Chess.com / Lichess)
-  → backend/services/chessdotcom.py | lichess.py  (게임 수집)
-  → backend/services/pgn_parser.py               (PGN 파싱)
-  → backend/ml/engine.py                         (Stockfish 분석)
-  → backend/ml/move_classifier.py                (수 품질 분류)
-  → backend/services/tactical_analysis.py        (20가지 패턴)
-  → backend/services/ai_insights.py              (GPT-4o-mini 코치)
-  → frontend/lib/api.ts                          (API 클라이언트)
-  → frontend/components/charts/                  (시각화)
+  → backend/shared/services/chessdotcom.py | lichess.py   (게임 수집)
+  → backend/shared/services/pgn_parser.py                 (PGN 파싱)
+  → backend/ml/engine.py                                  (Stockfish 분석)
+  → backend/ml/move_classifier.py                         (수 품질 분류)
+  → backend/features/dashboard/services/tactical_analysis.py  (20가지 패턴)
+  → backend/features/dashboard/services/ai_insights.py        (GPT-4o-mini 코치)
+  → frontend/shared/lib/api.ts                            (base axios)
+  → frontend/features/dashboard/components/charts/        (시각화)
 ```
 
 ---
@@ -129,18 +134,21 @@ LICHESS_API_TOKEN=lip_...
 |-------|------|
 | `engine` | `backend/app/ml/engine.py` — Stockfish 래퍼 |
 | `classifier` | `backend/app/ml/move_classifier.py` |
-| `tactical` | `backend/app/services/tactical_analysis.py` |
-| `analysis` | `backend/app/services/analysis.py` |
-| `pgn` | `backend/app/services/pgn_parser.py` |
-| `opening` | `backend/app/services/opening_db.py` |
-| `ai` | `backend/app/services/ai_insights.py` |
+| `tactical` | `backend/app/features/dashboard/services/tactical_analysis.py` |
+| `analysis` | `backend/app/features/dashboard/services/analysis.py` |
+| `pgn` | `backend/app/shared/services/pgn_parser.py` |
+| `opening` | `backend/app/shared/services/opening_db.py` |
+| `ai` | `backend/app/features/dashboard/services/ai_insights.py` |
+| `opponent` | `backend/app/features/opponent/services/` |
+| `opening-tier` | `backend/app/features/opening_tier/` |
 | `api` | `backend/app/api/routes/` |
 | `schema` | `backend/app/models/schemas.py` |
 | `config` | `backend/app/core/config.py` |
-| `dashboard` | `frontend/src/app/dashboard/` |
-| `charts` | `frontend/src/components/charts/` |
-| `types` | `frontend/src/types/index.ts` |
-| `api-client` | `frontend/src/lib/api.ts` |
+| `dashboard` | `frontend/src/features/dashboard/` |
+| `charts` | `frontend/src/features/dashboard/components/charts/` |
+| `shared` | `frontend/src/shared/` |
+| `types` | `frontend/src/shared/types/index.ts` |
+| `api-client` | `frontend/src/shared/lib/api.ts` |
 | `deps` | 의존성 패키지 |
 
 ### 규칙
@@ -169,17 +177,20 @@ BREAKING CHANGE: TacticalAnalysis 응답 스키마 변경
 ## 4. Branch 전략
 
 ```
-main            ── 배포 브랜치 (직접 push 금지)
-  └─ develop    ── 통합 브랜치
-       ├─ feat/tactical-patterns
-       ├─ feat/rating-trend-chart
+main              ── 배포 브랜치 (직접 push 금지)
+  └─ develop      ── 통합 브랜치
+       ├─ feat/dashboard-blunder-timeline    (Dev1)
+       ├─ feat/opponent-analysis             (Dev1)
+       ├─ feat/opening-tier-table            (Dev2)
+       ├─ feat/community-board               (Future)
        ├─ fix/engine-mate-score
        └─ refactor/pgn-clock-parser
 ```
 
 - `main` → PR은 반드시 `develop` 경유
 - 브랜치명: `<type>/<kebab-case-description>`
-- 개인 작업 브랜치는 `develop`에서 분기
+- **개발자별 feature 브랜치는 서로 다른 폴더를 수정하므로 conflict가 발생하지 않습니다**
+- `shared/` 폴더 수정 시 반드시 팀원과 협의 후 진행할 것
 
 ---
 

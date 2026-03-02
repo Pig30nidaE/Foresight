@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { OpeningTreeNode } from "@/types";
-import OpeningGameListModal from "@/components/modals/OpeningGameListModal";
+import OpeningGameListModal from "@/features/dashboard/components/modals/OpeningGameListModal";
 
 interface Props {
   data: OpeningTreeNode[];

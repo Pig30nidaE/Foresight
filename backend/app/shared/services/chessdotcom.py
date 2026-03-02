@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Optional
 from app.core.config import settings
 from app.models.schemas import PlayerProfile, GameSummary, GameResult, Platform
-from app.services import opening_db
+from app.shared.services import opening_db
 
 # PGN 헤더에서 ECO 코드 추출용 정규식
 _RE_ECO = re.compile(r'\[ECO "([^"]+)"\]')
