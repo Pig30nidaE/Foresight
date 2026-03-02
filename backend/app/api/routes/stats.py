@@ -45,13 +45,13 @@ async def get_first_move_stats(
 
         logger.info(f"  → API returned {len(games)} games")
         
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
+        # → GameSummary의 time_class 필드가 일관되게 설정됨
         df = analysis_svc.build_dataframe(games)
         logger.info(f"  → DataFrame: {len(df)} rows, columns={list(df.columns) if not df.empty else 'EMPTY'}")
         
         if not df.empty:
-            logger.info(f"  → Before filter: {df['time_class'].value_counts().to_dict() if 'time_class' in df.columns else 'NO time_class COLUMN'}")
-            df = df[df["time_class"] == time_class]
-            logger.info(f"  → After filter ({time_class}): {len(df)} rows")
+            logger.info(f"  → time_class distribution: {df['time_class'].value_counts().to_dict() if 'time_class' in df.columns else 'NO time_class COLUMN'}")
 
         result = analysis_svc.get_first_move_stats(df, username.lower())
         logger.info(f"  → Result: white={len(result['white'])}, black={len(result['black'])}, total_games={result.get('total_games', 'N/A')}")
@@ -84,9 +84,9 @@ async def get_opening_tree(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         df = analysis_svc.build_dataframe(games)
-        if not df.empty:
-            df = df[df["time_class"] == time_class]
+        if not df.empty and side:
             if side == "white" and "white" in df.columns:
                 df = df[df["white"].str.lower() == username.lower()]
             elif side == "black" and "black" in df.columns:
@@ -118,10 +118,8 @@ async def get_best_worst_openings(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         df = analysis_svc.build_dataframe(games)
-        if not df.empty:
-            df = df[df["time_class"] == time_class]
-
         return analysis_svc.get_best_worst_openings(df, min_games)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -155,9 +153,7 @@ async def get_time_pressure(
 
         if time_class:
             games = [g for g in games if g.time_class == time_class]
-
-        parsed = parse_games_bulk(games, pressure_threshold=pressure_threshold)
-        return analysis_svc.get_time_pressure_stats(parsed, username)
+# Note: games는 이미 get_recent_games() 에서 time_class로 필터됨        return analysis_svc.get_time_pressure_stats(parsed, username)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

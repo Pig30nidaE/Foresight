@@ -201,13 +201,13 @@ class ChessDotComService:
                         # 수집 단계 타임클래스 필터 — 관계없는 타임클래스가 cap 을 낭비하지 않도록
                         if time_class and raw.get("time_class", "") != time_class:
                             continue
-                        games.append(self._parse_game(raw, username))
+                        games.append(self._parse_game(raw, username, time_class))
                 except Exception:
                     continue
 
         return games
 
-    def _parse_game(self, raw: dict, username: str) -> GameSummary:
+    def _parse_game(self, raw: dict, username: str, time_class: Optional[str] = None) -> GameSummary:
         white = raw.get("white", {})
         black = raw.get("black", {})
         white_name = white.get("username", "").lower()
@@ -255,7 +255,7 @@ class ChessDotComService:
             white=white.get("username", ""),
             black=black.get("username", ""),
             result=result,
-            time_class=raw.get("time_class", ""),
+            time_class=time_class or raw.get("time_class", ""),
             opening_eco=eco_code,
             opening_name=opening_name,
             pgn=pgn if pgn else None,
