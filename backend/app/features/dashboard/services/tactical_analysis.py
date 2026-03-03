@@ -297,7 +297,8 @@ class TacticalAnalysisService:
         patterns: List[PatternResult] = []
 
         # ── Time & Psychology (1–6) ─────────────────────────
-        for fn in [self._p1, self._p2, self._p3]:
+        # p3(Tilt) 제거: 데이터가 적은 환경에서 노이즈가 많아 비활성화
+        for fn in [self._p1, self._p2]:
             p = fn(games, username)
             if p:
                 patterns.append(p)
@@ -856,16 +857,7 @@ class TacticalAnalysisService:
 
         results: List[PatternResult] = []
 
-        if pin_total >= 3:
-            s = max(0, min(100, 100 - int(pin_bad / pin_total * 200)))
-            results.append(PatternResult(
-                label="핀(Pin) 인지", icon="📌",
-                description="핀된 기물을 이동해 체크를 허용한 비율 — 낮을수록 핀 처리 미흡",
-                score=s, is_strength=s >= 60, games_analyzed=analyzed,
-                detail=f"핀 상황 {pin_total}회 중 체크 허용 {pin_bad}회",
-                category="position",
-                representative_games=pin_bad_games + pin_ok_games,
-            ))
+        # Pin(p7) 제거: 핀 감지 정확도 이슈로 비활성화
 
         fork_total = fork_evaded + fork_failed
         if fork_total >= 3:
@@ -891,27 +883,7 @@ class TacticalAnalysisService:
                 representative_games=disc_ok_games_list + disc_bad_games_list,
             ))
 
-        if back_rank >= 2 or analyzed >= 40:
-            s = max(20, min(90, 100 - back_rank * 7))
-            results.append(PatternResult(
-                label="백랭크 수비", icon="🏰",
-                description="룩·퀸에 의한 백랭크 체크 허용 빈도",
-                score=s, is_strength=s >= 65, games_analyzed=analyzed,
-                detail=f"백랭크 체크 허용 {back_rank}회 ({analyzed}게임)",
-                category="position",
-                representative_games=backrank_games,
-            ))
-
-        if zw_miss >= 2 or analyzed >= 30:
-            s = max(20, min(90, 100 - zw_miss * 8))
-            results.append(PatternResult(
-                label="사이수(Zwischenzug) 발견", icon="♻️",
-                description="기물 교환 중 먼저 체크를 낼 기회를 놓친 빈도",
-                score=s, is_strength=s >= 65, games_analyzed=analyzed,
-                detail=f"사이수 기회 미활용 {zw_miss}회 ({analyzed}게임)",
-                category="position",
-                representative_games=zw_games,
-            ))
+        # 백랭크 수비(p10), 사이수(p11) 제거: 성공 기준 불명확으로 비활성화
 
         return results
 
