@@ -222,6 +222,9 @@ function PatternCard({ p, highlight, onClick }: { p: TacticalPattern; highlight:
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-base leading-none">{p.icon}</span>
           <span className="text-sm font-semibold text-zinc-200 truncate">{p.label}</span>
+          {p.situation_id != null && p.situation_id > 0 && (
+            <span className="text-[10px] px-1 py-0.5 rounded bg-zinc-800 text-zinc-500 font-mono shrink-0">#{p.situation_id}</span>
+          )}
           {highlight === "strength" && <span className="text-xs text-emerald-400 font-bold shrink-0">★</span>}
           {highlight === "weakness" && <span className="text-xs text-red-400 font-bold shrink-0">▼</span>}
         </div>

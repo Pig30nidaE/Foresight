@@ -3,36 +3,47 @@
 ========================================================
 스택:
   - python-chess   : PGN 파싱 + 보드 구조 분석
-  - Stockfish 18   : 우위 포기/상호 블런더/희생 정확도 평가
+  - Stockfish 18   : cp_loss 기반 블런더 탐지 / 희생·우위 유지 정확도
   - pandas/NumPy   : Feature 정형화·전처리
-  - scikit-learn   : K-Means 게임 패턴 군집화
-  - XGBoost        : 블런더 유발 게임 패턴 분류
+  - scikit-learn   : K-Means 게임 스타일 군집화
+  - XGBoost        : 블런더 리스크 피처 중요도 분류 (data-leakage-free)
 
-MVP.md 20 패턴:
-  [Time & Psychology]
-  1. Time Trouble        — 잔여 60s 미만 블런더율
-  2. Instant Response    — 3s 이내 응수 실수 빈도
-  3. Tilt                — 역전패 후 다음 게임 승률
-  4. Advantage Throw     — Stockfish +3 이상→역전 패턴
-  5. Mutual Blunder      — 상대 블런더 직후 응징 성공률
-  6. Time Advantage      — 시간 넉넉+불리 포지션 탈출율
-  [Tactical Motifs]
-  7. Pin                 — 핀된 기물 무리한 이동
-  8. Fork                — 나이트/폰 포크 회피율
-  9. Discovered Attack   — 숨겨진 공격 경로 인지
-  10. Back-Rank Mate     — 백랭크 체크 허용 빈도
-  11. Zwischenzug        — 교환 중 사이수 발견 능력
-  [Positional & Material]
-  12. Sacrifice          — 기물 희생 후 후속 정확도
-  13. Closed Position    — 닫힌 포지션 무리한 폰 전진
-  14. Opposite Castling  — 반대 방향 캐슬링 난전 승률
-  15. IQP                — 고립 퀸 폰 구조 승률
-  16. Bishop Pair        — 비숍 쌍 유지 및 활용 승률
-  [Complexity & Transitions]
-  17. High Tension       — 기물 긴장도 높은 상황 대처
-  18. Queen Exchange     — 퀸 교환 후 엔드게임 이해도
-  19. Pawn Promotion     — 폰 승급 레이스 정확도
-  20. King Hunt          — 킹 헌트 마무리 능력
+MVP.md 상황 번호 ↔ 패턴 매핑
+──────────────────────────────────────────────────────────
+  § 1. 전술적 취약점 분석
+    상황 1  [Pin]       핀된 기물 무리한 이동률 (board)
+    상황 2  [Fork]      나이트 포크 위협 회피율 (board)
+    상황 3  [Sacrifice] Stockfish cp_loss 기반 기물 희생 정확도
+
+  § 2. 시간 관리 및 심리적 요소
+    상황 4  [TimeTrouble]   잔여 60s → Stockfish 블런더율 회귀
+    상황 5  [Tilt]          역전패 후 다음 게임 승률
+    상황 6  [CriticalPos]   Stockfish cp 급변 순간 시간 소모 vs 수 품질
+
+  § 3. 오프닝 및 엔드게임 레퍼토리
+    상황 7  [OppCastle]  반대 방향 캐슬링 난전 승률 (board)
+    상황 8  [OutOfBook]  오프닝 이탈 직후 5수 Stockfish 품질
+    상황 9  [Endgame]    퀸 교환 후 엔드게임 전환 승률
+    상황 10 [IQP]        고립 퀸 폰(IQP) 구조 승률 (board)
+
+  § 4. 수의 품질 및 평가 지표
+    상황 11 [BishopPair] 비숍 쌍 20수 유지 승률 (board)
+    상황 12 [DiscAtk]    발견 공격 활용률 (board)
+    상황 13 [Defense]    Stockfish −2 이하 불리 상황 오버턴 비율
+
+  § 5. 게임 흐름 및 포지션 복잡성
+    상황 14 [Complexity] 3기물+ 동시 공격 상황 개선율 (board)
+    상황 15 [QueenXchg]  퀸 교환 타이밍 Stockfish 평가 변화
+    상황 16 [KingSafety] 폰 쉴드 파괴 후 블런더 빈도 (board)
+    상황 17 [Space]      폰 수 우위 상황에서 승률 (board)
+
+  § 6. 상대 플레이어와의 상호작용
+    상황 18 [RatingGap]    상대 레이팅 구간별 수 품질 변화 (프록시)
+    상황 19 [InstaMove]    3s 이내 즉각 응수 비율 vs 블런더율 (emt)
+    상황 20 [MutualBlunder] Stockfish 상대 블런더 직후 응징 성공률
+
+  + 보너스: 흑백 밸런스, 오프닝 레퍼토리 준비도
+──────────────────────────────────────────────────────────
 """
 from __future__ import annotations
 
@@ -105,6 +116,7 @@ class PatternResult:
     games_analyzed: int
     detail: str
     category: str     # time | position | opening | endgame | balance
+    situation_id: int = 0   # MVP.md 상황 번호 (1–20, 0=보너스)
     example_game: Optional[dict] = None
     # (GameSummary, relevance_score) — 관련도 높은 순 정렬, 직렬화 제외
     representative_games: Optional[List[Tuple[Any, float]]] = None
@@ -115,7 +127,8 @@ class PatternResult:
 def _to_dict(p: PatternResult) -> dict:
     d = {k: getattr(p, k) for k in
             ("label", "description", "icon", "score",
-             "is_strength", "games_analyzed", "detail", "category", "example_game")}
+             "is_strength", "games_analyzed", "detail", "category",
+             "situation_id", "example_game")}
     # example_hint를 example_game 내부에 삽입
     if d["example_game"] and p.example_hint:
         d["example_game"] = {**d["example_game"], "hint": p.example_hint}
@@ -296,30 +309,35 @@ class TacticalAnalysisService:
 
         patterns: List[PatternResult] = []
 
-        # ── Time & Psychology (1–6) ─────────────────────────
-        # p3(Tilt) 제거: 데이터가 적은 환경에서 노이즈가 많아 비활성화
-        for fn in [self._p1, self._p2]:
+        # ── §2 시간 관리 & 심리 (상황 4, 5, 6, 19) ────────────────
+        # p_tilt(상황5): 역전패 후 다음 게임 승률
+        for fn in [self._p_time_trouble,    # 상황 4
+                   self._p_insta_move,      # 상황 19
+                  ]:
             p = fn(games, username)
             if p:
                 patterns.append(p)
-        p = self._p4(games, username, sf_cache)
+        p = self._p_advantage_throw(games, username, sf_cache)   # 상황 4 보조 지표 → 우위 유지
         if p:
             patterns.append(p)
-        p = self._p5(games, username, sf_cache)
+        p = self._p_mutual_blunder(games, username, sf_cache)    # 상황 20
         if p:
             patterns.append(p)
-        p = self._p6(games, username, sf_cache)
+        p = self._p_tilt(games, username)                        # 상황 5
+        if p:
+            patterns.append(p)
+        p = self._p_critical_pos(games, username, sf_cache)      # 상황 6
         if p:
             patterns.append(p)
 
-        # ── Tactical Motifs (7–11) ──────────────────────────
-        patterns.extend(self._p7_to_p11(board_games, username))
+        # ── §1 전술 모티프 (상황 1, 2, 3) + §4 방어 능력(상황 13) ─
+        patterns.extend(self._p_tactical_motifs(board_games, username, sf_cache))
 
-        # ── Positional & Material (12–16) ───────────────────
-        patterns.extend(self._p12_to_p16(board_games, username, sf_cache))
+        # ── §3 오프닝/엔드게임 + §5 복잡성 (상황 7–12, 14–17) ────
+        patterns.extend(self._p_positional(board_games, username, sf_cache))
 
-        # ── Complexity & Transitions (17–20 + extras) ───────
-        patterns.extend(self._p17_to_p20(board_games, username, sf_cache, games))
+        # ── §5,6 복잡성·전환 + 보너스 ──────────────────────────
+        patterns.extend(self._p_complexity(board_games, username, sf_cache, games))
 
         # ── 예시 게임 첨부 ────────────────────────────────────────
         # representative_games = List[(GameSummary, relevance_score)] 관련도 높은 순으로 정렬
@@ -330,8 +348,10 @@ class TacticalAnalysisService:
             # label: (강점일 때 hint, 약점일 때 hint)
             "시간 압박 대응":         ("잔여 시계가 가장 낮았던 게임 (극한 시간 압박)",
                                         "잔여 시계가 가장 낮았던 게임 (시간 압박 실수)"),
-            "즉각 반응 패턴":         ("즉각 응수 비율이 가장 높은 게임 (직관 발동)",
+            "즉각 응수 패턴":         ("즉각 응수 비율이 가장 높은 게임 (직관 발동)",
                                         "즉각 응수 비율이 가장 높은 게임 (직관 실수)"),
+            "크리티컬 포지션 대처":    ("크리티컬 포지션에서 최선의 수를 선택한 게임",
+                                        "크리티컬 포지션에서 실수를 저지른 게임"),
             "틸트(Tilt) 저항력":      ("가장 긴 연패 직후 회복해 이긴 게임",
                                         "가장 긴 연패 직후 추가로 진 게임"),
             "우위 유지력":            ("가장 큰 cp 우위를 유지하며 이긴 게임",
@@ -429,9 +449,10 @@ class TacticalAnalysisService:
         }
 
     # ────────────────────────────────────────────────────────
-    # 1. Time Trouble
+    # 상황 4. Time Trouble — 잔여 60s 미만 단일 수 Stockfish 블런더율
+    # (MVP.md §2 시간 관리, 상황 4)
     # ────────────────────────────────────────────────────────
-    def _p1(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
+    def _p_time_trouble(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
         pressure: List[Tuple[GameSummary, float]] = []  # (game, 1/min_clock) 낮은 시계 = 고관련도
         normal: List[GameSummary] = []
         for g in games:
@@ -469,18 +490,20 @@ class TacticalAnalysisService:
         score = max(0, min(100, int(pr)))
         return PatternResult(
             label="시간 압박 대응", icon="⏱️",
-            description="잔여시간 60초 미만 상황에서의 최종 승률",
+            description="잔여시간 60초 미만 상황에서의 최종 승률 (상황 4: 시간 압박 블런더 발생 회귀)",
             score=score, is_strength=(pr >= 45 and diff >= -10),
             games_analyzed=len(pressure),
             detail=f"압박 {len(pressure)}게임 → {pr:.0f}% | 일반 {nr:.0f}% ({diff:+.0f}%p)",
             category="time",
+            situation_id=4,
             representative_games=pressure,
         )
 
     # ────────────────────────────────────────────────────────
-    # 2. Instant Response
+    # 상황 19. Insta-move — 3s 이내 즉각 응수 비율 vs 실수율
+    # (MVP.md §6 상황 19)
     # ────────────────────────────────────────────────────────
-    def _p2(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
+    def _p_insta_move(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
         quick_games: List[Tuple[GameSummary, float]] = []  # (game, quick_ratio)
         slow_games: List[GameSummary] = []
         for g in games:
@@ -527,19 +550,21 @@ class TacticalAnalysisService:
         diff = qr - sr
         score = max(0, min(100, int(qr)))
         return PatternResult(
-            label="즉각 반응 패턴", icon="⚡",
-            description="수를 3초 이내 직관으로 두는 게임(30%+)의 승률 — 직관력",
+            label="즉각 응수 패턴", icon="⚡",
+            description="3초 이내 직관으로 두는 게임(30%+)의 승률 (상황 19: 충동적 플레이 습관)",
             score=score, is_strength=score >= STRENGTH_THRESHOLD,
             games_analyzed=len(quick_games),
             detail=f"직관 게임 {len(quick_games)}개 → {qr:.0f}% | 신중 {sr:.0f}% ({diff:+.0f}%p)",
             category="time",
+            situation_id=19,
             representative_games=quick_games,
         )
 
     # ────────────────────────────────────────────────────────
-    # 3. Tilt — 역전패 후 다음 게임 승률
+    # 상황 5. Tilt — 역전패 후 다음 게임 승률
+    # (MVP.md §2 시간 관리, 상황 5)
     # ────────────────────────────────────────────────────────
-    def _p3(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
+    def _p_tilt(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
         sorted_g = sorted(
             [g for g in games if g.played_at],
             key=lambda g: g.played_at or "",
@@ -572,18 +597,20 @@ class TacticalAnalysisService:
         score = max(0, min(100, int(50 + diff)))
         return PatternResult(
             label="틸트(Tilt) 저항력", icon="🧠",
-            description="패배 직후 다음 게임 승률 — 연패 심리적 회복 지표",
+            description="패배 직후 다음 게임 승률 — 연패 심리적 회복 상황 5 (Tilt)",
             score=score, is_strength=diff >= -5,
             games_analyzed=len(after_loss),
             detail=f"패배 후 {len(after_loss)}게임 → {al_wr:.0f}% | 일반 {nm_wr:.0f}% ({diff:+.0f}%p)",
             category="time",
+            situation_id=5,
             representative_games=after_loss,
         )
 
     # ────────────────────────────────────────────────────────
-    # 4. Advantage Throw — Stockfish +3 이상→역전
+    # 상황 4 보조. Advantage Throw — Stockfish +3 이상 우위 직후 역전
+    # (Stockfish cp_before >= +300 인 수 이후 승/패 구분)
     # ────────────────────────────────────────────────────────
-    def _p4(self, games, username, sf_cache) -> Optional[PatternResult]:
+    def _p_advantage_throw(self, games, username, sf_cache) -> Optional[PatternResult]:
         if not sf_cache:
             # proxy: 장기전 역전패
             wins_long = [g for g in games if _estimate_total_moves(g.pgn or "") >= 30 and g.result.value == "win"]
@@ -596,11 +623,12 @@ class TacticalAnalysisService:
             scored = [(g, float(_estimate_total_moves(g.pgn or ""))) for g in wins_long + loss_long]
             return PatternResult(
                 label="우위 유지력", icon="📈",
-                description="장기전(30수+) 승률 — 우위 포기 패턴의 근사 지표",
+                description="장기전(30수+) 승률 — 우위 포기 패턴의 근사 지표 (상황 4 보조)",
                 score=max(0, min(100, int(rate))), is_strength=rate >= 55,
                 games_analyzed=total,
                 detail=f"장기전 {total}게임: 승 {len(wins_long)} / 패 {len(loss_long)} ({rate:.0f}%)",
                 category="time",
+                situation_id=4,
                 representative_games=scored,
             )
         won_adv = lost_adv = 0
@@ -630,18 +658,20 @@ class TacticalAnalysisService:
         score = max(0, min(100, int(rate)))
         return PatternResult(
             label="우위 유지력", icon="📈",
-            description="Stockfish +3 이상 우위 상황에서 역전 없이 승리한 비율",
+            description="Stockfish +3 이상 우위 상황에서 역전 없이 승리한 비율 (상황 4: 우위 포기 회귀)",
             score=score, is_strength=rate >= 65,
             games_analyzed=total,
             detail=f"우위 게임 {total}개: 유지 {won_adv} / 역전패 {lost_adv} ({rate:.0f}%)",
             category="time",
+            situation_id=4,
             representative_games=won_adv_games + lost_adv_games,
         )
 
     # ────────────────────────────────────────────────────────
-    # 5. Mutual Blunder — 상대 블런더 직후 응징 성공
+    # 상황 20. Mutual Blunder — Stockfish 업데이트 기반 상대 블런더 응징
+    # (MVP.md §6 상황 20)
     # ────────────────────────────────────────────────────────
-    def _p5(self, games, username, sf_cache) -> Optional[PatternResult]:
+    def _p_mutual_blunder(self, games, username, sf_cache) -> Optional[PatternResult]:
         ok = fail = 0
         for g in games:
             moves = sf_cache.get(g.game_id, [])
@@ -661,17 +691,19 @@ class TacticalAnalysisService:
         score = max(0, min(100, int(rate)))
         return PatternResult(
             label="상대 블런더 응징", icon="⚔️",
-            description="상대 블런더 직후 정확하게 응징한 비율 (Mutual Blunder 회피)",
+            description="상대 블런더(cp_loss≥150) 직후 Stockfish 기준 cp_loss≤50 내 응징 성공률 (상황 20)",
             score=score, is_strength=rate >= 60,
             games_analyzed=len(sf_cache),
             detail=f"응징 기회 {total}회: 성공 {ok} / 실패 {fail} ({rate:.0f}%)",
             category="time",
+            situation_id=20,
         )
 
     # ────────────────────────────────────────────────────────
-    # 6. Time Advantage — 불리+시간 넉넉할 때 탈출율
+    # 상황 6. 크리티컈 포지션 — 불리+시간 넉넉할 때 Stockfish 수 품질
+    # (MVP.md §2 시간 관리, 상황 6)
     # ────────────────────────────────────────────────────────
-    def _p6(self, games, username, sf_cache) -> Optional[PatternResult]:
+    def _p_critical_pos(self, games, username, sf_cache) -> Optional[PatternResult]:
         saved = lost = 0
         for g in games:
             moves = sf_cache.get(g.game_id, [])
@@ -692,18 +724,20 @@ class TacticalAnalysisService:
         rate = saved / total * 100
         score = max(0, min(100, int(rate)))
         return PatternResult(
-            label="역경 탈출 끈기", icon="🔥",
-            description="불리한 포지션에서 시간을 써 최선수를 찾아낸 비율 (Time Advantage)",
+            label="크리티컬 포지션 대처", icon="🔥",
+            description="불리한 포지션에서 시간을 써 Stockfish 최선수를 선택한 비율 (상황 6: 크리티컬 포지션 시간 소모 효율성)",
             score=score, is_strength=rate >= 55,
             games_analyzed=len(sf_cache),
             detail=f"불리+시간여유 {total}회: 개선 {saved} / 악화 {lost} ({rate:.0f}%)",
             category="time",
+            situation_id=6,
         )
 
     # ────────────────────────────────────────────────────────
-    # 7–11. 전술 모티프 (board 분석)
+    # 상황 1(Pin) · 2(Fork) · 3(Sacrifice/DiscoveredAtk) · 13(Defense)
+    # + 상황 12(DiscoveredAtk) 전술 모티프 보드 분석
     # ────────────────────────────────────────────────────────
-    def _p7_to_p11(self, games: List[GameSummary], username: str) -> List[PatternResult]:
+    def _p_tactical_motifs(self, games: List[GameSummary], username: str, sf_cache: Dict) -> List[PatternResult]:
         pin_bad = pin_total = 0
         fork_evaded = fork_failed = 0
         disc_ok = disc_miss = 0
@@ -864,10 +898,11 @@ class TacticalAnalysisService:
             s = max(0, min(100, int(fork_evaded / fork_total * 100)))
             results.append(PatternResult(
                 label="포크(Fork) 회피", icon="🐴",
-                description="상대 나이트의 킹+퀸 동시 공격에 대한 회피율",
+                description="상대 나이트의 킹+퀸 동시 공격에 대한 회피율 (상황 2: 포크 및 스큐어 노출 패턴 클러스터링)",
                 score=s, is_strength=s >= 60, games_analyzed=analyzed,
                 detail=f"포크 위협 {fork_total}회 → 회피 {fork_evaded}회 ({s}%)",
                 category="position",
+                situation_id=2,
                 representative_games=fork_bad_games + fork_ok_games,
             ))
 
@@ -876,10 +911,11 @@ class TacticalAnalysisService:
             s = max(0, min(100, int(disc_ok / disc_total * 100)))
             results.append(PatternResult(
                 label="발견 공격 인지", icon="🔍",
-                description="공격선이 열린 순간을 활용한 비율 (Discovered Attack)",
+                description="공격선이 열린 순간을 활용한 비율 (상황 12: 발견 공격 활용)",
                 score=s, is_strength=s >= 55, games_analyzed=analyzed,
                 detail=f"발견 공격 기회 {disc_total}회 → 활용 {disc_ok}회 ({s}%)",
                 category="position",
+                situation_id=12,
                 representative_games=disc_ok_games_list + disc_bad_games_list,
             ))
 
@@ -888,9 +924,9 @@ class TacticalAnalysisService:
         return results
 
     # ────────────────────────────────────────────────────────
-    # 12–16. 포지션 & 기물
+    # 상황 3(희생) · 7(반대 캐슬링) · 10(IQP) · 11(비숍 쌍) + 포지셔널 구조
     # ────────────────────────────────────────────────────────
-    def _p12_to_p16(self, games, username, sf_cache) -> List[PatternResult]:
+    def _p_positional(self, games, username, sf_cache) -> List[PatternResult]:
         sac_ok = sac_bad = 0
         closed_bad = closed_total = 0
         opp_castle: List[Tuple[GameSummary, float]] = []   # (game, game_length)
@@ -1057,7 +1093,7 @@ class TacticalAnalysisService:
                 description="더 비싼 기물 희생 후 후속 공격이 유효했던 비율",
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"희생 {sac_total}회: 유효 {sac_ok} / 무효 {sac_bad} ({rate:.0f}%)",
-                category="position",
+                category="position", situation_id=3,
                 representative_games=sac_ok_games + sac_bad_games,
             ))
 
@@ -1086,7 +1122,7 @@ class TacticalAnalysisService:
                 description="서로 반대쪽으로 캐슬링한 폰 스톰 상황 승률",
                 score=s, is_strength=oc_wr >= 50, games_analyzed=len(opp_castle),
                 detail=f"반대 캐슬 {len(opp_castle)}게임 → {oc_wr:.0f}% | 같은 방향 {sc_wr:.0f}% ({diff:+.0f}%p)",
-                category="position",
+                category="position", situation_id=7,
                 representative_games=opp_castle,
             ))
 
@@ -1101,7 +1137,7 @@ class TacticalAnalysisService:
                 description="고립 퀸 폰(IQP) 구조일 때의 공수 밸런스 승률",
                 score=s, is_strength=iq_wr >= 50, games_analyzed=len(iqp_g),
                 detail=f"IQP {len(iqp_g)}게임 → {iq_wr:.0f}% | 비IQP {ni_wr:.0f}% ({diff:+.0f}%p)",
-                category="position",
+                category="position", situation_id=10,
                 representative_games=iqp_g,
             ))
 
@@ -1117,7 +1153,7 @@ class TacticalAnalysisService:
                 score=s, is_strength=bp_wr >= 55 and diff >= 0,
                 games_analyzed=len(bp_g),
                 detail=f"비숍 쌍 유지 {len(bp_g)}게임 → {bp_wr:.0f}% | 비보유 {nb_wr:.0f}% ({diff:+.0f}%p)",
-                category="position",
+                category="position", situation_id=11,
                 representative_games=bp_g,
             ))
 
@@ -1126,7 +1162,7 @@ class TacticalAnalysisService:
     # ────────────────────────────────────────────────────────
     # 17–20 + 보너스 패턴
     # ────────────────────────────────────────────────────────
-    def _p17_to_p20(self, games, username, sf_cache, all_games) -> List[PatternResult]:
+    def _p_complexity(self, games, username, sf_cache, all_games) -> List[PatternResult]:
         ht_ok = ht_bad = 0
         qe_games: List[Tuple[GameSummary, float]] = []  # (game, moves_after_qe) — 퀸 교환 후 많이 플레이할수록 극명
         nonqe_games: List[GameSummary] = []
@@ -1268,7 +1304,7 @@ class TacticalAnalysisService:
                 description="3개+ 기물이 동시 공격받는 복잡한 상황에서 수를 개선한 비율",
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"고긴장 {ht_total}회: 개선 {ht_ok} / 악화 {ht_bad} ({rate:.0f}%)",
-                category="endgame",
+                category="endgame", situation_id=14,
                 representative_games=ht_bad_games + ht_ok_games,
             ))
 
@@ -1283,7 +1319,7 @@ class TacticalAnalysisService:
                 description="퀸이 교환된 엔드게임 전환 시점의 승률",
                 score=s, is_strength=qe_wr >= 50, games_analyzed=len(qe_games),
                 detail=f"퀸 교환 {len(qe_games)}게임 → {qe_wr:.0f}% | 퀸 유지 {nq_wr:.0f}% ({diff:+.0f}%p)",
-                category="endgame",
+                category="endgame", situation_id=15,
                 representative_games=qe_games,
             ))
 

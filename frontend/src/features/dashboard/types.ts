@@ -126,6 +126,7 @@ export interface TacticalPattern {
     hint?: string | null;
   } | null;
   top_games?: PatternGameItem[];
+  situation_id?: number;
 }
 
 export interface ClusterInfo {
