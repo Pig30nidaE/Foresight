@@ -151,9 +151,9 @@ async def get_time_pressure(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
-        if time_class:
-            games = [g for g in games if g.time_class == time_class]
-# Note: games는 이미 get_recent_games() 에서 time_class로 필터됨        return analysis_svc.get_time_pressure_stats(parsed, username)
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
+        parsed = parse_games_bulk(games, pressure_threshold=pressure_threshold)
+        return analysis_svc.get_time_pressure_stats(parsed, username)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

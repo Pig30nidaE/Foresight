@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from "recharts";
-import type { TacticalAnalysis, TacticalPattern, ClusterInfo, XGBoostProfile } from "@/types";
+import type { TacticalAnalysis, TacticalPattern, ClusterInfo, XGBoostProfile, AiInsights } from "@/types";
 import PatternGameListModal from "@/features/dashboard/components/modals/PatternGameListModal";
 
 // Chess.com 게임 URL → 분석 URL 변환
@@ -285,7 +285,7 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
                 <Radar name="점수" dataKey="score" stroke="#10b981" fill="#10b981" fillOpacity={0.2} strokeWidth={2} />
                 <Tooltip
                   contentStyle={{ background: "#09090b", border: "1px solid #27272a", borderRadius: 10 }}
-                  formatter={(v: number) => [`${v}점`, "점수"]}
+                  formatter={(v: number | undefined) => [`${v ?? 0}점`, "점수"]}
                 />
               </RadarChart>
             </ResponsiveContainer>
