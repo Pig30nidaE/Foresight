@@ -170,11 +170,10 @@ class ChessDotComService:
         archives = await self._get_archives(username)
         games: List[GameSummary] = []
         HARD_CAP = 5000
-        using_time_filter = since_ts is not None or until_ts is not None
-        # 전체 기간(필터 없음)  → 모든 게임 조회 필요 → HARD_CAP 사용
-        # 날짜 범위 지정 시    → 날짜 필터가 이미 제한, max_games 는 호출자 의도 존중
-        # 단, max_games 가 없거나 0이면 HARD_CAP 으로 폴백
-        effective_cap = max(max_games, 1) if using_time_filter else HARD_CAP
+        # max_games 를 항상 존중하되 HARD_CAP 으로 상한 제한
+        # 이전 코드는 날짜 필터가 없으면 max_games 를 무시하고 HARD_CAP(5000)을 사용했지만
+        # 이로 인해 모든 엔드포인트가 무조건 5000게임을 가져와 응답이 25-30초 소요됨
+        effective_cap = min(max(max_games, 1), HARD_CAP)
 
         async with httpx.AsyncClient(timeout=20) as client:
             for archive_url in archives:
