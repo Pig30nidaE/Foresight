@@ -370,6 +370,16 @@ class TacticalAnalysisService:
                                         "가장 많이 플레이했지만 진 익숙한 오프닝 게임"),
             "흑백 밸런스":            ("더 약한 색(약점)으로 플레이한 게임",
                                         "더 약한 색(약점)으로 플레이한 게임"),
+            "핀(Pin) 인지 오류율":    ("핀 상태에서도 정확한 수를 찾은 게임",
+                                        "핀 기물을 무리하게 움직여 블런더가 발생한 게임"),
+            "오프닝 이탈 대응":       ("이탈 직후에도 안전한 수를 두어 유리한 게임",
+                                        "이탈 직후 블런더로 열세로 빠진 게임"),
+            "불리 포지션 방어력":     ("불리한 상황에서도 블런더 없이 버텨 역전한 게임",
+                                        "불리한 상황에서 추가 블런더로 패배한 게임"),
+            "킹 안전도 관리":         ("쉴드 파괴 이후에도 차분히 수비한 게임",
+                                        "쉴드 파괴 직후 수비 블런더로 무너진 게임"),
+            "공간 우위 활용":         ("공간 우위를 끝까지 활용해 이긴 게임",
+                                        "공간 우위가 있었음에도 진 게임"),
         }
 
         def _eg_dict(g) -> dict:
@@ -767,6 +777,12 @@ class TacticalAnalysisService:
             board = parsed.board()
             analyzed += 1
 
+            # sf_cache O(1) 조회 — 게임당 1회 빌드
+            _sf_lookup: Dict[Tuple[int, str], Dict] = {
+                (m["move_no"], m["color"]): m
+                for m in sf_cache.get(g.game_id, [])
+            }
+
             # 게임 내 패턴 발생 횟수
             g_pin_bad = g_pin_total = 0
             g_fork_ev = g_fork_fail = 0
@@ -778,15 +794,15 @@ class TacticalAnalysisService:
                 is_my = board.turn == my_color
                 move = node.move
                 try:
-                    # 7. Pin
+                    # 상황 1. Pin — Stockfish cp_loss 검증으로 정확도 개선
                     if is_my and board.is_pinned(my_color, move.from_square):
                         pin_total += 1
                         g_pin_total += 1
-                        board.push(move)
-                        if board.is_check():
+                        mv_clr = "white" if board.turn == chess.WHITE else "black"
+                        sf_m = _sf_lookup.get((board.fullmove_number, mv_clr))
+                        if sf_m and sf_m.get("cp_loss", 0) >= BLUNDER_CP:
                             pin_bad += 1
                             g_pin_bad += 1
-                        board.pop()
 
                     # 8. Fork (나이트 포크)
                     if is_my:
@@ -891,7 +907,18 @@ class TacticalAnalysisService:
 
         results: List[PatternResult] = []
 
-        # Pin(p7) 제거: 핀 감지 정확도 이슈로 비활성화
+        # 상황 1. 핀(Pin) 인지 오류율 — Stockfish 검증 재활성화
+        if pin_total >= 3:
+            error_rate = pin_bad / pin_total * 100
+            s = max(0, min(100, int(100 - error_rate)))
+            results.append(PatternResult(
+                label="핀(Pin) 인지 오류율", icon="📌",
+                description="핀 상태 기물을 무리하게 움직여 Stockfish 블런더(≥150cp)를 범한 비율 (상황 1)",
+                score=s, is_strength=s >= 75, games_analyzed=analyzed,
+                detail=f"핀 이동 {pin_total}회 → 블런더 {pin_bad}회 (오류율 {error_rate:.0f}%)",
+                category="position", situation_id=1,
+                representative_games=pin_bad_games + pin_ok_games,
+            ))
 
         fork_total = fork_evaded + fork_failed
         if fork_total >= 3:
@@ -920,6 +947,71 @@ class TacticalAnalysisService:
             ))
 
         # 백랭크 수비(p10), 사이수(p11) 제거: 성공 기준 불명확으로 비활성화
+
+        # ── 상황 8. 오프닝 이탈(Out of Book) 후 5수 품질 ──────────────
+        # Stockfish 기반: 11~16수 구간(오프닝 이론 이탈 직후)의 블런더 유무
+        ob_good = ob_bad = 0
+        ob_good_games: List[Tuple[GameSummary, float]] = []
+        ob_bad_games:  List[Tuple[GameSummary, float]] = []
+        for g in games:
+            sf_raw = sf_cache.get(g.game_id, [])
+            post_book = [m for m in sf_raw if m.get("is_my_move") and 11 <= m["move_no"] <= 16]
+            if len(post_book) < 3:
+                continue
+            blunders_ob = sum(1 for m in post_book if m.get("cp_loss", 0) >= BLUNDER_CP)
+            avg_loss = sum(max(0.0, m.get("cp_loss", 0.0)) for m in post_book) / len(post_book)
+            if blunders_ob > 0:
+                ob_bad += 1
+                ob_bad_games.append((g, float(blunders_ob * 60)))
+            else:
+                ob_good += 1
+                ob_good_games.append((g, max(1.0, 60.0 - avg_loss)))
+        ob_total = ob_good + ob_bad
+        if ob_total >= 5:
+            rate = ob_good / ob_total * 100
+            s = max(0, min(100, int(rate)))
+            results.append(PatternResult(
+                label="오프닝 이탈 대응", icon="📖",
+                description="오프닝 이론 이탈 직후(11~16수) 5수 내 Stockfish 블런더 없는 게임 비율 (상황 8)",
+                score=s, is_strength=rate >= 65, games_analyzed=ob_total,
+                detail=f"이탈 후 {ob_total}게임: 안전 {ob_good} / 블런더 {ob_bad} ({rate:.0f}%)",
+                category="opening", situation_id=8,
+                representative_games=ob_bad_games + ob_good_games,
+            ))
+
+        # ── 상황 13. 방어 능력(Defensive Resilience) ──────────────────
+        # Stockfish ≤-2.0 불리 상황에서 블런더 없이 버텨내는 비율
+        def_ok = def_blunder = 0
+        def_ok_games:  List[Tuple[GameSummary, float]] = []
+        def_bad_games: List[Tuple[GameSummary, float]] = []
+        for g in games:
+            sf_raw = sf_cache.get(g.game_id, [])
+            disadv_moves = [
+                m for m in sf_raw
+                if m.get("is_my_move") and m.get("cp_before") is not None and m["cp_before"] <= -200
+            ]
+            if not disadv_moves:
+                continue
+            blunders_disadv = sum(1 for m in disadv_moves if m.get("cp_loss", 0) >= BLUNDER_CP)
+            survived = g.result.value in ("win", "draw")
+            if blunders_disadv == 0:
+                def_ok += 1
+                def_ok_games.append((g, float(len(disadv_moves)) * (2.0 if survived else 1.0)))
+            else:
+                def_blunder += 1
+                def_bad_games.append((g, float(blunders_disadv)))
+        def_total = def_ok + def_blunder
+        if def_total >= 3:
+            rate = def_ok / def_total * 100
+            s = max(0, min(100, int(rate)))
+            results.append(PatternResult(
+                label="불리 포지션 방어력", icon="🛡️",
+                description="Stockfish ≤-2.0 불리한 상황에서 블런더 없이 버텨낸 비율 (상황 13: 방어 능력)",
+                score=s, is_strength=rate >= 50, games_analyzed=def_total,
+                detail=f"불리 {def_total}게임: 수비 성공 {def_ok} / 블런더 {def_blunder} ({rate:.0f}%)",
+                category="position", situation_id=13,
+                representative_games=def_ok_games + def_bad_games,
+            ))
 
         return results
 
@@ -1164,11 +1256,18 @@ class TacticalAnalysisService:
     # ────────────────────────────────────────────────────────
     def _p_complexity(self, games, username, sf_cache, all_games) -> List[PatternResult]:
         ht_ok = ht_bad = 0
-        qe_games: List[Tuple[GameSummary, float]] = []  # (game, moves_after_qe) — 퀸 교환 후 많이 플레이할수록 극명
+        qe_games: List[Tuple[GameSummary, float]] = []
         nonqe_games: List[GameSummary] = []
         promo_ok = promo_miss = 0
         hunt_ok = hunt_miss = 0
         analyzed = 0
+        # 상황 16: 킹 안전도 — 폰 쉬일드 파괴 시에 Stockfish 블런더 유무
+        ks_blunder_moves = ks_safe_moves = 0
+        ks_blunder_games: List[Tuple[GameSummary, float]] = []
+        ks_safe_games:    List[Tuple[GameSummary, float]] = []
+        # 상황 17: 공간 우위 — 20수 시점 진출 폰 수 비교
+        space_adv_games: List[Tuple[GameSummary, float]] = []
+        space_dis_games: List[GameSummary] = []
 
         # 패턴별 게임 추적
         ht_ok_games:      List[Tuple[GameSummary, float]] = []
@@ -1194,6 +1293,13 @@ class TacticalAnalysisService:
             hunt_result: Optional[bool] = None
             g_ht_ok = g_ht_bad = 0
             g_promo_ok = g_promo_miss = 0
+            g_ks_blunder = g_ks_safe = 0
+            g_space_score: Optional[int] = None
+            # sf_cache O(1) 동인 조회
+            _sf_cx: Dict[Tuple[int, str], Dict] = {
+                (m["move_no"], m["color"]): m
+                for m in sf_cache.get(g.game_id, [])
+            }
 
             for node in parsed.mainline():
                 is_my = board.turn == my_color
@@ -1258,6 +1364,45 @@ class TacticalAnalysisService:
                             elif hunt_result is None:
                                 hunt_result = False
 
+                    # 상황 16. King Safety — 캐슬 후 폰 쉬일드 파괴 시 Stockfish 블런더
+                    if is_my:
+                        ksq2 = board.king(my_color)
+                        if ksq2 is not None:
+                            kf = chess.square_file(ksq2)
+                            if kf <= 1 or kf >= 6:  # 캐슬링된 위치
+                                shield_rank = 1 if my_color == chess.WHITE else 6
+                                shield = sum(
+                                    1 for f in range(max(0, kf - 1), min(8, kf + 2))
+                                    if (pp := board.piece_at(chess.square(f, shield_rank)))
+                                    and pp.piece_type == chess.PAWN and pp.color == my_color
+                                )
+                                if shield <= 1:  # 쉬일드 2개 이상 파괴
+                                    mv_clr = "white" if board.turn == chess.WHITE else "black"
+                                    sf_m = _sf_cx.get((board.fullmove_number, mv_clr))
+                                    if sf_m:
+                                        if sf_m.get("cp_loss", 0) >= BLUNDER_CP:
+                                            ks_blunder_moves += 1
+                                            g_ks_blunder += 1
+                                        else:
+                                            ks_safe_moves += 1
+                                            g_ks_safe += 1
+
+                    # 상황 17. Space Advantage — 20수 시점 진출 폰 대비
+                    if board.fullmove_number == 20 and is_my and g_space_score is None:
+                        adv_min = 4 if my_color == chess.WHITE else 0
+                        adv_max = 7 if my_color == chess.WHITE else 3
+                        opp_adv_min = 4 if opp_color == chess.WHITE else 0
+                        opp_adv_max = 7 if opp_color == chess.WHITE else 3
+                        my_adv = sum(
+                            1 for sq in board.pieces(chess.PAWN, my_color)
+                            if adv_min <= chess.square_rank(sq) <= adv_max
+                        )
+                        op_adv = sum(
+                            1 for sq in board.pieces(chess.PAWN, opp_color)
+                            if opp_adv_min <= chess.square_rank(sq) <= opp_adv_max
+                        )
+                        g_space_score = my_adv - op_adv
+
                     board.push(move)
                 except Exception:
                     try:
@@ -1292,6 +1437,18 @@ class TacticalAnalysisService:
                     promo_miss_games.append((g, float(g_promo_miss)))
                 else:
                     promo_ok_games.append((g, float(g_promo_ok)))
+
+            # 킹 안전 / 공간 우위 게임상 집계
+            if g_ks_blunder + g_ks_safe > 0:
+                if g_ks_blunder > 0:
+                    ks_blunder_games.append((g, float(g_ks_blunder)))
+                else:
+                    ks_safe_games.append((g, float(g_ks_safe)))
+            if g_space_score is not None:
+                if g_space_score > 0:
+                    space_adv_games.append((g, float(g_space_score)))
+                else:
+                    space_dis_games.append(g)
 
         results: List[PatternResult] = []
 
@@ -1347,6 +1504,36 @@ class TacticalAnalysisService:
                 detail=f"킹 헌트 기회 {hunt_total}회: 마무리 {hunt_ok} / 놓침 {hunt_miss} ({rate:.0f}%)",
                 category="endgame",
                 representative_games=hunt_ok_games + hunt_miss_games,
+            ))
+
+        # 상황 16. 킹 안전도 관리
+        ks_total = ks_blunder_moves + ks_safe_moves
+        if ks_total >= 3:
+            safe_rate = ks_safe_moves / ks_total * 100
+            s = max(0, min(100, int(safe_rate)))
+            results.append(PatternResult(
+                label="킹 안전도 관리", icon="👑",
+                description="캐슬링 후 폰 쉬일드 파괴(≤1개) 상황에서 Stockfish 블런더 없는 비율 (상황 16: 킹 안전도)",
+                score=s, is_strength=safe_rate >= 65, games_analyzed=analyzed,
+                detail=f"쉬일드 파괴 {ks_total}회: 안전 수 {ks_safe_moves} / 블런더 {ks_blunder_moves} ({safe_rate:.0f}%)",
+                category="position", situation_id=16,
+                representative_games=ks_blunder_games + ks_safe_games,
+            ))
+
+        # 상황 17. 공간 우위 활용
+        if len(space_adv_games) >= 5:
+            sa_list = [g for g, _ in space_adv_games]
+            sa_wr = _win_rate(sa_list, username)
+            sd_wr = _win_rate(space_dis_games, username) if space_dis_games else 50.0
+            diff = sa_wr - sd_wr
+            s = max(0, min(100, int(sa_wr)))
+            results.append(PatternResult(
+                label="공간 우위 활용", icon="📍",
+                description="20수 시점 진출 폰 우위 게임의 승률 (상황 17: 공간 우위 활용 능력)",
+                score=s, is_strength=sa_wr >= 55 and diff >= 0, games_analyzed=len(space_adv_games),
+                detail=f"우위 {len(space_adv_games)}게임 → {sa_wr:.0f}% | 열세 {sd_wr:.0f}% ({diff:+.0f}%p)",
+                category="position", situation_id=17,
+                representative_games=space_adv_games,
             ))
 
         # ── 보너스: 흑백 밸런스 ─────────────────────────────
