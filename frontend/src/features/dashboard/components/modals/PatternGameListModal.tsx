@@ -2,6 +2,10 @@
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import {
+  ResponsiveContainer, LineChart, Line,
+  XAxis, YAxis, Tooltip, ReferenceLine, Legend,
+} from "recharts";
 import type { TacticalPattern, PatternGameItem } from "@/features/dashboard/types";
 
 // Chess.com 게임 URL → 분석 URL 변환
@@ -31,7 +35,7 @@ const PATTERN_CONFIG: Record<number, PatternDisplayConfig> = {
   2:  { successLabel: "포크 방어 성공",   failureLabel: "포크 허용",          drawLabel: "포크 발생",       analysisType: "quality",    analysisDesc: "상대 나이트 킹+퀸 동시 공격 위협 대응 결과" },
   3:  { successLabel: "효과적 희생",      failureLabel: "무효 희생",          drawLabel: "희생 발생",       analysisType: "quality",    analysisDesc: "기물 희생 후 후속 공격 Stockfish 기준 유효성 (avg CP손실 <80)" },
   4:  { successLabel: "시간 압박 극복",   failureLabel: "시간 압박 실책",     drawLabel: "시간 압박 발생",  analysisType: "quality",    analysisDesc: "잔여시간 60초 미만 상황 → 게임 결과 (최저 잔여시간 표시)" },
-  5:  { successLabel: "분위기 전환 성공", failureLabel: "연패 지속",          drawLabel: "무승부",          analysisType: "win_rate",   analysisDesc: "패배 직후 다음 게임 결과 — 심리적 회복력 측정" },
+  5:  { successLabel: "연승 중 정확도 우수",  failureLabel: "연패 중 정확도 저하", drawLabel: "보통",         analysisType: "quality",    analysisDesc: "연승/연패 구간 streak 깊이별 수 품질 추이 — 심리적 흐름이 플레이에 미치는 영향" },
   6:  { successLabel: "결정적 순간 포착", failureLabel: "결정적 순간 실착",   drawLabel: "무승부",          analysisType: "quality",    analysisDesc: "불리(≤-2.0) + 시간 여유(≥120초) 상황의 수 품질" },
   7:  { successLabel: "반대 캐슬 공략",   failureLabel: "반대 캐슬 패배",     drawLabel: "무승부",          analysisType: "win_rate",   analysisDesc: "서로 반대쪽 캐슬링 → 폰 스톰 난전 결과" },
   8:  { successLabel: "이탈 대응 성공",   failureLabel: "이탈 후 블런더",     drawLabel: "무승부",          analysisType: "quality",    analysisDesc: "11~16수 이론 이탈 직후 → Stockfish 블런더 유무" },
@@ -76,6 +80,92 @@ const RESULT_DOT: Record<string, string> = {
   loss: "bg-red-400",
   draw: "bg-zinc-400",
 };
+
+// ─── TiltTrendChart (situation_id=5 전용) ────────────────────
+interface TiltChartData {
+  normal_avg: number;
+  win_trend:  Array<{ depth: string; avg_q: number }>;
+  loss_trend: Array<{ depth: string; avg_q: number }>;
+  win_count:  number;
+  loss_count: number;
+}
+
+function TiltTrendChart({ data }: { data: TiltChartData }) {
+  // win_trend · loss_trend를 depth 기준으로 merge
+  const depthOrder = ["2연속", "3연속", "4연속", "5+연속"];
+  const winMap  = Object.fromEntries(data.win_trend.map(d  => [d.depth,  d.avg_q]));
+  const lossMap = Object.fromEntries(data.loss_trend.map(d => [d.depth, d.avg_q]));
+
+  const allDepths = depthOrder.filter(d => d in winMap || d in lossMap);
+  const chartRows = allDepths.map(depth => ({
+    depth,
+    연승: winMap[depth]  ?? null,
+    연패: lossMap[depth] ?? null,
+  }));
+
+  if (chartRows.length === 0) return null;
+
+  const fmt = (v: number) => v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2);
+
+  return (
+    <div className="mt-3 mb-1">
+      <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">
+        streak 깊이별 수 품질 추이
+      </p>
+      <ResponsiveContainer width="100%" height={160}>
+        <LineChart data={chartRows} margin={{ top: 4, right: 12, left: -10, bottom: 4 }}>
+          <XAxis
+            dataKey="depth"
+            tick={{ fill: "#71717a", fontSize: 10 }}
+            axisLine={false} tickLine={false}
+          />
+          <YAxis
+            tickFormatter={fmt}
+            tick={{ fill: "#71717a", fontSize: 9 }}
+            axisLine={false} tickLine={false}
+            domain={["auto", "auto"]}
+          />
+          <Tooltip
+            contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+            labelStyle={{ color: "#a1a1aa", fontSize: 11 }}
+            formatter={(v: number | undefined) => v != null ? [fmt(v), "수 품질"] : ["-", "수 품질"]}
+          />
+          <Legend
+            iconType="circle" iconSize={7}
+            wrapperStyle={{ fontSize: 10, color: "#a1a1aa", paddingTop: 4 }}
+          />
+          {/* 일반 게임 평균 기준선 */}
+          <ReferenceLine
+            y={data.normal_avg}
+            stroke="#52525b"
+            strokeDasharray="4 3"
+            label={{ value: `기준 ${fmt(data.normal_avg)}`, fill: "#71717a", fontSize: 9, position: "insideTopRight" }}
+          />
+          <Line
+            type="monotone"
+            dataKey="연승"
+            stroke="#34d399"
+            strokeWidth={2}
+            dot={{ fill: "#34d399", r: 4 }}
+            connectNulls
+          />
+          <Line
+            type="monotone"
+            dataKey="연패"
+            stroke="#f87171"
+            strokeWidth={2}
+            dot={{ fill: "#f87171", r: 4 }}
+            connectNulls
+          />
+        </LineChart>
+      </ResponsiveContainer>
+      <div className="flex justify-center gap-6 text-[10px] text-zinc-500 mt-1">
+        <span>연승 {data.win_count}게임</span>
+        <span>연패 {data.loss_count}게임</span>
+      </div>
+    </div>
+  );
+}
 
 // ─── GameRow ─────────────────────────────────────────────────
 interface GameRowProps {
@@ -313,6 +403,52 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
           {games.length === 0 ? (
             <p className="text-sm text-zinc-500 text-center py-8">URL 있는 대표 게임이 없습니다.</p>
+          ) : pattern.situation_id === 5 ? (
+            // ── 틸트 저항력: 연승/연패 섹션 분리 + 추이 차트 ──
+            (() => {
+              const winGames  = games.filter(g => g.is_success === true);
+              const lossGames = games.filter(g => g.is_success === false);
+              return (
+                <>
+                  {/* 통계 요약 */}
+                  <div className="pb-2">
+                    <StatSummary games={games} config={cfg} />
+                  </div>
+                  {/* 추이 차트 */}
+                  {pattern.chart_data && (
+                    <TiltTrendChart data={pattern.chart_data} />
+                  )}
+                  {/* 연패 섹션 */}
+                  {lossGames.length > 0 && (
+                    <div className="pt-2">
+                      <p className="text-xs text-red-400/80 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                        연패 구간 — 품질 저하 게임 ({lossGames.length}개)
+                      </p>
+                      <div className="space-y-2">
+                        {lossGames.map((g, i) => (
+                          <GameRow key={`loss-${g.url}-${i}`} game={g} rank={i + 1} config={cfg} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* 연승 섹션 */}
+                  {winGames.length > 0 && (
+                    <div className="pt-3">
+                      <p className="text-xs text-emerald-400/80 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                        연승 구간 — 정확도 우수 게임 ({winGames.length}개)
+                      </p>
+                      <div className="space-y-2">
+                        {winGames.map((g, i) => (
+                          <GameRow key={`win-${g.url}-${i}`} game={g} rank={i + 1} config={cfg} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()
           ) : (
             <>
               {/* 통계 요약 */}
