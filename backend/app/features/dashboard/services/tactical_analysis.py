@@ -644,10 +644,12 @@ class TacticalAnalysisService:
         if len(sorted_g) < 10:
             return None
 
-        # (game, streak_len, quality_score)  — sf 데이터 있는 게임만 포함
+        # streak_count: sf 유무 관계없이 실제 streak(≥2연속) 참여 게임 수 — 반환 조건에만 사용
+        # win/loss_streak_data: sf 데이터(is_my_move)가 있는 streak 게임만 — 품질 분석에 사용
         win_streak_data: List[Tuple[GameSummary, int, float]] = []
         loss_streak_data: List[Tuple[GameSummary, int, float]] = []
-        normal_q: List[float] = []         # streak 아닌 게임 품질 (기준선용)
+        normal_q: List[float] = []   # streak 아닌 win/loss 게임 중 sf 있는 것의 품질 (기준선)
+        streak_count = 0             # sf 유무 무관, streak 참여 게임 총 수
 
         streak = 0
         last_result: Optional[str] = None
@@ -656,39 +658,42 @@ class TacticalAnalysisService:
             total_mv = _estimate_total_moves(g.pgn or "")
             r = g.result.value if total_mv >= 15 else None
 
-            # ── Stockfish 수 품질: 실제 is_my_move 데이터가 있는 게임만 계산 ──
-            # sf_cache에 없거나 내 수 항목이 없으면 None → 품질 통계에서 제외
+            # ── 수 품질: is_my_move가 실제 있는 게임만 계산 (없으면 None) ──
             sf_moves = sf_cache.get(g.game_id, [])
             my_moves = [m for m in sf_moves if m.get("is_my_move")]
-            if my_moves:
-                q: Optional[float] = sum(
-                    _move_weight(float(m.get("cp_loss", 0))) for m in my_moves
-                ) / len(my_moves)
-            else:
-                q = None   # 데이터 없음 — 0.0으로 처리하지 않음
+            q: Optional[float] = (
+                sum(_move_weight(float(m.get("cp_loss", 0))) for m in my_moves) / len(my_moves)
+                if my_moves else None
+            )
 
             if r in ("win", "loss"):
-                # streak 추적은 결과만으로 수행 (sf 데이터 유무 무관)
+                # ── streak 추적: 결과만으로 (sf 유무 무관) ──
                 if r == last_result:
                     streak += 1
                 else:
                     streak = 1
                     last_result = r
-                if streak >= 2:   # 2연속 이상만 streak으로 집계
-                    if q is not None:   # sf 데이터 있는 게임만 품질 등록
+
+                if streak >= 2:
+                    streak_count += 1          # 패턴 존재 여부 카운트
+                    if q is not None:          # 품질 집계는 sf 있는 게임만
                         if r == "win":
                             win_streak_data.append((g, streak, q))
                         else:
                             loss_streak_data.append((g, streak, q))
                 else:
                     if q is not None:
-                        normal_q.append(q)
+                        normal_q.append(q)     # 기준선용 (무승부 제외)
             else:
-                # 무승부/짧은 게임 — streak 리셋, normal_q에도 포함하지 않음
+                # 무승부/짧은 게임 — streak 리셋, 어떤 집계에도 포함하지 않음
                 streak = 0
                 last_result = None
 
-        if len(win_streak_data) + len(loss_streak_data) < 5:
+        # streak 게임 자체가 부족하면 분석 의미 없음
+        if streak_count < 5:
+            return None
+        # sf 데이터 기반 품질 집계가 하나도 없으면 수치 표시 불가
+        if len(win_streak_data) + len(loss_streak_data) < 2:
             return None
 
         normal_avg = sum(normal_q) / len(normal_q) if normal_q else 0.0
@@ -815,12 +820,12 @@ class TacticalAnalysisService:
             label="틸트(Tilt) 저항력", icon="🧠",
             description="연승/연패 구간 수 정확도 추이 — 심리적 흐름이 플레이 품질에 미치는 영향 (상황 5)",
             score=score, is_strength=is_strength,
-            games_analyzed=len(win_streak_data) + len(loss_streak_data),
+            games_analyzed=streak_count,   # sf 유무 관계없이 실제 streak 게임 수
             detail=detail,
             category="time", situation_id=5,
             insight=insight,
             key_metric_value=key_val, key_metric_label=key_lbl, key_metric_unit=key_unit,
-            evidence_count=len(win_streak_data) + len(loss_streak_data),
+            evidence_count=streak_count,
             representative_games=rep_games,
             chart_data=chart_data,
         )
