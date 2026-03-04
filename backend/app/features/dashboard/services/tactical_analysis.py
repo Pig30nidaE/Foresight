@@ -117,10 +117,15 @@ class PatternResult:
     detail: str
     category: str     # time | position | opening | endgame | balance
     situation_id: int = 0   # MVP.md 상황 번호 (1–20, 0=보너스)
+    # ── ML 해석 필드 (신규) ──────────────────────────────────────────
+    insight: str = ""              # ML 유도 해석 문장 (핵심 발견 1줄)
+    key_metric_value: Optional[float] = None   # 핵심 수치 (63.2)
+    key_metric_label: str = ""     # 수치 레이블 ("평균 CP 손실")
+    key_metric_unit: str = ""      # 단위 ("cp" | "%" | "수" | "초" | "회")
+    evidence_count: int = 0        # 실제 탐지된 사례 수 (패턴 발생 횟수)
+    # ── 내부 필드 (직렬화 제외) ─────────────────────────────────────
     example_game: Optional[dict] = None
-    # (GameSummary, relevance_score) — 관련도 높은 순 정렬, 직렬화 제외
     representative_games: Optional[List[Tuple[Any, float]]] = None
-    # 예시 게임 선택 이유 (프론트 힌트 텍스트용)
     example_hint: Optional[str] = None
 
 
@@ -128,7 +133,9 @@ def _to_dict(p: PatternResult) -> dict:
     d = {k: getattr(p, k) for k in
             ("label", "description", "icon", "score",
              "is_strength", "games_analyzed", "detail", "category",
-             "situation_id", "example_game")}
+             "situation_id", "example_game",
+             "insight", "key_metric_value", "key_metric_label", "key_metric_unit",
+             "evidence_count")}
     # example_hint를 example_game 내부에 삽입
     if d["example_game"] and p.example_hint:
         d["example_game"] = {**d["example_game"], "hint": p.example_hint}
@@ -311,8 +318,8 @@ class TacticalAnalysisService:
 
         # ── §2 시간 관리 & 심리 (상황 4, 5, 6, 19) ────────────────
         # p_tilt(상황5): 역전패 후 다음 게임 승률
-        for fn in [self._p_time_trouble,    # 상황 4
-                   self._p_insta_move,      # 상황 19
+        for fn in [lambda g, u: self._p_time_trouble(g, u, sf_cache),  # 상황 4
+                   lambda g, u: self._p_insta_move(g, u, sf_cache),    # 상황 19
                   ]:
             p = fn(games, username)
             if p:
@@ -513,9 +520,13 @@ class TacticalAnalysisService:
     # 상황 19. Insta-move — 3s 이내 즉각 응수 비율 vs 실수율
     # (MVP.md §6 상황 19)
     # ────────────────────────────────────────────────────────
-    def _p_insta_move(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
-        quick_games: List[Tuple[GameSummary, float]] = []  # (game, quick_ratio)
+    def _p_insta_move(self, games: List[GameSummary], username: str, sf_cache: Dict = None) -> Optional[PatternResult]:
+        """상황 19: 즉각 응수 빈도와 CP 손실 상관 분석."""
+        sf_cache = sf_cache or {}
+        quick_games: List[Tuple[GameSummary, float]] = []
         slow_games: List[GameSummary] = []
+        quick_losses: List[float] = []
+        slow_losses:  List[float] = []
         for g in games:
             if not g.pgn:
                 continue
@@ -524,24 +535,24 @@ class TacticalAnalysisService:
                 continue
             is_white = g.white.lower() == username.lower()
             qc = tot = 0
-            prev_clk: Optional[float] = None
             board = parsed.board()
+            sf_lookup = {(m["move_no"], m["color"]): m for m in sf_cache.get(g.game_id, [])}
             for node in parsed.mainline():
                 my_turn = (board.turn == chess.WHITE) == is_white
-                clk = _parse_clock(node.comment or "")
                 emt = _parse_emt(node.comment or "")
-                if my_turn:
-                    if emt is not None:
-                        tot += 1
+                mv_clr = "white" if board.turn == chess.WHITE else "black"
+                sf_m = sf_lookup.get((board.fullmove_number, mv_clr))
+                if my_turn and emt is not None:
+                    tot += 1
+                    if emt <= 3.0:
+                        qc += 1
+                    # SF 기반 CP 손실 분리
+                    if sf_m and sf_m.get("cp_loss") is not None:
+                        loss = max(0.0, float(sf_m["cp_loss"]))
                         if emt <= 3.0:
-                            qc += 1
-                    elif clk is not None and prev_clk is not None:
-                        spent = prev_clk - clk
-                        if 0 < spent:
-                            tot += 1
-                            if spent <= 3.0:
-                                qc += 1
-                    prev_clk = clk
+                            quick_losses.append(loss)
+                        else:
+                            slow_losses.append(loss)
                 try:
                     board.push(node.move)
                 except Exception:
@@ -549,7 +560,7 @@ class TacticalAnalysisService:
             if tot >= 10:
                 ratio = qc / tot
                 if ratio >= 0.3:
-                    quick_games.append((g, ratio))  # ratio가 높을수록 직관 플레이 극명
+                    quick_games.append((g, ratio))
                 else:
                     slow_games.append(g)
         if len(quick_games) < 5:
@@ -559,14 +570,35 @@ class TacticalAnalysisService:
         sr = _win_rate(slow_games, username) if slow_games else 50.0
         diff = qr - sr
         score = max(0, min(100, int(qr)))
+        if quick_losses and slow_losses:
+            q_avg = sum(quick_losses) / len(quick_losses)
+            s_avg = sum(slow_losses) / len(slow_losses)
+            diff_cp = q_avg - s_avg
+            insight = (f"즉각 응수(≤3초) 평균 CP 손실 {q_avg:.0f}cp "
+                       f"— 신중한 수({s_avg:.0f}cp)보다 {diff_cp:+.0f}cp. "
+                       f"{len(quick_losses)}개 즉각 수 분석")
+            key_val  = q_avg
+            key_lbl  = "즉각 수 평균 CP 손실"
+            key_unit = "cp"
+            evidence = len(quick_losses)
+        else:
+            insight = (f"즉각 응수 게임({len(quick_games)}개) 승률 {qr:.0f}% "
+                       f"— 신중 게임 대비 {diff:+.0f}%p. "
+                       f"{'직관 강점' if diff > 5 else '충동적 수 주의'}")
+            key_val  = qr
+            key_lbl  = "즉각 응수 게임 승률"
+            key_unit = "%"
+            evidence = len(quick_games)
         return PatternResult(
             label="즉각 응수 패턴", icon="⚡",
             description="3초 이내 직관으로 두는 게임(30%+)의 승률 (상황 19: 충동적 플레이 습관)",
             score=score, is_strength=score >= STRENGTH_THRESHOLD,
             games_analyzed=len(quick_games),
             detail=f"직관 게임 {len(quick_games)}개 → {qr:.0f}% | 신중 {sr:.0f}% ({diff:+.0f}%p)",
-            category="time",
-            situation_id=19,
+            category="time", situation_id=19,
+            insight=insight, key_metric_value=key_val,
+            key_metric_label=key_lbl, key_metric_unit=key_unit,
+            evidence_count=evidence,
             representative_games=quick_games,
         )
 
@@ -611,8 +643,12 @@ class TacticalAnalysisService:
             score=score, is_strength=diff >= -5,
             games_analyzed=len(after_loss),
             detail=f"패배 후 {len(after_loss)}게임 → {al_wr:.0f}% | 일반 {nm_wr:.0f}% ({diff:+.0f}%p)",
-            category="time",
-            situation_id=5,
+            category="time", situation_id=5,
+            insight=(f"연패 후 {len(after_loss)}게임 승률 {al_wr:.0f}% "
+                     f"({'정상과 동등' if abs(diff) <= 5 else ('심리 회복력 취약' if diff < -5 else '역경 후 강해짐')}). "
+                     f"패배 직후 {al_wr:.0f}% vs 일반 {nm_wr:.0f}% ({diff:+.0f}%p)"),
+            key_metric_value=al_wr, key_metric_label="패배 후 승률", key_metric_unit="%",
+            evidence_count=len(after_loss),
             representative_games=after_loss,
         )
 
@@ -666,14 +702,19 @@ class TacticalAnalysisService:
             return None
         rate = won_adv / total * 100
         score = max(0, min(100, int(rate)))
+        avg_max_cp = sum(max((m["cp_before"] or 0) for m in sf_cache.get(g.game_id, []) if m.get("is_my_move") and m.get("cp_before")) or [300]
+                        for g in games if sf_cache.get(g.game_id)) / max(total, 1)
         return PatternResult(
             label="우위 유지력", icon="📈",
             description="Stockfish +3 이상 우위 상황에서 역전 없이 승리한 비율 (상황 4: 우위 포기 회귀)",
             score=score, is_strength=rate >= 65,
             games_analyzed=total,
             detail=f"우위 게임 {total}개: 유지 {won_adv} / 역전패 {lost_adv} ({rate:.0f}%)",
-            category="time",
-            situation_id=4,
+            category="time", situation_id=4,
+            insight=(f"+3폰 이상 우위 달성 {total}게임 — {won_adv}게임 유지({rate:.0f}%), {lost_adv}게임 역전패. "
+                     f"우위 포기는 집중력·시간 관리 문제"),
+            key_metric_value=rate, key_metric_label="우위 유지율", key_metric_unit="%",
+            evidence_count=total,
             representative_games=won_adv_games + lost_adv_games,
         )
 
@@ -705,8 +746,12 @@ class TacticalAnalysisService:
             score=score, is_strength=rate >= 60,
             games_analyzed=len(sf_cache),
             detail=f"응징 기회 {total}회: 성공 {ok} / 실패 {fail} ({rate:.0f}%)",
-            category="time",
-            situation_id=20,
+            category="time", situation_id=20,
+            insight=(f"상대 블런더 {total}회 탐지 — {ok}회({rate:.0f}%) 즉각 응징, "
+                     f"{fail}회 기회 미활용. "
+                     f"{'포지션 읽기 능력 우수' if rate >= 60 else '블런더 탐지력 개선 필요'}"),
+            key_metric_value=rate, key_metric_label="블런더 응징률", key_metric_unit="%",
+            evidence_count=total,
         )
 
     # ────────────────────────────────────────────────────────
@@ -739,8 +784,11 @@ class TacticalAnalysisService:
             score=score, is_strength=rate >= 55,
             games_analyzed=len(sf_cache),
             detail=f"불리+시간여유 {total}회: 개선 {saved} / 악화 {lost} ({rate:.0f}%)",
-            category="time",
-            situation_id=6,
+            category="time", situation_id=6,
+            insight=(f"위기 포지션(불리≥2폰+시간여유) {total}회 탐지 — {saved}회 개선({rate:.0f}%), {lost}회 실기. "
+                     f"{'위기 집중력 우수' if rate >= 55 else '불리 상황에서 포기 경향 있음'}"),
+            key_metric_value=rate, key_metric_label="위기 대처 성공률", key_metric_unit="%",
+            evidence_count=total,
         )
 
     # ────────────────────────────────────────────────────────
@@ -917,6 +965,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=s >= 75, games_analyzed=analyzed,
                 detail=f"핀 이동 {pin_total}회 → 블런더 {pin_bad}회 (오류율 {error_rate:.0f}%)",
                 category="position", situation_id=1,
+                insight=(f"핀된 기물 이동 {pin_total}회 — {pin_bad}회 Stockfish 블런더(≥150cp 손실). "
+                         f"핀 인지 오류율 {error_rate:.0f}% — {'우수' if s >= 75 else ('주의 필요' if s >= 55 else '핀 포지션 파악 연습 권장')}"),
+                key_metric_value=error_rate, key_metric_label="핀 이도 시 블런더율", key_metric_unit="%",
+                evidence_count=pin_total,
                 representative_games=pin_bad_games + pin_ok_games,
             ))
 
@@ -928,8 +980,11 @@ class TacticalAnalysisService:
                 description="상대 나이트의 킹+퀸 동시 공격에 대한 회피율 (상황 2: 포크 및 스큐어 노출 패턴 클러스터링)",
                 score=s, is_strength=s >= 60, games_analyzed=analyzed,
                 detail=f"포크 위협 {fork_total}회 → 회피 {fork_evaded}회 ({s}%)",
-                category="position",
-                situation_id=2,
+                category="position", situation_id=2,
+                insight=(f"나이트 포크 위협 {fork_total}회 노출 — {fork_evaded}회 회피({s}%), {fork_failed}회 당함. "
+                         f"{'전술 회피 능력 우수' if s >= 60 else '나이트 포크 노출 요인 확인 필요'}"),
+                key_metric_value=float(s), key_metric_label="포크 회피율", key_metric_unit="%",
+                evidence_count=fork_total,
                 representative_games=fork_bad_games + fork_ok_games,
             ))
 
@@ -941,8 +996,11 @@ class TacticalAnalysisService:
                 description="공격선이 열린 순간을 활용한 비율 (상황 12: 발견 공격 활용)",
                 score=s, is_strength=s >= 55, games_analyzed=analyzed,
                 detail=f"발견 공격 기회 {disc_total}회 → 활용 {disc_ok}회 ({s}%)",
-                category="position",
-                situation_id=12,
+                category="position", situation_id=12,
+                insight=(f"슬라이더 공격선 개방 기회 {disc_total}회 — {disc_ok}회 활용({s}%), {disc_miss}회 놓침. "
+                         f"{'콤비장 점령 탈출 능력 위수' if s >= 55 else '발견 공격 패턴 학습 권장'}"),
+                key_metric_value=float(s), key_metric_label="발견 공격 활용률", key_metric_unit="%",
+                evidence_count=disc_total,
                 representative_games=disc_ok_games_list + disc_bad_games_list,
             ))
 
@@ -976,6 +1034,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=rate >= 65, games_analyzed=ob_total,
                 detail=f"이탈 후 {ob_total}게임: 안전 {ob_good} / 블런더 {ob_bad} ({rate:.0f}%)",
                 category="opening", situation_id=8,
+                insight=(f"이론 이탈 직후(11~16수) {ob_total}게임 분석 — {ob_bad}게임({100-rate:.0f}%)에서 블런더 발생. "
+                         f"{'독립적 판단력 우수' if rate >= 65 else '예제선 벏 이탈 대처 트레이닝 필요'}"),
+                key_metric_value=rate, key_metric_label="안전 이탈률", key_metric_unit="%",
+                evidence_count=ob_total,
                 representative_games=ob_bad_games + ob_good_games,
             ))
 
@@ -1186,6 +1248,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"희생 {sac_total}회: 유효 {sac_ok} / 무효 {sac_bad} ({rate:.0f}%)",
                 category="position", situation_id=3,
+                insight=(f"기물 희생 {sac_total}회 시도 — {sac_ok}회 유효(탁월한 공격), {sac_bad}회 실패. "
+                         f"희생 정확도 {rate:.0f}% — {'섭석적 소질미 우수' if rate >= 55 else '무리한 희생 주의'}"),
+                key_metric_value=rate, key_metric_label="희생 성공률", key_metric_unit="%",
+                evidence_count=sac_total,
                 representative_games=sac_ok_games + sac_bad_games,
             ))
 
@@ -1200,6 +1266,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=s >= 60, games_analyzed=analyzed,
                 detail=f"닫힌 상황 {closed_total}회 중 무리한 폰 전진 {closed_bad}회",
                 category="position",
+                insight=(f"닫힌 포지션 {closed_total}회 탐지 — {closed_bad}회 무리한 폰 전진({bad_rate:.0f}%). "
+                         f"{'구조적 인내심 우수' if bad_rate < 30 else ('폰 전진 충동 억제 필요' if bad_rate >= 50 else '보통 수준 자제력')}"),
+                key_metric_value=bad_rate, key_metric_label="성급한 폰 전진율", key_metric_unit="%",
+                evidence_count=closed_total,
                 representative_games=closed_sorted,
             ))
 
@@ -1215,6 +1285,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=oc_wr >= 50, games_analyzed=len(opp_castle),
                 detail=f"반대 캐슬 {len(opp_castle)}게임 → {oc_wr:.0f}% | 같은 방향 {sc_wr:.0f}% ({diff:+.0f}%p)",
                 category="position", situation_id=7,
+                insight=(f"반대 캐슬링 난전 {len(opp_castle)}게임 — 승률 {oc_wr:.0f}% vs 같은 방향 {sc_wr:.0f}% ({diff:+.0f}%p). "
+                         f"{'복잡한 난전 선호 스타일' if diff > 5 else ('난전 회피 경향' if diff < -5 else '일반적 승률')}"),
+                key_metric_value=oc_wr, key_metric_label="반대 캐슬 승률", key_metric_unit="%",
+                evidence_count=len(opp_castle),
                 representative_games=opp_castle,
             ))
 
@@ -1230,6 +1304,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=iq_wr >= 50, games_analyzed=len(iqp_g),
                 detail=f"IQP {len(iqp_g)}게임 → {iq_wr:.0f}% | 비IQP {ni_wr:.0f}% ({diff:+.0f}%p)",
                 category="position", situation_id=10,
+                insight=(f"IQP 구조 {len(iqp_g)}게임 — 승률 {iq_wr:.0f}% vs 비IQP {ni_wr:.0f}% ({diff:+.0f}%p). "
+                         f"{'능동적 공격 스타일에 강함' if diff > 5 else ('폴 구조 능력 개선 필요' if diff < -5 else 'IQP 보유 승률 평균 수준')}"),
+                key_metric_value=iq_wr, key_metric_label="IQP 보유 승률", key_metric_unit="%",
+                evidence_count=len(iqp_g),
                 representative_games=iqp_g,
             ))
 
@@ -1246,6 +1324,10 @@ class TacticalAnalysisService:
                 games_analyzed=len(bp_g),
                 detail=f"비숍 쌍 유지 {len(bp_g)}게임 → {bp_wr:.0f}% | 비보유 {nb_wr:.0f}% ({diff:+.0f}%p)",
                 category="position", situation_id=11,
+                insight=(f"비숍 쌍 20수 유지 {len(bp_g)}게임 — 승률 {bp_wr:.0f}% vs 비보유 {nb_wr:.0f}% ({diff:+.0f}%p). "
+                         f"{'비숍 쌍 장기 활용 능력 우수' if diff > 5 else ('비숍 조기 교환되는 경향' if diff < 0 else '비숍 쌍 기여도 없음')}"),
+                key_metric_value=bp_wr, key_metric_label="비숍 쌍 유지 승률", key_metric_unit="%",
+                evidence_count=len(bp_g),
                 representative_games=bp_g,
             ))
 
@@ -1462,6 +1544,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"고긴장 {ht_total}회: 개선 {ht_ok} / 악화 {ht_bad} ({rate:.0f}%)",
                 category="endgame", situation_id=14,
+                insight=(f"3기물+ 동시 공격 고긴장 {ht_total}회 — {ht_ok}회 위협 개선, {ht_bad}회 악화. "
+                         f"긴장도 대처율 {rate:.0f}% — {'복잡한 전술 계산 우수' if rate >= 55 else '긴장 상황 판단력 개선 필요'}"),
+                key_metric_value=rate, key_metric_label="긴장 상황 개선율", key_metric_unit="%",
+                evidence_count=ht_total,
                 representative_games=ht_bad_games + ht_ok_games,
             ))
 
@@ -1477,6 +1563,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=qe_wr >= 50, games_analyzed=len(qe_games),
                 detail=f"퀸 교환 {len(qe_games)}게임 → {qe_wr:.0f}% | 퀸 유지 {nq_wr:.0f}% ({diff:+.0f}%p)",
                 category="endgame", situation_id=15,
+                insight=(f"퀸 교환 후 {len(qe_games)}게임 — 승률 {qe_wr:.0f}% vs 퀸 유지 {nq_wr:.0f}% ({diff:+.0f}%p). "
+                         f"{'엔드게임 전환 강세' if diff > 5 else ('엔드게임 약점' if diff < -5 else '퀸 교환 전후 승률 유사')}"),
+                key_metric_value=qe_wr, key_metric_label="퀸 교환 후 승률", key_metric_unit="%",
+                evidence_count=len(qe_games),
                 representative_games=qe_games,
             ))
 
@@ -1490,6 +1580,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=rate >= 60, games_analyzed=analyzed,
                 detail=f"승급 레이스 {pr_total}회: 정확 {promo_ok} / 미흡 {promo_miss} ({rate:.0f}%)",
                 category="endgame",
+                insight=(f"폰 승급 레이스 {pr_total}회 — {promo_ok}회 정확한 전진, {promo_miss}회 박자 실수. "
+                         f"승급 정확도 {rate:.0f}% — {'엔드게임 폰 운영 우수' if rate >= 60 else '폰 승급 타이밍 교정 필요'}"),
+                key_metric_value=rate, key_metric_label="승급 정확도", key_metric_unit="%",
+                evidence_count=pr_total,
                 representative_games=promo_miss_games + promo_ok_games,
             ))
 
@@ -1503,6 +1597,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"킹 헌트 기회 {hunt_total}회: 마무리 {hunt_ok} / 놓침 {hunt_miss} ({rate:.0f}%)",
                 category="endgame",
+                insight=(f"상대 킹 노출 기회 {hunt_total}회 — {hunt_ok}회 결정적 마무리, {hunt_miss}회 놓침. "
+                         f"마무리 성공률 {rate:.0f}% — {'공격적 마무리 능력 우수' if rate >= 55 else '킹 사냥 결정타 부족'}"),
+                key_metric_value=rate, key_metric_label="킹 헌트 성공률", key_metric_unit="%",
+                evidence_count=hunt_total,
                 representative_games=hunt_ok_games + hunt_miss_games,
             ))
 
@@ -1517,6 +1615,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=safe_rate >= 65, games_analyzed=analyzed,
                 detail=f"쉬일드 파괴 {ks_total}회: 안전 수 {ks_safe_moves} / 블런더 {ks_blunder_moves} ({safe_rate:.0f}%)",
                 category="position", situation_id=16,
+                insight=(f"폰 쉬일드 파괴 후 {ks_total}회 — {ks_safe_moves}회 안전 대응, {ks_blunder_moves}회 Stockfish 블런더. "
+                         f"킹 안전 유지율 {safe_rate:.0f}% — {'쉬일드 파괴 후 안정적 플레이' if safe_rate >= 65 else '킹 노출 시 취약한 수 선택'}"),
+                key_metric_value=safe_rate, key_metric_label="킹 안전 유지율", key_metric_unit="%",
+                evidence_count=ks_total,
                 representative_games=ks_blunder_games + ks_safe_games,
             ))
 
@@ -1533,6 +1635,10 @@ class TacticalAnalysisService:
                 score=s, is_strength=sa_wr >= 55 and diff >= 0, games_analyzed=len(space_adv_games),
                 detail=f"우위 {len(space_adv_games)}게임 → {sa_wr:.0f}% | 열세 {sd_wr:.0f}% ({diff:+.0f}%p)",
                 category="position", situation_id=17,
+                insight=(f"20수 시점 공간 우위 {len(space_adv_games)}게임 — 승률 {sa_wr:.0f}% vs 열세 {sd_wr:.0f}% ({diff:+.0f}%p). "
+                         f"{'공간 우위 활용 능력 우수' if diff > 5 else ('공간 우위 전환 실패 경향' if diff < -5 else '공간과 승률 연결 평균 수준')}"),
+                key_metric_value=sa_wr, key_metric_label="공간 우위 시 승률", key_metric_unit="%",
+                evidence_count=len(space_adv_games),
                 representative_games=space_adv_games,
             ))
 

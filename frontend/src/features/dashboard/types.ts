@@ -127,6 +127,11 @@ export interface TacticalPattern {
   } | null;
   top_games?: PatternGameItem[];
   situation_id?: number;
+  insight?: string;
+  key_metric_value?: number | null;
+  key_metric_label?: string;
+  key_metric_unit?: string;
+  evidence_count?: number;
 }
 
 export interface ClusterInfo {
