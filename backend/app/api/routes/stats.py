@@ -2,6 +2,8 @@
 첫 수 선호도, 오프닝 트리, 수 품질 분석 엔드포인트
 MVP 섹션 1, 2, 3 대응
 """
+import asyncio
+import functools
 import logging
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
@@ -180,7 +182,11 @@ async def get_tactical_patterns(
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         games = [g for g in games if g.time_class == time_class]
-        return tactical_svc.analyze(games, username)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            functools.partial(tactical_svc.analyze, games, username),
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -207,7 +213,11 @@ async def get_tactical_ai_insights(
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         games = [g for g in games if g.time_class == time_class]
-        analysis = tactical_svc.analyze(games, username)
+        loop = asyncio.get_event_loop()
+        analysis = await loop.run_in_executor(
+            None,
+            functools.partial(tactical_svc.analyze, games, username),
+        )
 
         from app.features.dashboard.services.ai_insights import generate_tactical_insights
         insights = await generate_tactical_insights(analysis, username)
