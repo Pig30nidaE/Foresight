@@ -73,8 +73,57 @@ SF_DEPTH = 8            # 10→8: blitz 분석에 충분, 속도 2-3배 개선
 SF_BUDGET_GAMES = 15    # 25→15: 엔진 분석 대상 게임 수 축소
 SF_BUDGET_MOVES = 30    # 40→30: 중반까지만 분석
 BOARD_BUDGET_GAMES = 80  # 120→80: 보드 루프 게임 수 축소
-BLUNDER_CP = 150   # centipawn 손실 ≥150 → 블런더
+BLUNDER_CP = 150   # centipawn 손실 ≥150 → 블런더 (하위 호환 유지)
 SF_PARALLEL_WORKERS = 4  # 병렬 Stockfish 인스턴스 수 (CPU 코어 수 초과 권장 안 함)
+
+# ── 수 품질 6단계 가중치 (체스닷컴 분류 근사, cp_loss 기준) ──────────────
+# cp_loss = prev_cp − cp_now (음수 = 내 입장에서 포지션이 개선됨 = Best)
+# 구간: Best / Excellent / Good / Inaccuracy / Mistake / Blunder
+_CP_WEIGHT_TIERS: list[tuple[float, float]] = [
+    (  5.0,  +2.0),   # Best       (0−5 cp 손실)  : 거의 최선수
+    ( 20.0,  +1.0),   # Excellent  (5−20 cp 손실) : 아주 좋은 수
+    ( 50.0,  +0.3),   # Good       (20−50 cp)     : 무난한 수
+    (100.0,  -0.5),   # Inaccuracy (50−100 cp)    : 부정확
+    (200.0,  -1.5),   # Mistake    (100−200 cp)   : 실수
+    (float("inf"), -3.0),  # Blunder (200+ cp)    : 블런더
+]
+
+
+def _move_weight(cp_loss: float) -> float:
+    """cp_loss → 수 품질 가중치 (음수 포함; Best=+2.0, Blunder=−3.0)."""
+    # 음수 cp_loss = 포지션 개선 → 최선수 취급
+    for thr, w in _CP_WEIGHT_TIERS:
+        if cp_loss < thr:
+            return w
+    return -3.0
+
+
+def _game_quality_score(sf_moves: list) -> float:
+    """
+    게임 sf_moves에서 내 수(is_my_move=True)의 가중 품질 점수 ÷ 내 수 수.
+    양수 → 전반적으로 좋은 플레이, 음수 → 전반적으로 나쁜 플레이.
+    데이터 없으면 0.0 반환.
+    """
+    my_moves = [m for m in sf_moves if m.get("is_my_move")]
+    if not my_moves:
+        return 0.0
+    return sum(_move_weight(float(m.get("cp_loss", 0))) for m in my_moves) / len(my_moves)
+
+
+def _quality_score_slice(
+    sf_moves: list,
+    move_min: int = 1,
+    move_max: int = 9999,
+) -> float:
+    """특정 수 번호 구간 [move_min, move_max] 내 내 수의 가중 품질 점수."""
+    sliced = [
+        m for m in sf_moves
+        if m.get("is_my_move")
+        and move_min <= m.get("move_no", 0) <= move_max
+    ]
+    if not sliced:
+        return 0.0
+    return sum(_move_weight(float(m.get("cp_loss", 0))) for m in sliced) / len(sliced)
 
 # ── 시계 파싱 ────────────────────────────────────────────────
 _RE_CLK = re.compile(r"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]")
@@ -770,7 +819,8 @@ class TacticalAnalysisService:
                     continue
                 if i + 1 < len(moves):
                     nxt = moves[i + 1]
-                    if nxt["is_my_move"] and nxt.get("cp_loss", 999) < 50:
+                    # Good 이상(가중치≥0)이면 응징 성공
+                    if nxt["is_my_move"] and _move_weight(float(nxt.get("cp_loss", 0))) >= 0:
                         ok += 1
                     else:
                         fail += 1
@@ -804,13 +854,15 @@ class TacticalAnalysisService:
             for m in moves:
                 if not m["is_my_move"]:
                     continue
+                    # 도삼마 시사. 위기 포지션 관리 - 가중 품질 점수 기반
                 if (m.get("cp_before") is not None
                         and m["cp_before"] <= -200
                         and m.get("clk") is not None
                         and m["clk"] >= 120):
-                    if m.get("cp_loss", 0) < 0:
+                    w = _move_weight(float(m.get("cp_loss", 0)))
+                    if w > 0:      # Good 이상: 불리에서 좋은 수 선택
                         saved += 1
-                    elif m.get("cp_loss", 999) >= BLUNDER_CP:
+                    elif w < 0:   # Inaccuracy 이하: 에러 발생
                         lost += 1
         total = saved + lost
         if total < 3:
@@ -881,15 +933,17 @@ class TacticalAnalysisService:
                 is_my = board.turn == my_color
                 move = node.move
                 try:
-                    # 상황 1. Pin — Stockfish cp_loss 검증으로 정확도 개선
+                    # 상황 1. Pin — 가중 품질 점수 기반 핀 대응 정확도
                     if is_my and board.is_pinned(my_color, move.from_square):
                         pin_total += 1
                         g_pin_total += 1
                         mv_clr = "white" if board.turn == chess.WHITE else "black"
                         sf_m = _sf_lookup.get((board.fullmove_number, mv_clr))
-                        if sf_m and sf_m.get("cp_loss", 0) >= BLUNDER_CP:
-                            pin_bad += 1
-                            g_pin_bad += 1
+                        if sf_m:
+                            # Inaccuracy 이상(cp_loss≥50, 가중치<0)은 핀 대응 실패
+                            if _move_weight(float(sf_m.get("cp_loss", 0))) < 0:
+                                pin_bad += 1
+                                g_pin_bad += 1
 
                     # 8. Fork (나이트 포크)
                     if is_my:
@@ -1075,23 +1129,24 @@ class TacticalAnalysisService:
             post_book = [m for m in sf_raw if m.get("is_my_move") and 11 <= m["move_no"] <= 16]
             if len(post_book) < 3:
                 continue
-            blunders_ob = sum(1 for m in post_book if m.get("cp_loss", 0) >= BLUNDER_CP)
-            avg_loss = sum(max(0.0, m.get("cp_loss", 0.0)) for m in post_book) / len(post_book)
-            if blunders_ob > 0:
-                ob_bad += 1
-                ob_bad_games.append((g, float(blunders_ob * 60), {
-                    "is_success":   False,
-                    "metric_value": blunders_ob,
-                    "metric_label": "블런더 횟수",
-                    "context":      f"이탈 직후 {blunders_ob}회 블런더",
+            avg_loss  = sum(max(0.0, m.get("cp_loss", 0.0)) for m in post_book) / len(post_book)
+            quality   = _game_quality_score(post_book)
+            bad_moves = sum(1 for m in post_book if _move_weight(float(m.get("cp_loss", 0))) < 0)
+            if quality >= 0:
+                ob_good += 1
+                ob_good_games.append((g, max(0.1, quality + 2.0), {
+                    "is_success":   True,
+                    "metric_value": round(quality, 2),
+                    "metric_label": "수 품질 점수",
+                    "context":      f"이탈 대응 우수 (avg {avg_loss:.0f}cp · 품질점수 {quality:+.1f})",
                 }))
             else:
-                ob_good += 1
-                ob_good_games.append((g, max(1.0, 60.0 - avg_loss), {
-                    "is_success":   True,
-                    "metric_value": round(avg_loss, 1),
-                    "metric_label": "평균 CP 손실",
-                    "context":      f"이탈 대응 성공 (avg {avg_loss:.0f}cp)",
+                ob_bad += 1
+                ob_bad_games.append((g, max(0.1, abs(quality) * 10), {
+                    "is_success":   False,
+                    "metric_value": bad_moves,
+                    "metric_label": "부정적 수 횟수",
+                    "context":      f"이탈 후 부정적 수 {bad_moves}회 (품질점수 {quality:+.1f})",
                 }))
         ob_total = ob_good + ob_bad
         if ob_total >= 5:
@@ -1099,7 +1154,7 @@ class TacticalAnalysisService:
             s = max(0, min(100, int(rate)))
             results.append(PatternResult(
                 label="오프닝 이탈 대응", icon="📖",
-                description="오프닝 이론 이탈 직후(11~16수) 5수 내 Stockfish 블런더 없는 게임 비율 (상황 8)",
+                description="오프닝 이론 이탈 직후(11~16수) 수의 가중 품질 점수 기반 평가 (상황 8)",
                 score=s, is_strength=rate >= 65, games_analyzed=ob_total,
                 detail=f"이탈 후 {ob_total}게임: 안전 {ob_good} / 블런더 {ob_bad} ({rate:.0f}%)",
                 category="opening", situation_id=8,
@@ -1123,23 +1178,25 @@ class TacticalAnalysisService:
             ]
             if not disadv_moves:
                 continue
-            blunders_disadv = sum(1 for m in disadv_moves if m.get("cp_loss", 0) >= BLUNDER_CP)
-            survived = g.result.value in ("win", "draw")
-            if blunders_disadv == 0:
+            quality    = _game_quality_score(disadv_moves)
+            bad_moves  = sum(1 for m in disadv_moves if _move_weight(float(m.get("cp_loss", 0))) < 0)
+            good_moves = len(disadv_moves) - bad_moves
+            survived   = g.result.value in ("win", "draw")
+            if quality >= 0:    # 순 양수 = 불리에서도 전반적으로 좋은 수 선택
                 def_ok += 1
                 def_ok_games.append((g, float(len(disadv_moves)) * (2.0 if survived else 1.0), {
                     "is_success":   True,
-                    "metric_value": len(disadv_moves),
-                    "metric_label": "불리 상황 횟수",
-                    "context":      f"불리 {len(disadv_moves)}회 방어" + (" · 역전" if survived else ""),
+                    "metric_value": round(quality, 2),
+                    "metric_label": "방어 품질 점수",
+                    "context":      f"불리 {len(disadv_moves)}회 · 좋은 수 {good_moves}회 (품질점수 {quality:+.1f})" + (" · 역전" if survived else ""),
                 }))
-            else:
+            else:               # 순 음수 = 불리 중 포지션 더 나빠진 회수 많음
                 def_blunder += 1
-                def_bad_games.append((g, float(blunders_disadv), {
+                def_bad_games.append((g, abs(quality) * len(disadv_moves), {
                     "is_success":   False,
-                    "metric_value": blunders_disadv,
-                    "metric_label": "블런더 횟수",
-                    "context":      f"불리 중 {blunders_disadv}회 블런더",
+                    "metric_value": bad_moves,
+                    "metric_label": "부정적 수 횟수",
+                    "context":      f"불리 중 부정적 수 {bad_moves}회 (품질점수 {quality:+.1f})",
                 }))
         def_total = def_ok + def_blunder
         if def_total >= 3:
@@ -1220,10 +1277,14 @@ class TacticalAnalysisService:
                             sf_data = sf_cache.get(g.game_id, [])
                             if sf_data:
                                 mn = board.fullmove_number
-                                after = [m for m in sf_data if m["move_no"] >= mn and m["is_my_move"]]
+                                after = [
+                                    m for m in sf_data
+                                    if m.get("move_no", 0) >= mn and m.get("is_my_move")
+                                ]
+                                # 희생 직후 5수의 가중 품질 점수 > 0 → 효과적 희생
                                 sac_ok_flag = (
-                                    len(after) > 0 and
-                                    sum(m["cp_loss"] for m in after[:5]) / len(after[:5]) < 80
+                                    len(after) > 0
+                                    and _game_quality_score(after[:5]) > 0
                                 )
                             else:
                                 sac_ok_flag = g.result.value == "win"
@@ -1311,17 +1372,34 @@ class TacticalAnalysisService:
                 closed_games.append((g, bad_ratio * 100 + g_closed_bad))
 
             game_len = float(_estimate_total_moves(g.pgn or ""))
+            _sf_pos = sf_cache.get(g.game_id, [])
+            _q_pos = _game_quality_score(_sf_pos)
             opp = my_cs is not None and opp_cs is not None and my_cs != opp_cs
             if opp:
-                opp_castle.append((g, game_len))
+                opp_castle.append((g, game_len, {
+                    "is_success":   _q_pos > 0 or g.result.value == "win",
+                    "metric_value": round(_q_pos, 2),
+                    "metric_label": "수 품질 점수",
+                    "context":      f"상대방 반대 캐슬링 — 수 품질 {'우수' if _q_pos > 0 else '미흡'} ({_q_pos:+.1f})",
+                }))
             else:
                 same_castle.append(g)
             if had_iqp:
-                iqp_g.append((g, game_len))
+                iqp_g.append((g, game_len, {
+                    "is_success":   _q_pos > 0 or g.result.value == "win",
+                    "metric_value": round(_q_pos, 2),
+                    "metric_label": "수 품질 점수",
+                    "context":      f"IQP 보유 — 수 품질 {'우수' if _q_pos > 0 else '미흡'} ({_q_pos:+.1f})",
+                }))
             else:
                 no_iqp_g.append(g)
             if had_bp and not lost_bp:
-                bp_g.append((g, game_len))
+                bp_g.append((g, game_len, {
+                    "is_success":   _q_pos > 0 or g.result.value == "win",
+                    "metric_value": round(_q_pos, 2),
+                    "metric_label": "수 품질 점수",
+                    "context":      f"비숍 페어 보유 — 수 품질 {'우수' if _q_pos > 0 else '미흡'} ({_q_pos:+.1f})",
+                }))
             else:
                 no_bp_g.append(g)
 
@@ -1551,10 +1629,11 @@ class TacticalAnalysisService:
                                     mv_clr = "white" if board.turn == chess.WHITE else "black"
                                     sf_m = _sf_cx.get((board.fullmove_number, mv_clr))
                                     if sf_m:
-                                        if sf_m.get("cp_loss", 0) >= BLUNDER_CP:
+                                        w = _move_weight(float(sf_m.get("cp_loss", 0)))
+                                        if w < 0:   # Inaccuracy 이하: 파얌 후 실수
                                             ks_blunder_moves += 1
                                             g_ks_blunder += 1
-                                        else:
+                                        elif w > 0:  # Good 이상: 안정적 대응
                                             ks_safe_moves += 1
                                             g_ks_safe += 1
 
@@ -1584,7 +1663,14 @@ class TacticalAnalysisService:
             if had_qe:
                 total_moves = float(_estimate_total_moves(g.pgn or ""))
                 moves_after = max(total_moves - qe_move_no, 1.0)  # 퀸 교환 후 플레이 수
-                qe_games.append((g, moves_after))
+                _sf_after_qe = [m for m in sf_cache.get(g.game_id, []) if m.get("is_my_move") and m.get("move_no", 0) >= qe_move_no]
+                _q_qe = _game_quality_score(_sf_after_qe) if _sf_after_qe else 0.0
+                qe_games.append((g, moves_after, {
+                    "is_success":   g.result.value in ("win", "draw"),
+                    "metric_value": round(_q_qe, 2),
+                    "metric_label": "엔드게임 수 품질",
+                    "context":      f"퀸 교환({qe_move_no}수) 후 엔드게임 — 수 품질 {_q_qe:+.1f}",
+                }))
             else:
                 nonqe_games.append(g)
 
