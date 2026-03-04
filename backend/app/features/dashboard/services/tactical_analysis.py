@@ -396,24 +396,17 @@ class TacticalAnalysisService:
 
         patterns: List[PatternResult] = []
 
-        # ── §2 시간 관리 & 심리 (상황 4, 5, 6, 19) ────────────────
-        # p_tilt(상황5): 역전패 후 다음 게임 승률
-        for fn in [lambda g, u: self._p_time_trouble(g, u, sf_cache),  # 상황 4
-                   lambda g, u: self._p_insta_move(g, u, sf_cache),    # 상황 19
-                  ]:
-            p = fn(games, username)
-            if p:
-                patterns.append(p)
+        # ── §2 시간 관리 & 심리 (상황 5, 19, 20) ────────────────
+        p = self._p_insta_move(games, username, sf_cache)         # 상황 19
+        if p:
+            patterns.append(p)
         p = self._p_advantage_throw(games, username, sf_cache)   # 상황 4 보조 지표 → 우위 유지
         if p:
             patterns.append(p)
         p = self._p_mutual_blunder(games, username, sf_cache)    # 상황 20
         if p:
             patterns.append(p)
-        p = self._p_tilt(games, username)                        # 상황 5
-        if p:
-            patterns.append(p)
-        p = self._p_critical_pos(games, username, sf_cache)      # 상황 6
+        p = self._p_tilt(games, username, sf_cache)              # 상황 5
         if p:
             patterns.append(p)
 
@@ -433,14 +426,10 @@ class TacticalAnalysisService:
         # 패턴 레이블 → 예시 게임 선택 이유 설명
         _HINT_MAP: Dict[str, Tuple[str, str]] = {
             # label: (강점일 때 hint, 약점일 때 hint)
-            "시간 압박 대응":         ("잔여 시계가 가장 낮았던 게임 (극한 시간 압박)",
-                                        "잔여 시계가 가장 낮았던 게임 (시간 압박 실수)"),
             "즉각 응수 패턴":         ("즉각 응수 비율이 가장 높은 게임 (직관 발동)",
                                         "즉각 응수 비율이 가장 높은 게임 (직관 실수)"),
-            "크리티컬 포지션 대처":    ("크리티컬 포지션에서 최선의 수를 선택한 게임",
-                                        "크리티컬 포지션에서 실수를 저지른 게임"),
-            "틸트(Tilt) 저항력":      ("가장 긴 연패 직후 회복해 이긴 게임",
-                                        "가장 긴 연패 직후 추가로 진 게임"),
+            "틸트(Tilt) 저항력":      ("연승/연패 중에도 수 품질이 유지된 게임",
+                                        "연승/연패 중 수 품질이 저하된 게임"),
             "우위 유지력":            ("가장 큰 cp 우위를 유지하며 이긴 게임",
                                         "가장 큰 cp 우위를 날려 역전된 게임"),
             "기물 희생 정확도":       ("가장 큰 기물(퀸·룩)을 희생하고 성공한 게임",
@@ -457,8 +446,6 @@ class TacticalAnalysisService:
                                         "가장 많이 플레이했지만 진 익숙한 오프닝 게임"),
             "흑백 밸런스":            ("더 약한 색(약점)으로 플레이한 게임",
                                         "더 약한 색(약점)으로 플레이한 게임"),
-            "핀(Pin) 인지 오류율":    ("핀 상태에서도 정확한 수를 찾은 게임",
-                                        "핀 기물을 무리하게 움직여 블런더가 발생한 게임"),
             "오프닝 이탈 대응":       ("이탈 직후에도 안전한 수를 두어 유리한 게임",
                                         "이탈 직후 블런더로 열세로 빠진 게임"),
             "불리 포지션 방어력":     ("불리한 상황에서도 블런더 없이 버텨 역전한 게임",
@@ -544,61 +531,6 @@ class TacticalAnalysisService:
             "cluster_analysis": cluster,
             "xgboost_profile": xgb_profile,
         }
-
-    # ────────────────────────────────────────────────────────
-    # 상황 4. Time Trouble — 잔여 60s 미만 단일 수 Stockfish 블런더율
-    # (MVP.md §2 시간 관리, 상황 4)
-    # ────────────────────────────────────────────────────────
-    def _p_time_trouble(self, games: List[GameSummary], username: str, sf_cache: Dict = None) -> Optional[PatternResult]:
-        pressure: List[Tuple[GameSummary, float]] = []  # (game, 1/min_clock) 낮은 시계 = 고관련도
-        normal: List[GameSummary] = []
-        for g in games:
-            if not g.pgn:
-                continue
-            parsed = _parse_game(g.pgn)
-            if not parsed:
-                continue
-            is_white = g.white.lower() == username.lower()
-            min_clk = float("inf")
-            had = False
-            board = parsed.board()
-            for node in parsed.mainline():
-                my_turn = (board.turn == chess.WHITE) == is_white
-                clk = _parse_clock(node.comment or "")
-                if my_turn and clk is not None and clk < 60.0:
-                    had = True
-                    if clk < min_clk:
-                        min_clk = clk
-                try:
-                    board.push(node.move)
-                except Exception:
-                    break
-            if had:
-                # relevance = 1/min_clk: 시계가 낮을수록 관련도 높음
-                pressure.append((g, 1.0 / max(min_clk, 0.1), {
-                    "metric_value": round(min_clk, 1),
-                    "metric_label": "최저 잔여시간",
-                    "context":      f"잔여 {min_clk:.0f}초",
-                }))
-            else:
-                normal.append(g)
-        if len(pressure) < 5:
-            return None
-        pressure_games = [g for g, *_ in pressure]
-        pr = _win_rate(pressure_games, username)
-        nr = _win_rate(normal, username) if normal else 50.0
-        diff = pr - nr
-        score = max(0, min(100, int(pr)))
-        return PatternResult(
-            label="시간 압박 대응", icon="⏱️",
-            description="잔여시간 60초 미만 상황에서의 최종 승률 (상황 4: 시간 압박 블런더 발생 회귀)",
-            score=score, is_strength=(pr >= 45 and diff >= -10),
-            games_analyzed=len(pressure),
-            detail=f"압박 {len(pressure)}게임 → {pr:.0f}% | 일반 {nr:.0f}% ({diff:+.0f}%p)",
-            category="time",
-            situation_id=4,
-            representative_games=pressure,
-        )
 
     # ────────────────────────────────────────────────────────
     # 상황 19. Insta-move — 3s 이내 즉각 응수 비율 vs 실수율
@@ -694,50 +626,87 @@ class TacticalAnalysisService:
     # 상황 5. Tilt — 역전패 후 다음 게임 승률
     # (MVP.md §2 시간 관리, 상황 5)
     # ────────────────────────────────────────────────────────
-    def _p_tilt(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
+    def _p_tilt(self, games: List[GameSummary], username: str, sf_cache: Dict = None) -> Optional[PatternResult]:
+        sf_cache = sf_cache or {}
         sorted_g = sorted(
             [g for g in games if g.played_at],
             key=lambda g: g.played_at or "",
         )
         if len(sorted_g) < 10:
             return None
-        after_loss: List[Tuple[GameSummary, float]] = []  # (game, consecutive_loss_streak)
-        normal: List[GameSummary] = []
-        prev_bad = False
+
+        streak_games: List[Tuple[GameSummary, float]] = []  # (game, streak_length)
+        normal_games: List[GameSummary] = []
         streak = 0
-        for i, g in enumerate(sorted_g):
-            if i > 0:
-                if prev_bad:
-                    after_loss.append((g, float(streak)))  # streak 길수록 틸트 극명
-                else:
-                    normal.append(g)
+        last_result: Optional[str] = None
+
+        for g in sorted_g:
             total_mv = _estimate_total_moves(g.pgn or "")
-            if g.result.value == "loss" and total_mv >= 15:
-                streak += 1
-                prev_bad = True
+            r = g.result.value if total_mv >= 15 else None
+            if r in ("win", "loss"):
+                if r == last_result:
+                    streak += 1
+                else:
+                    streak = 1
+                    last_result = r
+                if streak >= 2:     # 2연속 이상 → streak 게임으로 분류
+                    streak_games.append((g, float(streak)))
+                else:
+                    normal_games.append(g)
             else:
                 streak = 0
-                prev_bad = False
-        if len(after_loss) < 5:
+                last_result = None
+                normal_games.append(g)
+
+        if len(streak_games) < 5:
             return None
-        al_list = [g for g, _ in after_loss]
-        al_wr = _win_rate(al_list, username)
-        nm_wr = _win_rate(normal, username) if normal else 50.0
-        diff = al_wr - nm_wr
-        score = max(0, min(100, int(50 + diff)))
+
+        # sf_cache 기반 수 품질 점수 계산
+        sq_list = [_game_quality_score(sf_cache.get(g.game_id, [])) for g, *_ in streak_games if sf_cache.get(g.game_id)]
+        nq_list = [_game_quality_score(sf_cache.get(g.game_id, [])) for g in normal_games if sf_cache.get(g.game_id)]
+
+        if sq_list and nq_list:
+            sq_avg = sum(sq_list) / len(sq_list)
+            nq_avg = sum(nq_list) / len(nq_list)
+            diff_q = sq_avg - nq_avg
+            # 수 품질 단위(약 -1.5 ~ +2.0)를 0~100 점수로 정규화
+            score = max(0, min(100, int(50 + diff_q * 20)))
+            is_strength = diff_q >= -0.2
+            detail = (f"연속게임 {len(streak_games)}개 수 품질 {sq_avg:+.2f} "
+                      f"| 일반 {nq_avg:+.2f} (차이 {diff_q:+.2f})")
+            insight = (f"연승/연패 중 수 품질 {sq_avg:+.2f} — "
+                       f"일반 게임({nq_avg:+.2f})보다 {diff_q:+.2f}점. "
+                       f"{'흐름 속 집중력 우수' if is_strength else '연속 게임 시 정확도 저하 주의'}")
+            key_val = round(sq_avg, 2)
+            key_lbl = "연속게임 수 품질 점수"
+            key_unit = "pts"
+        else:
+            # sf_cache 미사용 시 승률 폴백
+            al_list = [g for g, *_ in streak_games]
+            al_wr = _win_rate(al_list, username)
+            nm_wr = _win_rate(normal_games, username) if normal_games else 50.0
+            diff = al_wr - nm_wr
+            score = max(0, min(100, int(50 + diff)))
+            is_strength = diff >= -5
+            detail = f"연속게임 {len(streak_games)}개 → {al_wr:.0f}% | 일반 {nm_wr:.0f}% ({diff:+.0f}%p)"
+            insight = (f"연승/연패 중 {len(streak_games)}게임 승률 {al_wr:.0f}% "
+                       f"({'정상과 동등' if abs(diff) <= 5 else ('심리 회복력 취약' if diff < -5 else '역경 후 강해짐')}). "
+                       f"연속게임 {al_wr:.0f}% vs 일반 {nm_wr:.0f}% ({diff:+.0f}%p)")
+            key_val = al_wr
+            key_lbl = "연속게임 승률"
+            key_unit = "%"
+
         return PatternResult(
             label="틸트(Tilt) 저항력", icon="🧠",
-            description="패배 직후 다음 게임 승률 — 연패 심리적 회복 상황 5 (Tilt)",
-            score=score, is_strength=diff >= -5,
-            games_analyzed=len(after_loss),
-            detail=f"패배 후 {len(after_loss)}게임 → {al_wr:.0f}% | 일반 {nm_wr:.0f}% ({diff:+.0f}%p)",
+            description="연승/연패 중 수 정확도 변화 — 심리적 흐름에 따른 플레이 품질 (상황 5)",
+            score=score, is_strength=is_strength,
+            games_analyzed=len(streak_games),
+            detail=detail,
             category="time", situation_id=5,
-            insight=(f"연패 후 {len(after_loss)}게임 승률 {al_wr:.0f}% "
-                     f"({'정상과 동등' if abs(diff) <= 5 else ('심리 회복력 취약' if diff < -5 else '역경 후 강해짐')}). "
-                     f"패배 직후 {al_wr:.0f}% vs 일반 {nm_wr:.0f}% ({diff:+.0f}%p)"),
-            key_metric_value=al_wr, key_metric_label="패배 후 승률", key_metric_unit="%",
-            evidence_count=len(after_loss),
-            representative_games=after_loss,
+            insight=insight,
+            key_metric_value=key_val, key_metric_label=key_lbl, key_metric_unit=key_unit,
+            evidence_count=len(streak_games),
+            representative_games=streak_games,
         )
 
     # ────────────────────────────────────────────────────────
@@ -840,45 +809,6 @@ class TacticalAnalysisService:
                      f"{fail}회 기회 미활용. "
                      f"{'포지션 읽기 능력 우수' if rate >= 60 else '블런더 탐지력 개선 필요'}"),
             key_metric_value=rate, key_metric_label="블런더 응징률", key_metric_unit="%",
-            evidence_count=total,
-        )
-
-    # ────────────────────────────────────────────────────────
-    # 상황 6. 크리티컈 포지션 — 불리+시간 넉넉할 때 Stockfish 수 품질
-    # (MVP.md §2 시간 관리, 상황 6)
-    # ────────────────────────────────────────────────────────
-    def _p_critical_pos(self, games, username, sf_cache) -> Optional[PatternResult]:
-        saved = lost = 0
-        for g in games:
-            moves = sf_cache.get(g.game_id, [])
-            for m in moves:
-                if not m["is_my_move"]:
-                    continue
-                    # 도삼마 시사. 위기 포지션 관리 - 가중 품질 점수 기반
-                if (m.get("cp_before") is not None
-                        and m["cp_before"] <= -200
-                        and m.get("clk") is not None
-                        and m["clk"] >= 120):
-                    w = _move_weight(float(m.get("cp_loss", 0)))
-                    if w > 0:      # Good 이상: 불리에서 좋은 수 선택
-                        saved += 1
-                    elif w < 0:   # Inaccuracy 이하: 에러 발생
-                        lost += 1
-        total = saved + lost
-        if total < 3:
-            return None
-        rate = saved / total * 100
-        score = max(0, min(100, int(rate)))
-        return PatternResult(
-            label="크리티컬 포지션 대처", icon="🔥",
-            description="불리한 포지션에서 시간을 써 Stockfish 최선수를 선택한 비율 (상황 6: 크리티컬 포지션 시간 소모 효율성)",
-            score=score, is_strength=rate >= 55,
-            games_analyzed=len(sf_cache),
-            detail=f"불리+시간여유 {total}회: 개선 {saved} / 악화 {lost} ({rate:.0f}%)",
-            category="time", situation_id=6,
-            insight=(f"위기 포지션(불리≥2폰+시간여유) {total}회 탐지 — {saved}회 개선({rate:.0f}%), {lost}회 실기. "
-                     f"{'위기 집중력 우수' if rate >= 55 else '불리 상황에서 포기 경향 있음'}"),
-            key_metric_value=rate, key_metric_label="위기 대처 성공률", key_metric_unit="%",
             evidence_count=total,
         )
 
@@ -1068,23 +998,6 @@ class TacticalAnalysisService:
 
         results: List[PatternResult] = []
 
-        # 상황 1. 핀(Pin) 인지 오류율 — Stockfish 검증 재활성화
-        if pin_total >= 3:
-            error_rate = pin_bad / pin_total * 100
-            s = max(0, min(100, int(100 - error_rate)))
-            results.append(PatternResult(
-                label="핀(Pin) 인지 오류율", icon="📌",
-                description="핀 상태 기물을 무리하게 움직여 Stockfish 블런더(≥150cp)를 범한 비율 (상황 1)",
-                score=s, is_strength=s >= 75, games_analyzed=analyzed,
-                detail=f"핀 이동 {pin_total}회 → 블런더 {pin_bad}회 (오류율 {error_rate:.0f}%)",
-                category="position", situation_id=1,
-                insight=(f"핀된 기물 이동 {pin_total}회 — {pin_bad}회 Stockfish 블런더(≥150cp 손실). "
-                         f"핀 인지 오류율 {error_rate:.0f}% — {'우수' if s >= 75 else ('주의 필요' if s >= 55 else '핀 포지션 파악 연습 권장')}"),
-                key_metric_value=error_rate, key_metric_label="핀 이도 시 블런더율", key_metric_unit="%",
-                evidence_count=pin_total,
-                representative_games=pin_bad_games + pin_ok_games,
-            ))
-
         fork_total = fork_evaded + fork_failed
         if fork_total >= 3:
             s = max(0, min(100, int(fork_evaded / fork_total * 100)))
@@ -1174,7 +1087,7 @@ class TacticalAnalysisService:
             sf_raw = sf_cache.get(g.game_id, [])
             disadv_moves = [
                 m for m in sf_raw
-                if m.get("is_my_move") and m.get("cp_before") is not None and m["cp_before"] <= -200
+                if m.get("is_my_move") and m.get("cp_before") is not None and m["cp_before"] <= -100
             ]
             if not disadv_moves:
                 continue
@@ -1204,7 +1117,7 @@ class TacticalAnalysisService:
             s = max(0, min(100, int(rate)))
             results.append(PatternResult(
                 label="불리 포지션 방어력", icon="🛡️",
-                description="Stockfish ≤-2.0 불리한 상황에서 블런더 없이 버텨낸 비율 (상황 13: 방어 능력)",
+                description="Stockfish -1.0 이상 불리한 상황(cp ≤ -100)에서의 수 정확도 (상황 13: 방어 능력)",
                 score=s, is_strength=rate >= 50, games_analyzed=def_total,
                 detail=f"불리 {def_total}게임: 수비 성공 {def_ok} / 블런더 {def_blunder} ({rate:.0f}%)",
                 category="position", situation_id=13,
@@ -1274,18 +1187,21 @@ class TacticalAnalysisService:
                                         - _PIECE_VAL.get(tgt.piece_type, 0))
                             if val_diff > max_sac_val:
                                 max_sac_val = float(val_diff)
+                            # 희생 수 자체의 Stockfish 정확도 확인
                             sf_data = sf_cache.get(g.game_id, [])
                             if sf_data:
-                                mn = board.fullmove_number
-                                after = [
-                                    m for m in sf_data
-                                    if m.get("move_no", 0) >= mn and m.get("is_my_move")
-                                ]
-                                # 희생 직후 5수의 가중 품질 점수 > 0 → 효과적 희생
-                                sac_ok_flag = (
-                                    len(after) > 0
-                                    and _game_quality_score(after[:5]) > 0
+                                mv_clr = "white" if board.turn == chess.WHITE else "black"
+                                sf_m = next(
+                                    (m for m in sf_data
+                                     if m.get("move_no") == board.fullmove_number
+                                     and m.get("color") == mv_clr),
+                                    None,
                                 )
+                                if sf_m:
+                                    # 희생 수 자체가 Good 이상(가중치≥0)이면 정확한 희생
+                                    sac_ok_flag = _move_weight(float(sf_m.get("cp_loss", 0))) >= 0
+                                else:
+                                    sac_ok_flag = g.result.value == "win"
                             else:
                                 sac_ok_flag = g.result.value == "win"
 
@@ -1355,7 +1271,7 @@ class TacticalAnalysisService:
                         "is_success":   True,
                         "metric_value": sac_val,
                         "metric_label": "희생 기물 가치",
-                        "context":      "효과적 희생",
+                        "context":      "희생 수 정확 (Stockfish ≥ Good)",
                     }))
                 else:
                     sac_bad += 1
@@ -1363,7 +1279,7 @@ class TacticalAnalysisService:
                         "is_success":   False,
                         "metric_value": sac_val,
                         "metric_label": "희생 기물 가치",
-                        "context":      "무효 희생",
+                        "context":      "희생 수 부정확 (Stockfish 기준)",
                     }))
 
             # 닫힌 포지션 - 무리한 폰 전진이 있었던 게임일수록 관련도 높음
@@ -1411,12 +1327,12 @@ class TacticalAnalysisService:
             s = max(0, min(100, int(rate)))
             results.append(PatternResult(
                 label="기물 희생 정확도", icon="💥",
-                description="더 비싼 기물 희생 후 후속 공격이 유효했던 비율",
+                description="희생 수 자체의 Stockfish 정확도 기반 판별 (Good 이상이면 정확한 희생)",
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"희생 {sac_total}회: 유효 {sac_ok} / 무효 {sac_bad} ({rate:.0f}%)",
                 category="position", situation_id=3,
-                insight=(f"기물 희생 {sac_total}회 시도 — {sac_ok}회 유효(탁월한 공격), {sac_bad}회 실패. "
-                         f"희생 정확도 {rate:.0f}% — {'섭석적 소질미 우수' if rate >= 55 else '무리한 희생 주의'}"),
+                insight=(f"기물 희생 {sac_total}회 시도 — {sac_ok}회 Stockfish 정확(≥Good), {sac_bad}회 부정확. "
+                         f"희생 정확도 {rate:.0f}% — {'전술적 희생 능력 우수' if rate >= 55 else '무리한 희생 주의'}"),
                 key_metric_value=rate, key_metric_label="희생 성공률", key_metric_unit="%",
                 evidence_count=sac_total,
                 representative_games=sac_ok_games + sac_bad_games,
