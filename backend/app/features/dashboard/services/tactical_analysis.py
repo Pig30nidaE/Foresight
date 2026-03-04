@@ -431,7 +431,7 @@ class TacticalAnalysisService:
 
         def _pick_best(scored: List[Tuple[Any, float]], prefer_result: str) -> Optional[dict]:
             """관련도 내림차순 정렬, URL 있는 것 중 prefer_result 우선 선택."""
-            with_url = [(g, s) for g, s in scored if g.url]
+            with_url = [(g, s) for g, s, *_ in scored if g.url]
             if not with_url:
                 return None
             # 관련도 높은 순
@@ -535,7 +535,7 @@ class TacticalAnalysisService:
                 normal.append(g)
         if len(pressure) < 5:
             return None
-        pressure_games = [g for g, _ in pressure]
+        pressure_games = [g for g, *_ in pressure]
         pr = _win_rate(pressure_games, username)
         nr = _win_rate(normal, username) if normal else 50.0
         diff = pr - nr
@@ -604,7 +604,7 @@ class TacticalAnalysisService:
                     slow_games.append(g)
         if len(quick_games) < 5:
             return None
-        qg_list = [g for g, _ in quick_games]
+        qg_list = [g for g, *_ in quick_games]
         qr = _win_rate(qg_list, username)
         sr = _win_rate(slow_games, username) if slow_games else 50.0
         diff = qr - sr
