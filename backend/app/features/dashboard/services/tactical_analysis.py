@@ -491,7 +491,7 @@ class TacticalAnalysisService:
     # 상황 4. Time Trouble — 잔여 60s 미만 단일 수 Stockfish 블런더율
     # (MVP.md §2 시간 관리, 상황 4)
     # ────────────────────────────────────────────────────────
-    def _p_time_trouble(self, games: List[GameSummary], username: str) -> Optional[PatternResult]:
+    def _p_time_trouble(self, games: List[GameSummary], username: str, sf_cache: Dict = None) -> Optional[PatternResult]:
         pressure: List[Tuple[GameSummary, float]] = []  # (game, 1/min_clock) 낮은 시계 = 고관련도
         normal: List[GameSummary] = []
         for g in games:
