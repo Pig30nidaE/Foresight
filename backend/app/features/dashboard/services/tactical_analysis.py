@@ -1441,7 +1441,7 @@ class TacticalAnalysisService:
             ))
 
         if len(opp_castle) >= 5:
-            oc_games = [g for g, _ in opp_castle]
+            oc_games = [g for g, *_ in opp_castle]
             oc_wr = _win_rate(oc_games, username)
             sc_wr = _win_rate(same_castle, username) if same_castle else 50.0
             diff = oc_wr - sc_wr
@@ -1460,7 +1460,7 @@ class TacticalAnalysisService:
             ))
 
         if len(iqp_g) >= 5:
-            iq_games = [g for g, _ in iqp_g]
+            iq_games = [g for g, *_ in iqp_g]
             iq_wr = _win_rate(iq_games, username)
             ni_wr = _win_rate(no_iqp_g, username) if no_iqp_g else 50.0
             diff = iq_wr - ni_wr
@@ -1479,7 +1479,7 @@ class TacticalAnalysisService:
             ))
 
         if len(bp_g) >= 5:
-            bp_games = [g for g, _ in bp_g]
+            bp_games = [g for g, *_ in bp_g]
             bp_wr = _win_rate(bp_games, username)
             nb_wr = _win_rate(no_bp_g, username) if no_bp_g else 50.0
             diff = bp_wr - nb_wr
@@ -1727,7 +1727,7 @@ class TacticalAnalysisService:
             ))
 
         if len(qe_games) >= 5:
-            qe_list = [g for g, _ in qe_games]
+            qe_list = [g for g, *_ in qe_games]
             qe_wr = _win_rate(qe_list, username)
             nq_wr = _win_rate(nonqe_games, username) if nonqe_games else 50.0
             diff = qe_wr - nq_wr
