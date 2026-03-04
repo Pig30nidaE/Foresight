@@ -18,7 +18,10 @@ export interface FirstMoveEntry {
 export interface PatternGameItem {
   url: string;
   result: "win" | "loss" | "draw";
-  is_success?: boolean;          // true=패턴 성공(승리), false=패턴 실패(패배/무)
+  is_success?: boolean;          // 패턴별 성공 여부 (패턴마다 기준이 다름)
+  metric_value?: number | null;  // 패턴 핵심 수치 (잔여초, CP손실, 비율 등)
+  metric_label?: string | null;  // 수치 레이블 (예: "최저 잔여시간")
+  context?: string | null;       // 해당 게임에서 일어난 일 1줄 요약
   opening_eco?: string | null;
   opening_name?: string | null;
   played_at?: string | null;

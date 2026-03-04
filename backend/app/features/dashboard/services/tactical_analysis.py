@@ -142,21 +142,30 @@ def _to_dict(p: PatternResult) -> dict:
     if d["example_game"] and p.example_hint:
         d["example_game"] = {**d["example_game"], "hint": p.example_hint}
     # 대표 게임 상위 8개 직렬화 (패턴 모달 표시용)
+    # representative_games 항목은 2-튜플 (game, weight) 또는
+    # 3-튜플 (game, weight, extra_dict) 두 형식 모두 지원
     if p.representative_games:
         top = sorted(p.representative_games, key=lambda x: x[1], reverse=True)[:8]
-        d["top_games"] = [
-            {
+        games_out = []
+        for item in top:
+            g = item[0]
+            extra: dict = item[2] if len(item) > 2 and item[2] else {}
+            if not g.url:
+                continue
+            games_out.append({
                 "url":          g.url,
                 "result":       g.result.value,
-                "is_success":   g.result.value == "win",
+                "is_success":   extra.get("is_success", g.result.value == "win"),
+                "metric_value": extra.get("metric_value"),
+                "metric_label": extra.get("metric_label"),
+                "context":      extra.get("context"),
                 "opening_eco":  g.opening_eco,
                 "opening_name": g.opening_name,
                 "played_at":    g.played_at,
                 "white":        g.white,
                 "black":        g.black,
-            }
-            for g, _ in top if g.url
-        ]
+            })
+        d["top_games"] = games_out
     else:
         d["top_games"] = []
     return d
@@ -517,7 +526,11 @@ class TacticalAnalysisService:
                     break
             if had:
                 # relevance = 1/min_clk: 시계가 낮을수록 관련도 높음
-                pressure.append((g, 1.0 / max(min_clk, 0.1)))
+                pressure.append((g, 1.0 / max(min_clk, 0.1), {
+                    "metric_value": round(min_clk, 1),
+                    "metric_label": "최저 잔여시간",
+                    "context":      f"잔여 {min_clk:.0f}초",
+                }))
             else:
                 normal.append(g)
         if len(pressure) < 5:
@@ -582,7 +595,11 @@ class TacticalAnalysisService:
             if tot >= 10:
                 ratio = qc / tot
                 if ratio >= 0.3:
-                    quick_games.append((g, ratio))
+                    quick_games.append((g, ratio, {
+                        "metric_value": round(ratio * 100, 1),
+                        "metric_label": "직관 수 비율",
+                        "context":      f"직관 수 {ratio * 100:.0f}%",
+                    }))
                 else:
                     slow_games.append(g)
         if len(quick_games) < 5:
@@ -951,16 +968,36 @@ class TacticalAnalysisService:
             if g_pin_total > 0:
                 severity = g_pin_bad / g_pin_total * 100
                 if g_pin_bad > 0:
-                    pin_bad_games.append((g, severity + g_pin_bad))
+                    pin_bad_games.append((g, severity + g_pin_bad, {
+                        "is_success":   False,
+                        "metric_value": g_pin_bad,
+                        "metric_label": "핀 블런더 횟수",
+                        "context":      f"핀 블런더 {g_pin_bad}회",
+                    }))
                 else:
-                    pin_ok_games.append((g, float(g_pin_total)))
+                    pin_ok_games.append((g, float(g_pin_total), {
+                        "is_success":   True,
+                        "metric_value": g_pin_total,
+                        "metric_label": "핀 정확 대응 횟수",
+                        "context":      f"핀 정확 대응 {g_pin_total}회",
+                    }))
 
             g_fork_total = g_fork_ev + g_fork_fail
             if g_fork_total > 0:
                 if g_fork_fail > 0:
-                    fork_bad_games.append((g, float(g_fork_fail)))
+                    fork_bad_games.append((g, float(g_fork_fail), {
+                        "is_success":   False,
+                        "metric_value": g_fork_fail,
+                        "metric_label": "포크 피해 횟수",
+                        "context":      f"포크 {g_fork_fail}회 허용",
+                    }))
                 else:
-                    fork_ok_games.append((g, float(g_fork_ev)))
+                    fork_ok_games.append((g, float(g_fork_ev), {
+                        "is_success":   True,
+                        "metric_value": g_fork_ev,
+                        "metric_label": "포크 방어 횟수",
+                        "context":      f"포크 {g_fork_ev}회 방어",
+                    }))
 
             g_disc_total = g_disc_ok + g_disc_miss
             if g_disc_total > 0:
@@ -1042,10 +1079,20 @@ class TacticalAnalysisService:
             avg_loss = sum(max(0.0, m.get("cp_loss", 0.0)) for m in post_book) / len(post_book)
             if blunders_ob > 0:
                 ob_bad += 1
-                ob_bad_games.append((g, float(blunders_ob * 60)))
+                ob_bad_games.append((g, float(blunders_ob * 60), {
+                    "is_success":   False,
+                    "metric_value": blunders_ob,
+                    "metric_label": "블런더 횟수",
+                    "context":      f"이탈 직후 {blunders_ob}회 블런더",
+                }))
             else:
                 ob_good += 1
-                ob_good_games.append((g, max(1.0, 60.0 - avg_loss)))
+                ob_good_games.append((g, max(1.0, 60.0 - avg_loss), {
+                    "is_success":   True,
+                    "metric_value": round(avg_loss, 1),
+                    "metric_label": "평균 CP 손실",
+                    "context":      f"이탈 대응 성공 (avg {avg_loss:.0f}cp)",
+                }))
         ob_total = ob_good + ob_bad
         if ob_total >= 5:
             rate = ob_good / ob_total * 100
@@ -1080,10 +1127,20 @@ class TacticalAnalysisService:
             survived = g.result.value in ("win", "draw")
             if blunders_disadv == 0:
                 def_ok += 1
-                def_ok_games.append((g, float(len(disadv_moves)) * (2.0 if survived else 1.0)))
+                def_ok_games.append((g, float(len(disadv_moves)) * (2.0 if survived else 1.0), {
+                    "is_success":   True,
+                    "metric_value": len(disadv_moves),
+                    "metric_label": "불리 상황 횟수",
+                    "context":      f"불리 {len(disadv_moves)}회 방어" + (" · 역전" if survived else ""),
+                }))
             else:
                 def_blunder += 1
-                def_bad_games.append((g, float(blunders_disadv)))
+                def_bad_games.append((g, float(blunders_disadv), {
+                    "is_success":   False,
+                    "metric_value": blunders_disadv,
+                    "metric_label": "블런더 횟수",
+                    "context":      f"불리 중 {blunders_disadv}회 블런더",
+                }))
         def_total = def_ok + def_blunder
         if def_total >= 3:
             rate = def_ok / def_total * 100
@@ -1233,10 +1290,20 @@ class TacticalAnalysisService:
                 sac_val = max(max_sac_val, 1.0)
                 if sac_ok_flag:
                     sac_ok += 1
-                    sac_ok_games.append((g, sac_val))
+                    sac_ok_games.append((g, sac_val, {
+                        "is_success":   True,
+                        "metric_value": sac_val,
+                        "metric_label": "희생 기물 가치",
+                        "context":      "효과적 희생",
+                    }))
                 else:
                     sac_bad += 1
-                    sac_bad_games.append((g, sac_val))
+                    sac_bad_games.append((g, sac_val, {
+                        "is_success":   False,
+                        "metric_value": sac_val,
+                        "metric_label": "희생 기물 가치",
+                        "context":      "무효 희생",
+                    }))
 
             # 닫힌 포지션 - 무리한 폰 전진이 있었던 게임일수록 관련도 높음
             if g_closed_total > 0:
