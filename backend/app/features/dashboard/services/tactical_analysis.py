@@ -178,6 +178,8 @@ class PatternResult:
     example_game: Optional[dict] = None
     representative_games: Optional[List[Tuple[Any, float]]] = None
     example_hint: Optional[str] = None
+    # ── streak 추이 차트 데이터 ──────────────────────────────────────
+    chart_data: Optional[dict] = None
 
 
 def _to_dict(p: PatternResult) -> dict:
@@ -186,7 +188,7 @@ def _to_dict(p: PatternResult) -> dict:
              "is_strength", "games_analyzed", "detail", "category",
              "situation_id", "example_game",
              "insight", "key_metric_value", "key_metric_label", "key_metric_unit",
-             "evidence_count")}
+             "evidence_count", "chart_data")}
     # example_hint를 example_game 내부에 삽입
     if d["example_game"] and p.example_hint:
         d["example_game"] = {**d["example_game"], "hint": p.example_hint}
@@ -785,6 +787,17 @@ class TacticalAnalysisService:
                 "context":      f"연승 {sl}연속 중 — 수 품질 {q:+.2f} (일반 대비 {q - normal_avg:+.2f})",
             }))
 
+        # ── chart_data: streak 깊이별 추이 (프론트엔드 차트용) ────────
+        chart_data = {
+            "normal_avg":  round(normal_avg, 3),
+            "win_trend":   [{"depth": k, "avg_q": round(v, 3)}
+                            for k, v in win_trend.items()  if v is not None],
+            "loss_trend":  [{"depth": k, "avg_q": round(v, 3)}
+                            for k, v in loss_trend.items() if v is not None],
+            "win_count":   len(win_streak_data),
+            "loss_count":  len(loss_streak_data),
+        }
+
         return PatternResult(
             label="틸트(Tilt) 저항력", icon="🧠",
             description="연승/연패 구간 수 정확도 추이 — 심리적 흐름이 플레이 품질에 미치는 영향 (상황 5)",
@@ -796,6 +809,7 @@ class TacticalAnalysisService:
             key_metric_value=key_val, key_metric_label=key_lbl, key_metric_unit=key_unit,
             evidence_count=len(win_streak_data) + len(loss_streak_data),
             representative_games=rep_games,
+            chart_data=chart_data,
         )
 
     # ────────────────────────────────────────────────────────
