@@ -51,6 +51,7 @@ import io
 import os
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, Tuple
 
@@ -73,6 +74,7 @@ SF_BUDGET_GAMES = 15    # 25→15: 엔진 분석 대상 게임 수 축소
 SF_BUDGET_MOVES = 30    # 40→30: 중반까지만 분석
 BOARD_BUDGET_GAMES = 80  # 120→80: 보드 루프 게임 수 축소
 BLUNDER_CP = 150   # centipawn 손실 ≥150 → 블런더
+SF_PARALLEL_WORKERS = 4  # 병렬 Stockfish 인스턴스 수 (CPU 코어 수 초과 권장 안 함)
 
 # ── 시계 파싱 ────────────────────────────────────────────────
 _RE_CLK = re.compile(r"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]")
@@ -255,21 +257,41 @@ class StockfishHelper:
         max_moves: int = SF_BUDGET_MOVES,
         depth: int = SF_DEPTH,
     ) -> Dict[str, List[Dict]]:
-        """엔진을 1번만 열어 여러 게임을 배치 분석. {game_id: [moves]}."""
+        """N개 Stockfish 인스턴스를 병렬로 열어 게임 배치 분석. {game_id: [moves]}."""
         if not self._available:
             return {}
-        result: Dict[str, List[Dict]] = {}
-        try:
-            with chess.engine.SimpleEngine.popen_uci(self.path) as engine:
-                engine.configure({"Threads": 1, "Hash": 32})
-                for g in games:
-                    if g.pgn:
-                        result[g.game_id] = self._eval_one(
+
+        games_with_pgn = [g for g in games if g.pgn]
+        if not games_with_pgn:
+            return {}
+
+        n_workers = min(SF_PARALLEL_WORKERS, len(games_with_pgn))
+        # 라운드-로빈으로 게임을 n_workers 청크로 균등 분배
+        chunks: List[List] = [[] for _ in range(n_workers)]
+        for i, g in enumerate(games_with_pgn):
+            chunks[i % n_workers].append(g)
+
+        sf_path = self.path
+
+        def _eval_chunk(chunk: List) -> Dict[str, List[Dict]]:
+            chunk_result: Dict[str, List[Dict]] = {}
+            try:
+                with chess.engine.SimpleEngine.popen_uci(sf_path) as engine:
+                    engine.configure({"Threads": 1, "Hash": 32})
+                    for g in chunk:
+                        chunk_result[g.game_id] = self._eval_one(
                             engine, g.pgn, username, max_moves, depth
                         )
-        except Exception:
-            pass
-        return result
+            except Exception:
+                pass
+            return chunk_result
+
+        combined: Dict[str, List[Dict]] = {}
+        non_empty = [c for c in chunks if c]
+        with ThreadPoolExecutor(max_workers=len(non_empty)) as executor:
+            for partial in executor.map(_eval_chunk, non_empty):
+                combined.update(partial)
+        return combined
 
     # 하위 호환용 단일 게임 분석 (eval_batch 사용 권장)
     def eval_moves(
