@@ -650,6 +650,11 @@ class TacticalAnalysisService:
         loss_streak_data: List[Tuple[GameSummary, int, float]] = []
         normal_q: List[float] = []   # streak 아닌 win/loss 게임 중 sf 있는 것의 품질 (기준선)
         streak_count = 0             # sf 유무 무관, streak 참여 게임 총 수
+        # sf 데이터 없을 때 폴백용 — streak 결과 카운트
+        streak_wins = 0
+        streak_losses = 0
+        # 대표 게임 목록 (sf 없을 때 폴백용) — 품질 정렬 불가 시 streak 깊이순
+        streak_games_all: List[Tuple[GameSummary, int]] = []   # (game, streak_len)
 
         streak = 0
         last_result: Optional[str] = None
@@ -676,6 +681,11 @@ class TacticalAnalysisService:
 
                 if streak >= 2:
                     streak_count += 1          # 패턴 존재 여부 카운트
+                    streak_games_all.append((g, streak))
+                    if r == "win":
+                        streak_wins += 1
+                    else:
+                        streak_losses += 1
                     if q is not None:          # 품질 집계는 sf 있는 게임만
                         if r == "win":
                             win_streak_data.append((g, streak, q))
@@ -692,13 +702,50 @@ class TacticalAnalysisService:
         # streak 게임 자체가 부족하면 분석 의미 없음
         if streak_count < 5:
             return None
-        # sf 데이터 기반 품질 집계가 하나도 없으면 수치 표시 불가
-        if len(win_streak_data) + len(loss_streak_data) < 2:
-            return None
 
         normal_avg = sum(normal_q) / len(normal_q) if normal_q else 0.0
 
-        # ── streak 깊이별 추이 분석 ──────────────────────────────
+        # ── sf 데이터 없는 경우 폴백: 승/패율 기반 분석 ─────────
+        has_sf_data = len(win_streak_data) + len(loss_streak_data) >= 2
+
+        if not has_sf_data:
+            # Stockfish 분석 게임이 streak 구간에 없음 → 승/패율로 대체
+            loss_rate = streak_losses / streak_count if streak_count else 0.5
+            score     = max(0, min(100, int((1 - loss_rate) * 100)))
+            is_strength = loss_rate < 0.5
+            detail    = f"연승 {streak_wins}회 | 연패 {streak_losses}회 (총 streak {streak_count}게임, 수 품질 데이터 부족)"
+            insight   = (
+                f"연속 대국 {streak_count}게임 분석: 연승 {streak_wins}회 / 연패 {streak_losses}회. "
+                f"{'streak 중 승률이 높아 심리적 흐름 관리 양호' if is_strength else '연패 비율이 높아 멘탈 관리 주의 필요'}. "
+                "(수 품질 분석: Stockfish 데이터 확보 시 활성화)"
+            )
+            max_win_streak  = max((sl for _, sl in streak_games_all if sl > 0), default=0)
+            max_loss_streak = 0  # 결과 타입 정보가 없으므로 생략
+            rep_games_fb: List[Tuple[GameSummary, float, dict]] = []
+            for g_fb, sl_fb in sorted(streak_games_all, key=lambda x: -x[1])[:12]:
+                is_win = g_fb.result.value == "win"
+                rep_games_fb.append((g_fb, float(sl_fb), {
+                    "is_success":   is_win,
+                    "metric_value": None,
+                    "metric_label": None,
+                    "context":      f"{'연승' if is_win else '연패'} {sl_fb}연속 중",
+                }))
+            return PatternResult(
+                label="틸트(Tilt) 저항력", icon="🧠",
+                description="연승/연패 구간 심리적 흐름 분석 (상황 5)",
+                score=score, is_strength=is_strength,
+                games_analyzed=streak_count,
+                detail=detail,
+                category="time", situation_id=5,
+                insight=insight,
+                key_metric_value=round(loss_rate * 100, 1),
+                key_metric_label="연패 비율", key_metric_unit="%",
+                evidence_count=streak_count,
+                representative_games=rep_games_fb,
+                chart_data=None,
+            )
+
+        # ── streak 깊이별 추이 분석 (sf 데이터 충분할 때) ────────
         def _bucket_avg(data: List[Tuple[GameSummary, int, float]]) -> Dict[str, Optional[float]]:
             """streak 깊이(2/3/4/5+)별 평균 수 품질."""
             buckets: Dict[str, List[float]] = {"2연속": [], "3연속": [], "4연속": [], "5+연속": []}
@@ -732,8 +779,9 @@ class TacticalAnalysisService:
             key_lbl = "연패 중 수 품질"
             key_unit = "pts"
         else:
+            # win_q_avg만 있는 경우 (loss streak sf 데이터 없음)
             combined_diff = win_diff
-            key_val = round(win_q_avg, 2)  # type: ignore[arg-type]
+            key_val = round(win_q_avg, 2) if win_q_avg is not None else 0.0
             key_lbl = "연승 중 수 품질"
             key_unit = "pts"
 
