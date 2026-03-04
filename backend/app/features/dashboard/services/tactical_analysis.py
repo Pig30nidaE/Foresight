@@ -629,50 +629,40 @@ class TacticalAnalysisService:
     # (MVP.md §2 시간 관리, 상황 5)
     # ────────────────────────────────────────────────────────
     def _p_tilt(self, games: List[GameSummary], username: str, sf_cache: Dict = None) -> Optional[PatternResult]:
-        """연승/연패 구간별 수 정확도 추이 분석.
+        """연승/연패 구간별 수 정확도 추이 분석 (2-pass 방식).
 
-        - 각 게임을 날짜순 정렬 후 연승/연패 streak을 추적
-        - streak 깊이(2연속, 3연속, 4연속, 5+)별 평균 수 품질 점수 계산
-        - 연승 섹션 vs 연패 섹션 수 품질을 일반 게임 대비 비교
-        - 가장 품질 차이가 극명한 streak 게임을 representative_games로 반환
+        Pass 1: 전체 게임 결과로 streak 구간 탐지 (Stockfish 불필요)
+        Pass 2: streak 게임 + 일반 샘플을 대상으로 전용 Stockfish 분석 실행
+             → SF_BUDGET_GAMES 제한과 무관하게 streak 게임의 실제 수 품질 측정
+        Pass 3: 수 품질 집계 → streak 깊이별 평균(2/3/4/5+연속) + 일반 기준선
         """
+        # ── 분석 예산 상수 ──────────────────────────────────────
+        TILT_HISTORY   = 100   # streak 탐지 대상 최근 게임 수
+        TILT_SF_BUDGET = 30    # streak 전용 sf 분석 상한 (streak 게임 우선)
+        NORMAL_SF_CAP  = 15    # 기준선용 일반 게임 sf 분석 상한
+
         sf_cache = sf_cache or {}
+
+        # 충분히 진행된(≥15수) 게임만, 최근 TILT_HISTORY개 대상
         sorted_g = sorted(
-            [g for g in games if g.played_at],
+            [g for g in games if g.played_at and _estimate_total_moves(g.pgn or "") >= 15],
             key=lambda g: g.played_at or "",
-        )
+        )[-TILT_HISTORY:]
+
         if len(sorted_g) < 10:
             return None
 
-        # streak_count: sf 유무 관계없이 실제 streak(≥2연속) 참여 게임 수 — 반환 조건에만 사용
-        # win/loss_streak_data: sf 데이터(is_my_move)가 있는 streak 게임만 — 품질 분석에 사용
-        win_streak_data: List[Tuple[GameSummary, int, float]] = []
-        loss_streak_data: List[Tuple[GameSummary, int, float]] = []
-        normal_q: List[float] = []   # streak 아닌 win/loss 게임 중 sf 있는 것의 품질 (기준선)
-        streak_count = 0             # sf 유무 무관, streak 참여 게임 총 수
-        # sf 데이터 없을 때 폴백용 — streak 결과 카운트
-        streak_wins = 0
-        streak_losses = 0
-        # 대표 게임 목록 (sf 없을 때 폴백용) — 품질 정렬 불가 시 streak 깊이순
-        streak_games_all: List[Tuple[GameSummary, int]] = []   # (game, streak_len)
+        # ── PASS 1: streak 탐지 (결과 기반) ─────────────────────
+        streak_games_all: List[Tuple[GameSummary, int, str]] = []  # (game, streak_len, 'win'|'loss')
+        normal_game_objs: List[GameSummary] = []                   # streak 아닌 win/loss 게임
+        streak_count = 0
 
         streak = 0
         last_result: Optional[str] = None
 
         for g in sorted_g:
-            total_mv = _estimate_total_moves(g.pgn or "")
-            r = g.result.value if total_mv >= 15 else None
-
-            # ── 수 품질: is_my_move가 실제 있는 게임만 계산 (없으면 None) ──
-            sf_moves = sf_cache.get(g.game_id, [])
-            my_moves = [m for m in sf_moves if m.get("is_my_move")]
-            q: Optional[float] = (
-                sum(_move_weight(float(m.get("cp_loss", 0))) for m in my_moves) / len(my_moves)
-                if my_moves else None
-            )
-
+            r = g.result.value
             if r in ("win", "loss"):
-                # ── streak 추적: 결과만으로 (sf 유무 무관) ──
                 if r == last_result:
                     streak += 1
                 else:
@@ -680,162 +670,165 @@ class TacticalAnalysisService:
                     last_result = r
 
                 if streak >= 2:
-                    streak_count += 1          # 패턴 존재 여부 카운트
-                    streak_games_all.append((g, streak))
-                    if r == "win":
-                        streak_wins += 1
-                    else:
-                        streak_losses += 1
-                    if q is not None:          # 품질 집계는 sf 있는 게임만
-                        if r == "win":
-                            win_streak_data.append((g, streak, q))
-                        else:
-                            loss_streak_data.append((g, streak, q))
+                    streak_count += 1
+                    streak_games_all.append((g, streak, r))
                 else:
-                    if q is not None:
-                        normal_q.append(q)     # 기준선용 (무승부 제외)
+                    normal_game_objs.append(g)
             else:
-                # 무승부/짧은 게임 — streak 리셋, 어떤 집계에도 포함하지 않음
                 streak = 0
                 last_result = None
 
-        # streak 게임 자체가 부족하면 분석 의미 없음
         if streak_count < 5:
             return None
 
+        streak_wins   = sum(1 for _, _, r in streak_games_all if r == "win")
+        streak_losses = sum(1 for _, _, r in streak_games_all if r == "loss")
+
+        # ── PASS 2: streak 게임 전용 Stockfish 분석 ─────────────
+        # sf_cache에 없는 streak 게임 → 전용 분석 (기준선 normalも一部포함)
+        # streak 게임 전체(최대 TILT_SF_BUDGET개) + 기준선 일반 게임 일부
+        streak_objs  = [g for g, _, _ in streak_games_all]
+        normal_for_sf = normal_game_objs[:NORMAL_SF_CAP]
+        tilt_targets  = (streak_objs[:TILT_SF_BUDGET] + normal_for_sf)
+
+        missing = [g for g in tilt_targets if g.game_id not in sf_cache and g.pgn]
+        local_sf: Dict = dict(sf_cache)
+        if missing and _sf.available:
+            try:
+                fresh = _sf.eval_batch(missing, username)
+                local_sf.update(fresh)
+            except Exception:
+                pass   # sf 분석 실패 시 기존 캐시로 계속 진행
+
+        # ── PASS 3: 품질 집계 ────────────────────────────────────
+        win_streak_data:  List[Tuple[GameSummary, int, float]] = []
+        loss_streak_data: List[Tuple[GameSummary, int, float]] = []
+        normal_q: List[float] = []
+
+        def _calc_q(game_id: str) -> Optional[float]:
+            sf_moves = local_sf.get(game_id, [])
+            my_moves = [m for m in sf_moves if m.get("is_my_move")]
+            if not my_moves:
+                return None
+            return sum(_move_weight(float(m.get("cp_loss", 0))) for m in my_moves) / len(my_moves)
+
+        for g, sl, r in streak_games_all:
+            q = _calc_q(g.game_id)
+            if q is None:
+                continue
+            if r == "win":
+                win_streak_data.append((g, sl, q))
+            else:
+                loss_streak_data.append((g, sl, q))
+
+        for g in normal_for_sf:
+            q = _calc_q(g.game_id)
+            if q is not None:
+                normal_q.append(q)
+
         normal_avg = sum(normal_q) / len(normal_q) if normal_q else 0.0
 
-        # ── sf 데이터 없는 경우 폴백: 승/패율 기반 분석 ─────────
-        has_sf_data = len(win_streak_data) + len(loss_streak_data) >= 2
-
-        if not has_sf_data:
-            # Stockfish 분석 게임이 streak 구간에 없음 → 승/패율로 대체
-            loss_rate = streak_losses / streak_count if streak_count else 0.5
-            score     = max(0, min(100, int((1 - loss_rate) * 100)))
+        # sf 데이터 확보 실패 시 폴백 (sf 미설치 등)
+        if len(win_streak_data) + len(loss_streak_data) < 2:
+            loss_rate   = streak_losses / streak_count if streak_count else 0.5
+            score       = max(0, min(100, int((1 - loss_rate) * 100)))
             is_strength = loss_rate < 0.5
-            detail    = f"연승 {streak_wins}회 | 연패 {streak_losses}회 (총 streak {streak_count}게임, 수 품질 데이터 부족)"
-            insight   = (
-                f"연속 대국 {streak_count}게임 분석: 연승 {streak_wins}회 / 연패 {streak_losses}회. "
-                f"{'streak 중 승률이 높아 심리적 흐름 관리 양호' if is_strength else '연패 비율이 높아 멘탈 관리 주의 필요'}. "
-                "(수 품질 분석: Stockfish 데이터 확보 시 활성화)"
+            detail  = f"연승 {streak_wins}회 | 연패 {streak_losses}회 (총 {streak_count}게임, Stockfish 미설치)"
+            insight = (
+                f"연속 대국 {streak_count}게임: 연승 {streak_wins}회 / 연패 {streak_losses}회. "
+                f"{'streak 흐름 관리 양호' if is_strength else '연패 비율 높음 — 멘탈 관리 필요'}."
             )
-            max_win_streak  = max((sl for _, sl in streak_games_all if sl > 0), default=0)
-            max_loss_streak = 0  # 결과 타입 정보가 없으므로 생략
-            rep_games_fb: List[Tuple[GameSummary, float, dict]] = []
-            for g_fb, sl_fb in sorted(streak_games_all, key=lambda x: -x[1])[:12]:
-                is_win = g_fb.result.value == "win"
-                rep_games_fb.append((g_fb, float(sl_fb), {
-                    "is_success":   is_win,
-                    "metric_value": None,
-                    "metric_label": None,
-                    "context":      f"{'연승' if is_win else '연패'} {sl_fb}연속 중",
+            rep_fb: List[Tuple[GameSummary, float, dict]] = []
+            for g_fb, sl_fb, r_fb in sorted(streak_games_all, key=lambda x: -x[1])[:12]:
+                rep_fb.append((g_fb, float(sl_fb), {
+                    "is_success":   r_fb == "win",
+                    "metric_value": None, "metric_label": None,
+                    "context":      f"{'연승' if r_fb == 'win' else '연패'} {sl_fb}연속 중",
                 }))
             return PatternResult(
                 label="틸트(Tilt) 저항력", icon="🧠",
                 description="연승/연패 구간 심리적 흐름 분석 (상황 5)",
                 score=score, is_strength=is_strength,
                 games_analyzed=streak_count,
-                detail=detail,
-                category="time", situation_id=5,
+                detail=detail, category="time", situation_id=5,
                 insight=insight,
                 key_metric_value=round(loss_rate * 100, 1),
                 key_metric_label="연패 비율", key_metric_unit="%",
                 evidence_count=streak_count,
-                representative_games=rep_games_fb,
-                chart_data=None,
+                representative_games=rep_fb, chart_data=None,
             )
 
-        # ── streak 깊이별 추이 분석 (sf 데이터 충분할 때) ────────
+        # ── streak 깊이별 수 품질 버킷 집계 ────────────────────
         def _bucket_avg(data: List[Tuple[GameSummary, int, float]]) -> Dict[str, Optional[float]]:
-            """streak 깊이(2/3/4/5+)별 평균 수 품질."""
             buckets: Dict[str, List[float]] = {"2연속": [], "3연속": [], "4연속": [], "5+연속": []}
             for _, sl, qv in data:
-                key = f"{min(sl, 4) if sl <= 4 else 5}연속" if sl <= 4 else "5+연속"
-                if sl == 2: buckets["2연속"].append(qv)
+                if sl == 2:   buckets["2연속"].append(qv)
                 elif sl == 3: buckets["3연속"].append(qv)
                 elif sl == 4: buckets["4연속"].append(qv)
                 else:         buckets["5+연속"].append(qv)
             return {k: (sum(v) / len(v) if v else None) for k, v in buckets.items()}
 
-        win_trend  = _bucket_avg(win_streak_data)  if win_streak_data  else {}
-        loss_trend = _bucket_avg(loss_streak_data) if loss_streak_data else {}
+        win_trend  = _bucket_avg(win_streak_data)
+        loss_trend = _bucket_avg(loss_streak_data)
 
-        win_q_avg  = (sum(q for _, _, q in win_streak_data)  / len(win_streak_data))  if win_streak_data  else None
-        loss_q_avg = (sum(q for _, _, q in loss_streak_data) / len(loss_streak_data)) if loss_streak_data else None
+        win_q_avg  = sum(q for _, _, q in win_streak_data)  / len(win_streak_data)  if win_streak_data  else None
+        loss_q_avg = sum(q for _, _, q in loss_streak_data) / len(loss_streak_data) if loss_streak_data else None
 
         win_diff  = (win_q_avg  - normal_avg) if win_q_avg  is not None else 0.0
         loss_diff = (loss_q_avg - normal_avg) if loss_q_avg is not None else 0.0
 
         # ── 종합 점수 & 강점 판별 ────────────────────────────────
-        # 연패 시 정확도 하락이 핵심 지표. 연승 시 향상은 보너스
         if win_q_avg is not None and loss_q_avg is not None:
-            combined_diff = (win_diff * 0.4 + loss_diff * 0.6)  # 연패 가중치 높게
-            key_val = round(loss_q_avg, 2)
-            key_lbl = "연패 중 수 품질"
-            key_unit = "pts"
+            combined_diff = win_diff * 0.4 + loss_diff * 0.6   # 연패 가중치 높게
+            key_val, key_lbl = round(loss_q_avg, 2), "연패 중 수 품질"
         elif loss_q_avg is not None:
             combined_diff = loss_diff
-            key_val = round(loss_q_avg, 2)
-            key_lbl = "연패 중 수 품질"
-            key_unit = "pts"
+            key_val, key_lbl = round(loss_q_avg, 2), "연패 중 수 품질"
         else:
-            # win_q_avg만 있는 경우 (loss streak sf 데이터 없음)
             combined_diff = win_diff
-            key_val = round(win_q_avg, 2) if win_q_avg is not None else 0.0
-            key_lbl = "연승 중 수 품질"
-            key_unit = "pts"
+            key_val, key_lbl = (round(win_q_avg, 2) if win_q_avg is not None else 0.0), "연승 중 수 품질"
 
         score = max(0, min(100, int(50 + combined_diff * 20)))
         is_strength = combined_diff >= -0.2
 
-        # ── detail 문자열 ─────────────────────────────────────
+        # ── detail 문자열 ─────────────────────────────────────────
         parts = []
-        if win_q_avg is not None:
-            parts.append(f"연승 {len(win_streak_data)}게임: {win_q_avg:+.2f} ({win_diff:+.2f})")
-        if loss_q_avg is not None:
-            parts.append(f"연패 {len(loss_streak_data)}게임: {loss_q_avg:+.2f} ({loss_diff:+.2f})")
-        parts.append(f"일반: {normal_avg:+.2f}")
+        if win_q_avg  is not None: parts.append(f"연승 {len(win_streak_data)}게임: {win_q_avg:+.2f} ({win_diff:+.2f})")
+        if loss_q_avg is not None: parts.append(f"연패 {len(loss_streak_data)}게임: {loss_q_avg:+.2f} ({loss_diff:+.2f})")
+        parts.append(f"일반기준: {normal_avg:+.2f}")
         detail = " | ".join(parts)
 
-        # ── insight: streak 깊이 추이 포함 ───────────────────────
+        # ── insight ───────────────────────────────────────────────
         trend_notes = []
-        if loss_trend:
-            depth_vals = [(k, v) for k, v in loss_trend.items() if v is not None]
-            if len(depth_vals) >= 2:
-                first_v = depth_vals[0][1]
-                last_v  = depth_vals[-1][1]
-                if last_v - first_v < -0.3:
-                    trend_notes.append(f"연패 깊을수록 정확도 악화({first_v:+.2f}→{last_v:+.2f})")
-                elif last_v - first_v > 0.2:
-                    trend_notes.append(f"연패 중 오히려 집중력 상승({first_v:+.2f}→{last_v:+.2f})")
-        if win_trend:
-            depth_vals = [(k, v) for k, v in win_trend.items() if v is not None]
-            if len(depth_vals) >= 2:
-                first_v = depth_vals[0][1]
-                last_v  = depth_vals[-1][1]
-                if last_v - first_v > 0.3:
-                    trend_notes.append(f"연승 흐름 탈수록 정확도 향상({first_v:+.2f}→{last_v:+.2f})")
-                elif last_v - first_v < -0.2:
-                    trend_notes.append(f"연승 중에도 집중력 저하({first_v:+.2f}→{last_v:+.2f})")
+        for kind, trend in (("연패", loss_trend), ("연승", win_trend)):
+            vals = [(k, v) for k, v in trend.items() if v is not None]
+            if len(vals) >= 2:
+                dv = vals[-1][1] - vals[0][1]
+                if kind == "연패" and dv < -0.3:
+                    trend_notes.append(f"연패 깊을수록 정확도 악화({vals[0][1]:+.2f}→{vals[-1][1]:+.2f})")
+                elif kind == "연패" and dv > 0.2:
+                    trend_notes.append(f"연패 중 오히려 집중력 상승({vals[0][1]:+.2f}→{vals[-1][1]:+.2f})")
+                elif kind == "연승" and dv > 0.3:
+                    trend_notes.append(f"연승 깊을수록 정확도 향상({vals[0][1]:+.2f}→{vals[-1][1]:+.2f})")
+                elif kind == "연승" and dv < -0.2:
+                    trend_notes.append(f"연승 중에도 집중력 저하({vals[0][1]:+.2f}→{vals[-1][1]:+.2f})")
 
-        max_win_streak  = max((sl for _, sl, _ in win_streak_data),  default=0)
-        max_loss_streak = max((sl for _, sl, _ in loss_streak_data), default=0)
-        base_insight = (
-            f"연승 수 품질 {win_q_avg:+.2f} / 연패 {loss_q_avg:+.2f} (일반 {normal_avg:+.2f}). "
-            if win_q_avg is not None and loss_q_avg is not None
-            else (f"연패 수 품질 {loss_q_avg:+.2f} (일반 {normal_avg:+.2f}). "
-                  if loss_q_avg is not None
-                  else f"연승 수 품질 {win_q_avg:+.2f} (일반 {normal_avg:+.2f}). ")
-        )
-        streak_note = f"최대 연승 {max_win_streak}회 / 최대 연패 {max_loss_streak}회. " if max_win_streak or max_loss_streak else ""
-        cond_note   = ("흐름 속 집중력 우수" if is_strength else "연속 대국 시 멘탈 관리 필요")
-        insight     = base_insight + streak_note + (". ".join(trend_notes) + ". " if trend_notes else "") + cond_note
+        max_ws = max((sl for _, sl, _ in win_streak_data),  default=0)
+        max_ls = max((sl for _, sl, _ in loss_streak_data), default=0)
+        if win_q_avg is not None and loss_q_avg is not None:
+            base = f"연승 수품질 {win_q_avg:+.2f} / 연패 {loss_q_avg:+.2f} (일반 {normal_avg:+.2f}). "
+        elif loss_q_avg is not None:
+            base = f"연패 수품질 {loss_q_avg:+.2f} (일반 {normal_avg:+.2f}). "
+        else:
+            base = f"연승 수품질 {win_q_avg:+.2f} (일반 {normal_avg:+.2f}). "  # type: ignore[str-format]
+        insight = (base
+                   + (f"최대 연승 {max_ws}회 / 연패 {max_ls}회. " if max_ws or max_ls else "")
+                   + (". ".join(trend_notes) + ". " if trend_notes else "")
+                   + ("흐름 속 집중력 우수" if is_strength else "연속 대국 시 멘탈 관리 필요"))
 
-        # ── representative_games: 품질 차이가 가장 극명한 게임 우선 ──
-        # 연패 게임: 품질 낮은 순(틸트 가장 심한 게임)
-        loss_rep = sorted(loss_streak_data, key=lambda x: x[2])
-        # 연승 게임: 품질 높은 순(흐름 가장 좋은 게임) → is_strength 반영
-        win_rep  = sorted(win_streak_data,  key=lambda x: -x[2])
+        # ── representative_games ──────────────────────────────────
+        loss_rep = sorted(loss_streak_data, key=lambda x: x[2])        # 품질 낮은 순
+        win_rep  = sorted(win_streak_data,  key=lambda x: -x[2])       # 품질 높은 순
 
         rep_games: List[Tuple[GameSummary, float, dict]] = []
         for g, sl, q in loss_rep[:6]:
@@ -853,26 +846,24 @@ class TacticalAnalysisService:
                 "context":      f"연승 {sl}연속 중 — 수 품질 {q:+.2f} (일반 대비 {q - normal_avg:+.2f})",
             }))
 
-        # ── chart_data: streak 깊이별 추이 (프론트엔드 차트용) ────────
+        # ── chart_data ────────────────────────────────────────────
         chart_data = {
             "normal_avg":  round(normal_avg, 3),
-            "win_trend":   [{"depth": k, "avg_q": round(v, 3)}
-                            for k, v in win_trend.items()  if v is not None],
-            "loss_trend":  [{"depth": k, "avg_q": round(v, 3)}
-                            for k, v in loss_trend.items() if v is not None],
+            "win_trend":   [{"depth": k, "avg_q": round(v, 3)} for k, v in win_trend.items()  if v is not None],
+            "loss_trend":  [{"depth": k, "avg_q": round(v, 3)} for k, v in loss_trend.items() if v is not None],
             "win_count":   len(win_streak_data),
             "loss_count":  len(loss_streak_data),
+            "normal_count": len(normal_q),
         }
 
         return PatternResult(
             label="틸트(Tilt) 저항력", icon="🧠",
             description="연승/연패 구간 수 정확도 추이 — 심리적 흐름이 플레이 품질에 미치는 영향 (상황 5)",
             score=score, is_strength=is_strength,
-            games_analyzed=streak_count,   # sf 유무 관계없이 실제 streak 게임 수
-            detail=detail,
-            category="time", situation_id=5,
+            games_analyzed=streak_count,
+            detail=detail, category="time", situation_id=5,
             insight=insight,
-            key_metric_value=key_val, key_metric_label=key_lbl, key_metric_unit=key_unit,
+            key_metric_value=key_val, key_metric_label=key_lbl, key_metric_unit="pts",
             evidence_count=streak_count,
             representative_games=rep_games,
             chart_data=chart_data,

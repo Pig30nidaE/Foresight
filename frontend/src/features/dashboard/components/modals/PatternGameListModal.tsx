@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
-  ResponsiveContainer, LineChart, Line,
-  XAxis, YAxis, Tooltip, ReferenceLine, Legend,
+  ResponsiveContainer, ComposedChart, Line, Bar,
+  XAxis, YAxis, Tooltip, ReferenceLine, Legend, Cell,
 } from "recharts";
 import type { TacticalPattern, PatternGameItem } from "@/features/dashboard/types";
 
@@ -83,85 +83,123 @@ const RESULT_DOT: Record<string, string> = {
 
 // ─── TiltTrendChart (situation_id=5 전용) ────────────────────
 interface TiltChartData {
-  normal_avg: number;
-  win_trend:  Array<{ depth: string; avg_q: number }>;
-  loss_trend: Array<{ depth: string; avg_q: number }>;
-  win_count:  number;
-  loss_count: number;
+  normal_avg:   number;
+  win_trend:    Array<{ depth: string; avg_q: number }>;
+  loss_trend:   Array<{ depth: string; avg_q: number }>;
+  win_count:    number;
+  loss_count:   number;
+  normal_count: number;
 }
 
 function TiltTrendChart({ data }: { data: TiltChartData }) {
-  // win_trend · loss_trend를 depth 기준으로 merge
   const depthOrder = ["2연속", "3연속", "4연속", "5+연속"];
-  const winMap  = Object.fromEntries(data.win_trend.map(d  => [d.depth,  d.avg_q]));
+  const winMap  = Object.fromEntries(data.win_trend.map(d  => [d.depth, d.avg_q]));
   const lossMap = Object.fromEntries(data.loss_trend.map(d => [d.depth, d.avg_q]));
 
   const allDepths = depthOrder.filter(d => d in winMap || d in lossMap);
-  const chartRows = allDepths.map(depth => ({
+  // 추이 차트 데이터
+  const trendRows = allDepths.map(depth => ({
     depth,
     연승: winMap[depth]  ?? null,
     연패: lossMap[depth] ?? null,
   }));
 
-  if (chartRows.length === 0) return null;
+  // 전체 평균 (각 trend 값의 평균)
+  const avgOf = (arr: Array<{ depth: string; avg_q: number }>) =>
+    arr.length ? arr.reduce((s, d) => s + d.avg_q, 0) / arr.length : null;
+  const winAvg  = avgOf(data.win_trend);
+  const lossAvg = avgOf(data.loss_trend);
+  const gap     = winAvg != null && lossAvg != null ? winAvg - lossAvg : null;
+
+  // gap 바 차트 데이터 (연승/연패/일반 비교)
+  const barRows = [
+    { name: "일반",  value: data.normal_avg,  color: "#71717a" },
+    ...(lossAvg != null ? [{ name: "연패 중", value: lossAvg, color: "#f87171" }] : []),
+    ...(winAvg  != null ? [{ name: "연승 중", value: winAvg,  color: "#34d399" }] : []),
+  ];
 
   const fmt = (v: number) => v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2);
 
+  if (trendRows.length === 0 && barRows.length <= 1) return null;
+
   return (
-    <div className="mt-3 mb-1">
-      <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">
-        streak 깊이별 수 품질 추이
-      </p>
-      <ResponsiveContainer width="100%" height={160}>
-        <LineChart data={chartRows} margin={{ top: 4, right: 12, left: -10, bottom: 4 }}>
-          <XAxis
-            dataKey="depth"
-            tick={{ fill: "#71717a", fontSize: 10 }}
-            axisLine={false} tickLine={false}
-          />
-          <YAxis
-            tickFormatter={fmt}
-            tick={{ fill: "#71717a", fontSize: 9 }}
-            axisLine={false} tickLine={false}
-            domain={["auto", "auto"]}
-          />
-          <Tooltip
-            contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
-            labelStyle={{ color: "#a1a1aa", fontSize: 11 }}
-            formatter={(v: number | undefined) => v != null ? [fmt(v), "수 품질"] : ["-", "수 품질"]}
-          />
-          <Legend
-            iconType="circle" iconSize={7}
-            wrapperStyle={{ fontSize: 10, color: "#a1a1aa", paddingTop: 4 }}
-          />
-          {/* 일반 게임 평균 기준선 */}
-          <ReferenceLine
-            y={data.normal_avg}
-            stroke="#52525b"
-            strokeDasharray="4 3"
-            label={{ value: `기준 ${fmt(data.normal_avg)}`, fill: "#71717a", fontSize: 9, position: "insideTopRight" }}
-          />
-          <Line
-            type="monotone"
-            dataKey="연승"
-            stroke="#34d399"
-            strokeWidth={2}
-            dot={{ fill: "#34d399", r: 4 }}
-            connectNulls
-          />
-          <Line
-            type="monotone"
-            dataKey="연패"
-            stroke="#f87171"
-            strokeWidth={2}
-            dot={{ fill: "#f87171", r: 4 }}
-            connectNulls
-          />
-        </LineChart>
-      </ResponsiveContainer>
-      <div className="flex justify-center gap-6 text-[10px] text-zinc-500 mt-1">
-        <span>연승 {data.win_count}게임</span>
-        <span>연패 {data.loss_count}게임</span>
+    <div className="mt-3 mb-2 space-y-3">
+      {/* ── 연승/연패 평균 비교 요약 ── */}
+      <div className="bg-zinc-900/60 rounded-xl p-3 space-y-2">
+        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">연승 vs 연패 수 품질 비교</p>
+        {/* 바 비교 */}
+        <ResponsiveContainer width="100%" height={72}>
+          <ComposedChart data={barRows} layout="vertical" margin={{ top: 2, right: 40, left: 32, bottom: 2 }}>
+            <XAxis type="number" domain={["auto", "auto"]} tickFormatter={fmt}
+              tick={{ fill: "#52525b", fontSize: 9 }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name"
+              tick={{ fill: "#a1a1aa", fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
+            <Tooltip
+              contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+              formatter={(v: number | undefined) => v != null ? [fmt(v), "평균 수 품질"] : ["-", ""]}
+            />
+            <ReferenceLine x={data.normal_avg} stroke="#3f3f46" strokeDasharray="3 3" />
+            <Bar dataKey="value" radius={[0, 3, 3, 0]} barSize={14}>
+              {barRows.map((row, i) => (
+                <Cell key={i} fill={row.color} fillOpacity={0.75} />
+              ))}
+            </Bar>
+          </ComposedChart>
+        </ResponsiveContainer>
+        {/* gap 강조 표시 */}
+        {gap != null && (
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[10px] text-zinc-500">연승 vs 연패 품질 차이</span>
+            <span className={`text-sm font-bold font-mono ${
+              gap > 0.3 ? "text-emerald-400" : gap < -0.3 ? "text-red-400" : "text-zinc-300"
+            }`}>
+              {gap > 0 ? "+" : ""}{gap.toFixed(2)}
+              <span className="text-[10px] font-normal text-zinc-500 ml-1">pts</span>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── streak 깊이별 추이 (깊이 데이터 2개 이상일 때만) ── */}
+      {trendRows.length >= 2 && (
+        <div>
+          <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">
+            streak 깊이별 추이 ({allDepths[0]} → {allDepths[allDepths.length - 1]})
+          </p>
+          <ResponsiveContainer width="100%" height={148}>
+            <ComposedChart data={trendRows} margin={{ top: 4, right: 12, left: -10, bottom: 4 }}>
+              <XAxis dataKey="depth" tick={{ fill: "#71717a", fontSize: 10 }}
+                axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={fmt} tick={{ fill: "#71717a", fontSize: 9 }}
+                axisLine={false} tickLine={false} domain={["auto", "auto"]} />
+              <Tooltip
+                contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
+                labelStyle={{ color: "#a1a1aa", fontSize: 11 }}
+                formatter={(v: number | undefined, name: string | undefined) =>
+                  v != null ? [`${fmt(v)} pts`, name ?? ""] : ["-", name ?? ""]
+                }
+              />
+              <Legend iconType="circle" iconSize={7}
+                wrapperStyle={{ fontSize: 10, color: "#a1a1aa", paddingTop: 4 }} />
+              <ReferenceLine y={data.normal_avg} stroke="#3f3f46" strokeDasharray="4 3"
+                label={{ value: `일반 ${fmt(data.normal_avg)}`, fill: "#52525b",
+                         fontSize: 9, position: "insideTopRight" }} />
+              <Line type="monotone" dataKey="연승" stroke="#34d399" strokeWidth={2.5}
+                dot={{ fill: "#34d399", r: 4.5, strokeWidth: 0 }} activeDot={{ r: 6 }}
+                connectNulls />
+              <Line type="monotone" dataKey="연패" stroke="#f87171" strokeWidth={2.5}
+                dot={{ fill: "#f87171", r: 4.5, strokeWidth: 0 }} activeDot={{ r: 6 }}
+                connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* 게임 수 메타 */}
+      <div className="flex justify-center gap-5 text-[10px] text-zinc-600">
+        {winAvg  != null && <span className="text-emerald-500/70">연승 {data.win_count}게임 분석</span>}
+        {lossAvg != null && <span className="text-red-500/70">연패 {data.loss_count}게임 분석</span>}
+        {data.normal_count > 0 && <span>일반 {data.normal_count}게임 기준</span>}
       </div>
     </div>
   );
