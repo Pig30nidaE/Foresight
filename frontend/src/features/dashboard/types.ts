@@ -135,13 +135,14 @@ export interface TacticalPattern {
   key_metric_label?: string;
   key_metric_unit?: string;
   evidence_count?: number;
-  /** streak 깊이별 수 품질 추이 (ситуация 5 틸트 전용) */
+  /** streak 깊이별 수 품질 추이 (상황 5 틸트 전용) */
   chart_data?: {
-    normal_avg: number;
-    win_trend:  Array<{ depth: string; avg_q: number }>;
-    loss_trend: Array<{ depth: string; avg_q: number }>;
-    win_count:  number;
-    loss_count: number;
+    normal_avg:   number;
+    win_trend:    Array<{ depth: string; avg_q: number }>;
+    loss_trend:   Array<{ depth: string; avg_q: number }>;
+    win_count:    number;
+    loss_count:   number;
+    normal_count: number;
   } | null;
 }
 
