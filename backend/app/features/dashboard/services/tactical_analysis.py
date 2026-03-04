@@ -644,10 +644,10 @@ class TacticalAnalysisService:
         if len(sorted_g) < 10:
             return None
 
-        # (game, streak_type, streak_len, quality_score)
+        # (game, streak_len, quality_score)  — sf 데이터 있는 게임만 포함
         win_streak_data: List[Tuple[GameSummary, int, float]] = []
         loss_streak_data: List[Tuple[GameSummary, int, float]] = []
-        normal_q: List[float] = []
+        normal_q: List[float] = []         # streak 아닌 게임 품질 (기준선용)
 
         streak = 0
         last_result: Optional[str] = None
@@ -655,25 +655,38 @@ class TacticalAnalysisService:
         for g in sorted_g:
             total_mv = _estimate_total_moves(g.pgn or "")
             r = g.result.value if total_mv >= 15 else None
-            q = _game_quality_score(sf_cache.get(g.game_id, []))
+
+            # ── Stockfish 수 품질: 실제 is_my_move 데이터가 있는 게임만 계산 ──
+            # sf_cache에 없거나 내 수 항목이 없으면 None → 품질 통계에서 제외
+            sf_moves = sf_cache.get(g.game_id, [])
+            my_moves = [m for m in sf_moves if m.get("is_my_move")]
+            if my_moves:
+                q: Optional[float] = sum(
+                    _move_weight(float(m.get("cp_loss", 0))) for m in my_moves
+                ) / len(my_moves)
+            else:
+                q = None   # 데이터 없음 — 0.0으로 처리하지 않음
 
             if r in ("win", "loss"):
+                # streak 추적은 결과만으로 수행 (sf 데이터 유무 무관)
                 if r == last_result:
                     streak += 1
                 else:
                     streak = 1
                     last_result = r
                 if streak >= 2:   # 2연속 이상만 streak으로 집계
-                    if r == "win":
-                        win_streak_data.append((g, streak, q))
-                    else:
-                        loss_streak_data.append((g, streak, q))
+                    if q is not None:   # sf 데이터 있는 게임만 품질 등록
+                        if r == "win":
+                            win_streak_data.append((g, streak, q))
+                        else:
+                            loss_streak_data.append((g, streak, q))
                 else:
-                    normal_q.append(q)
+                    if q is not None:
+                        normal_q.append(q)
             else:
+                # 무승부/짧은 게임 — streak 리셋, normal_q에도 포함하지 않음
                 streak = 0
                 last_result = None
-                normal_q.append(q)
 
         if len(win_streak_data) + len(loss_streak_data) < 5:
             return None
