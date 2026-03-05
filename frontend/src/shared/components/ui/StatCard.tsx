@@ -13,17 +13,17 @@ export default function StatCard({ label, value, highlight, color }: StatCardPro
       className={clsx(
         "rounded-xl border p-4 flex flex-col gap-1",
         highlight
-          ? "border-emerald-500/40 bg-emerald-950/30"
-          : "border-zinc-800 bg-zinc-900"
+          ? "border-chess-accent/40 bg-chess-accent/10"
+          : "border-chess-border bg-chess-surface"
       )}
     >
-      <span className="text-xs text-zinc-500 uppercase tracking-wide">{label}</span>
+      <span className="text-xs text-chess-muted uppercase tracking-wide">{label}</span>
       <span
         className={clsx(
           "text-2xl font-bold",
           color === "emerald" && "text-emerald-400",
           color === "red" && "text-red-400",
-          !color && "text-white"
+          !color && "text-chess-primary"
         )}
       >
         {value}

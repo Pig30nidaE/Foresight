@@ -33,7 +33,7 @@ export default function OpeningTreeTable({ data }: Props) {
   const [selectedNode, setSelectedNode] = useState<OpeningTreeNode | null>(null);
 
   if (!data.length) {
-    return <p className="text-zinc-500 text-sm py-3">오프닝 데이터가 없습니다.</p>;
+    return <p className="text-chess-muted text-sm py-3">오프닝 데이터가 없습니다.</p>;
   }
 
   const toggle = (prefix: string) => {
@@ -55,8 +55,8 @@ export default function OpeningTreeTable({ data }: Props) {
           key={`${indent}-${node.eco_prefix}-${node.name}`}
           className={`group flex items-center justify-between py-1.5 px-2 rounded transition-colors cursor-pointer ${
             isGroup
-              ? "hover:bg-zinc-800/70 bg-zinc-900/40"
-              : "hover:bg-zinc-800/40"
+              ? "hover:bg-chess-border/50 bg-chess-surface/40"
+              : "hover:bg-chess-border/30"
           }`}
           style={{ paddingLeft: indent * 20 + 8 }}
           onClick={() => setSelectedNode(node)}
@@ -65,27 +65,27 @@ export default function OpeningTreeTable({ data }: Props) {
           <div className="flex items-center gap-1.5 min-w-0">
             {isGroup && node.children?.length ? (
               <span
-                className="text-zinc-500 text-xs w-3 shrink-0 hover:text-zinc-300 transition-colors"
+                className="text-chess-muted text-xs w-3 shrink-0 hover:text-chess-primary transition-colors"
                 onClick={(e) => { e.stopPropagation(); toggle(node.name); }}
               >
                 {expanded.has(node.name) ? "▾" : "▸"}
               </span>
             ) : (
-              <span className="text-zinc-700 text-xs w-3 shrink-0">└</span>
+              <span className="text-chess-border text-xs w-3 shrink-0">└</span>
             )}
             {/* Level에 따라 다르게 표시 */}
             {isGroup ? (
               // Level 1: 실제 오프닝명 — ECO 단일 알파벳 숨김
-              <span className="font-semibold text-sm text-zinc-200 truncate">
+              <span className="font-semibold text-sm text-chess-primary truncate">
                 {node.name}
               </span>
             ) : (
               // Level 2: ECO3 배지 + 변형명
               <>
-                <span className="font-bold shrink-0 text-amber-300 text-xs font-mono">
+                <span className="font-bold shrink-0 text-chess-accent text-xs font-mono">
                   {node.eco_prefix}
                 </span>
-                <span className="text-zinc-400 truncate text-xs">
+                <span className="text-chess-muted truncate text-xs">
                   {node.name.includes(":") ? node.name.split(":", 2)[1].trim() : node.name}
                 </span>
               </>
@@ -94,12 +94,12 @@ export default function OpeningTreeTable({ data }: Props) {
 
           {/* Stats */}
           <div className="flex items-center gap-3 text-xs shrink-0 ml-2">
-            <span className="text-zinc-500">{node.games}게임</span>
+            <span className="text-chess-muted">{node.games}게임</span>
             <div className="flex gap-1">
               <span className="text-emerald-400">{node.wins}승</span>
-              <span className="text-zinc-600">/</span>
-              <span className="text-zinc-400">{node.draws}무</span>
-              <span className="text-zinc-600">/</span>
+              <span className="text-chess-muted">/</span>
+              <span className="text-chess-muted">{node.draws}무</span>
+              <span className="text-chess-muted">/</span>
               <span className="text-red-400">{node.losses}패</span>
             </div>
             <span className={`font-bold w-10 text-right ${winColor(node.win_rate)}`}>
@@ -113,7 +113,7 @@ export default function OpeningTreeTable({ data }: Props) {
       {data.length > TOP_N && (
         <button
           onClick={() => setShowAll((v) => !v)}
-          className="w-full mt-1 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 rounded transition-colors"
+          className="w-full mt-1 py-1.5 text-xs text-chess-muted hover:text-chess-primary hover:bg-chess-border/30 rounded transition-colors"
         >
           {showAll ? `▲ 접기` : `▼ 더 보기 (${data.length - TOP_N}개 더)`}
         </button>

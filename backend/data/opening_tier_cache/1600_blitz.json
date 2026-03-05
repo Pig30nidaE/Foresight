@@ -1,0 +1,849 @@
+{
+  "A00": {
+    "eco": "A00",
+    "name": "Starting Position",
+    "white_wins": 3720485651,
+    "draws": 292459913,
+    "black_wins": 3460905013,
+    "depth": 0,
+    "moves": []
+  },
+  "A10": {
+    "eco": "A10",
+    "name": "English Opening",
+    "white_wins": 122714361,
+    "draws": 10107945,
+    "black_wins": 109323420,
+    "depth": 1,
+    "moves": [
+      "c2c4"
+    ]
+  },
+  "A20": {
+    "eco": "A20",
+    "name": "English Opening: King's English Variation",
+    "white_wins": 36566180,
+    "draws": 2768342,
+    "black_wins": 31658006,
+    "depth": 2,
+    "moves": [
+      "c2c4",
+      "e7e5"
+    ]
+  },
+  "A30": {
+    "eco": "A30",
+    "name": "English Opening: Symmetrical Variation",
+    "white_wins": 13999846,
+    "draws": 1219008,
+    "black_wins": 12241083,
+    "depth": 2,
+    "moves": [
+      "c2c4",
+      "c7c5"
+    ]
+  },
+  "A45": {
+    "eco": "A45",
+    "name": "Indian Defense",
+    "white_wins": 172254808,
+    "draws": 16051383,
+    "black_wins": 165131483,
+    "depth": 2,
+    "moves": [
+      "d2d4",
+      "g8f6"
+    ]
+  },
+  "A46": {
+    "eco": "A46",
+    "name": "Indian Defense: Knights Variation",
+    "white_wins": 38796523,
+    "draws": 3972838,
+    "black_wins": 36074825,
+    "depth": 3,
+    "moves": [
+      "d2d4",
+      "g8f6",
+      "g1f3"
+    ]
+  },
+  "B00": {
+    "eco": "B00",
+    "name": "Pirc Defense",
+    "white_wins": 18833186,
+    "draws": 1654027,
+    "black_wins": 18798835,
+    "depth": 4,
+    "moves": [
+      "e2e4",
+      "d7d6",
+      "d2d4",
+      "g8f6"
+    ]
+  },
+  "B01": {
+    "eco": "B01",
+    "name": "Scandinavian Defense",
+    "white_wins": 227291219,
+    "draws": 17859624,
+    "black_wins": 221124398,
+    "depth": 2,
+    "moves": [
+      "e2e4",
+      "d7d5"
+    ]
+  },
+  "B02": {
+    "eco": "B02",
+    "name": "Alekhine Defense",
+    "white_wins": 42150108,
+    "draws": 3354760,
+    "black_wins": 41563393,
+    "depth": 2,
+    "moves": [
+      "e2e4",
+      "g8f6"
+    ]
+  },
+  "B06": {
+    "eco": "B06",
+    "name": "Modern Defense",
+    "white_wins": 72392518,
+    "draws": 5480832,
+    "black_wins": 71041036,
+    "depth": 2,
+    "moves": [
+      "e2e4",
+      "g7g6"
+    ]
+  },
+  "B10": {
+    "eco": "B10",
+    "name": "Caro-Kann Defense",
+    "white_wins": 149658754,
+    "draws": 13009764,
+    "black_wins": 152879993,
+    "depth": 2,
+    "moves": [
+      "e2e4",
+      "c7c6"
+    ]
+  },
+  "B12": {
+    "eco": "B12",
+    "name": "Caro-Kann Defense: Advance Variation",
+    "white_wins": 24509675,
+    "draws": 2019940,
+    "black_wins": 24468951,
+    "depth": 5,
+    "moves": [
+      "e2e4",
+      "c7c6",
+      "d2d4",
+      "d7d5",
+      "e4e5"
+    ]
+  },
+  "B13": {
+    "eco": "B13",
+    "name": "Caro-Kann: Exchange",
+    "white_wins": 19861059,
+    "draws": 1985703,
+    "black_wins": 19726980,
+    "depth": 6,
+    "moves": [
+      "e2e4",
+      "c7c6",
+      "d2d4",
+      "d7d5",
+      "e4d5",
+      "c6d5"
+    ]
+  },
+  "B15": {
+    "eco": "B15",
+    "name": "Caro-Kann Defense",
+    "white_wins": 15957246,
+    "draws": 1440736,
+    "black_wins": 14322519,
+    "depth": 5,
+    "moves": [
+      "e2e4",
+      "c7c6",
+      "d2d4",
+      "d7d5",
+      "b1c3"
+    ]
+  },
+  "B20": {
+    "eco": "B20",
+    "name": "Sicilian Defense",
+    "white_wins": 367246958,
+    "draws": 30131132,
+    "black_wins": 368743514,
+    "depth": 2,
+    "moves": [
+      "e2e4",
+      "c7c5"
+    ]
+  },
+  "B23": {
+    "eco": "B23",
+    "name": "Sicilian Defense: Closed",
+    "white_wins": 38538630,
+    "draws": 3078913,
+    "black_wins": 36654380,
+    "depth": 3,
+    "moves": [
+      "e2e4",
+      "c7c5",
+      "b1c3"
+    ]
+  },
+  "B30": {
+    "eco": "B30",
+    "name": "Sicilian Defense: Old Sicilian",
+    "white_wins": 82935251,
+    "draws": 6963307,
+    "black_wins": 80702612,
+    "depth": 4,
+    "moves": [
+      "e2e4",
+      "c7c5",
+      "g1f3",
+      "b8c6"
+    ]
+  },
+  "B40": {
+    "eco": "B40",
+    "name": "Sicilian Defense: French Variation",
+    "white_wins": 37305157,
+    "draws": 3141725,
+    "black_wins": 39272688,
+    "depth": 4,
+    "moves": [
+      "e2e4",
+      "c7c5",
+      "g1f3",
+      "e7e6"
+    ]
+  },
+  "B50": {
+    "eco": "B50",
+    "name": "Sicilian Defense: Modern Variations",
+    "white_wins": 62255392,
+    "draws": 5540037,
+    "black_wins": 62081076,
+    "depth": 4,
+    "moves": [
+      "e2e4",
+      "c7c5",
+      "g1f3",
+      "d7d6"
+    ]
+  },
+  "B70": {
+    "eco": "B70",
+    "name": "Sicilian Defense: Dragon Variation",
+    "white_wins": 4559313,
+    "draws": 458483,
+    "black_wins": 4839433,
+    "depth": 10,
+    "moves": [
+      "e2e4",
+      "c7c5",
+      "g1f3",
+      "d7d6",
+      "d2d4",
+      "c5d4",
+      "f3d4",
+      "g8f6",
+      "b1c3",
+      "g7g6"
+    ]
+  },
+  "B80": {
+    "eco": "B80",
+    "name": "Sicilian Defense: Scheveningen Variation",
+    "white_wins": 1423497,
+    "draws": 123807,
+    "black_wins": 1461798,
+    "depth": 10,
+    "moves": [
+      "e2e4",
+      "c7c5",
+      "g1f3",
+      "d7d6",
+      "d2d4",
+      "c5d4",
+      "f3d4",
+      "g8f6",
+      "b1c3",
+      "e7e6"
+    ]
+  },
+  "B90": {
+    "eco": "B90",
+    "name": "Sicilian Defense: Najdorf Variation",
+    "white_wins": 12365594,
+    "draws": 1110513,
+    "black_wins": 12580470,
+    "depth": 10,
+    "moves": [
+      "e2e4",
+      "c7c5",
+      "g1f3",
+      "d7d6",
+      "d2d4",
+      "c5d4",
+      "f3d4",
+      "g8f6",
+      "b1c3",
+      "a7a6"
+    ]
+  },
+  "C00": {
+    "eco": "C00",
+    "name": "French Defense",
+    "white_wins": 213816169,
+    "draws": 17399925,
+    "black_wins": 213358411,
+    "depth": 2,
+    "moves": [
+      "e2e4",
+      "e7e6"
+    ]
+  },
+  "C02": {
+    "eco": "C02",
+    "name": "French Defense: Advance Variation",
+    "white_wins": 27588858,
+    "draws": 2189851,
+    "black_wins": 29124836,
+    "depth": 5,
+    "moves": [
+      "e2e4",
+      "e7e6",
+      "d2d4",
+      "d7d5",
+      "e4e5"
+    ]
+  },
+  "C10": {
+    "eco": "C10",
+    "name": "French Defense: Paulsen Variation",
+    "white_wins": 18640885,
+    "draws": 1629035,
+    "black_wins": 16821105,
+    "depth": 5,
+    "moves": [
+      "e2e4",
+      "e7e6",
+      "d2d4",
+      "d7d5",
+      "b1c3"
+    ]
+  },
+  "C20": {
+    "eco": "C20",
+    "name": "King's Pawn Game",
+    "white_wins": 901266379,
+    "draws": 66935802,
+    "black_wins": 797877741,
+    "depth": 2,
+    "moves": [
+      "e2e4",
+      "e7e5"
+    ]
+  },
+  "C30": {
+    "eco": "C30",
+    "name": "King's Gambit",
+    "white_wins": 55535317,
+    "draws": 3198203,
+    "black_wins": 47211301,
+    "depth": 3,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "f2f4"
+    ]
+  },
+  "C40": {
+    "eco": "C40",
+    "name": "King's Knight Opening",
+    "white_wins": 547690121,
+    "draws": 42031275,
+    "black_wins": 482718108,
+    "depth": 3,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3"
+    ]
+  },
+  "C41": {
+    "eco": "C41",
+    "name": "Philidor Defense",
+    "white_wins": 83108996,
+    "draws": 6636300,
+    "black_wins": 72613294,
+    "depth": 4,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "d7d6"
+    ]
+  },
+  "C42": {
+    "eco": "C42",
+    "name": "Petrov's Defense",
+    "white_wins": 66331471,
+    "draws": 4988806,
+    "black_wins": 58766942,
+    "depth": 4,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "g8f6"
+    ]
+  },
+  "C44": {
+    "eco": "C44",
+    "name": "Scotch Game",
+    "white_wins": 65524203,
+    "draws": 5093962,
+    "black_wins": 53551189,
+    "depth": 5,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "d2d4"
+    ]
+  },
+  "C45": {
+    "eco": "C45",
+    "name": "Scotch Game",
+    "white_wins": 34230609,
+    "draws": 2969231,
+    "black_wins": 29778206,
+    "depth": 7,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "d2d4",
+      "e5d4",
+      "f3d4"
+    ]
+  },
+  "C46": {
+    "eco": "C46",
+    "name": "Three Knights Opening",
+    "white_wins": 48868819,
+    "draws": 4246450,
+    "black_wins": 47020329,
+    "depth": 5,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "b1c3"
+    ]
+  },
+  "C47": {
+    "eco": "C47",
+    "name": "Four Knights Game",
+    "white_wins": 38624228,
+    "draws": 3468382,
+    "black_wins": 35824436,
+    "depth": 6,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "b1c3",
+      "g8f6"
+    ]
+  },
+  "C50": {
+    "eco": "C50",
+    "name": "Italian Game",
+    "white_wins": 153244804,
+    "draws": 11081658,
+    "black_wins": 137651678,
+    "depth": 5,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "f1c4"
+    ]
+  },
+  "C55": {
+    "eco": "C55",
+    "name": "Italian Game: Two Knights Defense",
+    "white_wins": 57029960,
+    "draws": 3845523,
+    "black_wins": 49898424,
+    "depth": 6,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "f1c4",
+      "g8f6"
+    ]
+  },
+  "C60": {
+    "eco": "C60",
+    "name": "Ruy Lopez",
+    "white_wins": 77310003,
+    "draws": 6484915,
+    "black_wins": 67197035,
+    "depth": 5,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "f1b5"
+    ]
+  },
+  "C65": {
+    "eco": "C65",
+    "name": "Ruy Lopez: Berlin Defense",
+    "white_wins": 15970775,
+    "draws": 1295755,
+    "black_wins": 13495792,
+    "depth": 6,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "f1b5",
+      "g8f6"
+    ]
+  },
+  "C78": {
+    "eco": "C78",
+    "name": "Ruy Lopez: Morphy Defense",
+    "white_wins": 6164739,
+    "draws": 597654,
+    "black_wins": 5527467,
+    "depth": 8,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "f1b5",
+      "a7a6",
+      "b5a4",
+      "g8f6"
+    ]
+  },
+  "C80": {
+    "eco": "C80",
+    "name": "Ruy Lopez: Open",
+    "white_wins": 379977,
+    "draws": 42277,
+    "black_wins": 331944,
+    "depth": 10,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "f1b5",
+      "a7a6",
+      "b5a4",
+      "g8f6",
+      "e1g1",
+      "f6e4"
+    ]
+  },
+  "C84": {
+    "eco": "C84",
+    "name": "Ruy Lopez: Closed",
+    "white_wins": 1486704,
+    "draws": 165301,
+    "black_wins": 1435931,
+    "depth": 10,
+    "moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "f1b5",
+      "a7a6",
+      "b5a4",
+      "g8f6",
+      "e1g1",
+      "f8e7"
+    ]
+  },
+  "D00": {
+    "eco": "D00",
+    "name": "Queen's Pawn Game",
+    "white_wins": 399478701,
+    "draws": 32034397,
+    "black_wins": 341957758,
+    "depth": 2,
+    "moves": [
+      "d2d4",
+      "d7d5"
+    ]
+  },
+  "D02": {
+    "eco": "D02",
+    "name": "Queen's Pawn Game: London System",
+    "white_wins": 13387735,
+    "draws": 1240908,
+    "black_wins": 11627880,
+    "depth": 5,
+    "moves": [
+      "d2d4",
+      "d7d5",
+      "g1f3",
+      "g8f6",
+      "c1f4"
+    ]
+  },
+  "D06": {
+    "eco": "D06",
+    "name": "Queen's Gambit",
+    "white_wins": 153758452,
+    "draws": 12015001,
+    "black_wins": 126427758,
+    "depth": 3,
+    "moves": [
+      "d2d4",
+      "d7d5",
+      "c2c4"
+    ]
+  },
+  "D10": {
+    "eco": "D10",
+    "name": "Slav Defense",
+    "white_wins": 39955923,
+    "draws": 3527000,
+    "black_wins": 35039842,
+    "depth": 4,
+    "moves": [
+      "d2d4",
+      "d7d5",
+      "c2c4",
+      "c7c6"
+    ]
+  },
+  "D20": {
+    "eco": "D20",
+    "name": "Queen's Gambit Accepted",
+    "white_wins": 36605829,
+    "draws": 2543215,
+    "black_wins": 27401535,
+    "depth": 4,
+    "moves": [
+      "d2d4",
+      "d7d5",
+      "c2c4",
+      "d5c4"
+    ]
+  },
+  "D30": {
+    "eco": "D30",
+    "name": "Queen's Gambit Declined",
+    "white_wins": 55717054,
+    "draws": 4683216,
+    "black_wins": 47457044,
+    "depth": 4,
+    "moves": [
+      "d2d4",
+      "d7d5",
+      "c2c4",
+      "e7e6"
+    ]
+  },
+  "D37": {
+    "eco": "D37",
+    "name": "Queen's Gambit Declined: Three Knights Variation",
+    "white_wins": 16234186,
+    "draws": 1455746,
+    "black_wins": 13717091,
+    "depth": 7,
+    "moves": [
+      "d2d4",
+      "d7d5",
+      "c2c4",
+      "e7e6",
+      "b1c3",
+      "g8f6",
+      "g1f3"
+    ]
+  },
+  "D43": {
+    "eco": "D43",
+    "name": "Semi-Slav Defense",
+    "white_wins": 8034551,
+    "draws": 730687,
+    "black_wins": 6842168,
+    "depth": 8,
+    "moves": [
+      "d2d4",
+      "d7d5",
+      "c2c4",
+      "e7e6",
+      "b1c3",
+      "g8f6",
+      "g1f3",
+      "c7c6"
+    ]
+  },
+  "D50": {
+    "eco": "D50",
+    "name": "Queen's Gambit Declined: Modern Variation",
+    "white_wins": 8105971,
+    "draws": 761457,
+    "black_wins": 7102405,
+    "depth": 7,
+    "moves": [
+      "d2d4",
+      "d7d5",
+      "c2c4",
+      "e7e6",
+      "b1c3",
+      "g8f6",
+      "c1g5"
+    ]
+  },
+  "D80": {
+    "eco": "D80",
+    "name": "Grünfeld Defense",
+    "white_wins": 4486571,
+    "draws": 541056,
+    "black_wins": 4611190,
+    "depth": 6,
+    "moves": [
+      "d2d4",
+      "g8f6",
+      "c2c4",
+      "g7g6",
+      "b1c3",
+      "d7d5"
+    ]
+  },
+  "D85": {
+    "eco": "D85",
+    "name": "Grunfeld: Exchange",
+    "white_wins": 1208047,
+    "draws": 175346,
+    "black_wins": 1256426,
+    "depth": 12,
+    "moves": [
+      "d2d4",
+      "g8f6",
+      "c2c4",
+      "g7g6",
+      "b1c3",
+      "d7d5",
+      "c4d5",
+      "f6d5",
+      "e2e4",
+      "d5c3",
+      "b2c3",
+      "f8g7"
+    ]
+  },
+  "E00": {
+    "eco": "E00",
+    "name": "Catalan Opening",
+    "white_wins": 1025387,
+    "draws": 124550,
+    "black_wins": 836048,
+    "depth": 5,
+    "moves": [
+      "d2d4",
+      "g8f6",
+      "c2c4",
+      "e7e6",
+      "g2g3"
+    ]
+  },
+  "E12": {
+    "eco": "E12",
+    "name": "Queen's Indian Defense",
+    "white_wins": 1441834,
+    "draws": 180437,
+    "black_wins": 1363654,
+    "depth": 6,
+    "moves": [
+      "d2d4",
+      "g8f6",
+      "c2c4",
+      "e7e6",
+      "g1f3",
+      "b7b6"
+    ]
+  },
+  "E20": {
+    "eco": "E20",
+    "name": "Nimzo-Indian Defense",
+    "white_wins": 9063819,
+    "draws": 871072,
+    "black_wins": 8598597,
+    "depth": 6,
+    "moves": [
+      "d2d4",
+      "g8f6",
+      "c2c4",
+      "e7e6",
+      "b1c3",
+      "f8b4"
+    ]
+  },
+  "E60": {
+    "eco": "E60",
+    "name": "Indian Defense: West Indian Defense",
+    "white_wins": 22662046,
+    "draws": 2225065,
+    "black_wins": 22453694,
+    "depth": 4,
+    "moves": [
+      "d2d4",
+      "g8f6",
+      "c2c4",
+      "g7g6"
+    ]
+  },
+  "E80": {
+    "eco": "E80",
+    "name": "King's Indian Defense: Sämisch Variation",
+    "white_wins": 2073280,
+    "draws": 181120,
+    "black_wins": 1781542,
+    "depth": 9,
+    "moves": [
+      "d2d4",
+      "g8f6",
+      "c2c4",
+      "g7g6",
+      "b1c3",
+      "f8g7",
+      "e2e4",
+      "d7d6",
+      "f2f3"
+    ]
+  }
+}
