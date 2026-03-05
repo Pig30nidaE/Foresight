@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        # allow unrelated env vars (e.g. NEXT_PUBLIC_API_URL) without failing
+        extra = "ignore"
 
 
 settings = Settings()
