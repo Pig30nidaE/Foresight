@@ -153,9 +153,9 @@ function DashboardContent() {
       {/* ── Search Bar (Section 0) ── */}
       <form
         onSubmit={handleSearch}
-        className="flex flex-wrap gap-3 items-center bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5"
+        className="flex flex-wrap gap-3 items-center bg-chess-surface/60 border border-chess-border rounded-2xl p-5"
       >
-        <div className="flex rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+        <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
           {(["chess.com", "lichess"] as Platform[]).map((p) => (
             <button
               key={p}
@@ -163,8 +163,8 @@ function DashboardContent() {
               onClick={() => setPlatform(p)}
               className={`px-4 py-2 text-sm font-medium transition-colors ${
                 platform === p
-                  ? "bg-emerald-500 text-white"
-                  : "bg-zinc-900 text-zinc-400 hover:text-white"
+                  ? "bg-chess-accent text-white"
+                  : "bg-chess-surface text-chess-muted hover:text-chess-primary"
               }`}
             >
               {p === "chess.com" ? "Chess.com" : "Lichess"}
@@ -172,7 +172,7 @@ function DashboardContent() {
           ))}
         </div>
 
-        <div className="flex rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+        <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
           {TIME_CLASSES.map((tc) => {
             const count = tcGameCount(tc);
             return (
@@ -182,8 +182,8 @@ function DashboardContent() {
                 onClick={() => setTimeClass(tc)}
                 className={`px-3 py-2 text-sm capitalize transition-colors ${
                   timeClass === tc
-                    ? "bg-zinc-600 text-white"
-                    : "bg-zinc-900 text-zinc-400 hover:text-white"
+                    ? "bg-chess-primary text-white"
+                    : "bg-chess-surface text-chess-muted hover:text-chess-primary"
                 }`}
               >
                 {tc}
@@ -199,11 +199,11 @@ function DashboardContent() {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="유저명 입력 (예: MagnusCarlsen)"
-          className="flex-1 min-w-48 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition-colors"
+          className="flex-1 min-w-48 bg-chess-surface border border-chess-border rounded-lg px-4 py-2 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors"
         />
         <button
           type="submit"
-          className="bg-emerald-500 hover:bg-emerald-400 text-white font-semibold px-6 py-2 rounded-lg transition-colors shrink-0"
+          className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-6 py-2 rounded-lg transition-colors shrink-0"
         >
           분석 시작 →
         </button>
@@ -212,7 +212,7 @@ function DashboardContent() {
       {/* ── 기간 탭 ── */}
       {submitted && (
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg overflow-hidden border border-zinc-800 shrink-0">
+          <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
             {PERIOD_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -220,8 +220,8 @@ function DashboardContent() {
                 onClick={() => setPeriod(opt.value)}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                   period === opt.value
-                    ? "bg-emerald-600 text-white"
-                    : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                    ? "bg-chess-accent text-white"
+                    : "bg-chess-surface text-chess-muted hover:text-chess-primary hover:bg-chess-border"
                 }`}
               >
                 {opt.label}
@@ -229,25 +229,25 @@ function DashboardContent() {
             ))}
           </div>
           {period === "custom" && (
-            <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <div className="flex items-center gap-2 text-xs text-chess-muted">
               <input
                 type="date"
                 value={pendingFrom}
                 onChange={(e) => setPendingFrom(e.target.value)}
-                className="bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+                className="bg-chess-surface border border-chess-border rounded-md px-2 py-1.5 text-chess-primary focus:outline-none focus:border-chess-accent"
               />
               <span>~</span>
               <input
                 type="date"
                 value={pendingTo}
                 onChange={(e) => setPendingTo(e.target.value)}
-                className="bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500"
+                className="bg-chess-surface border border-chess-border rounded-md px-2 py-1.5 text-chess-primary focus:outline-none focus:border-chess-accent"
               />
               <button
                 type="button"
                 onClick={() => { setCustomFrom(pendingFrom); setCustomTo(pendingTo); }}
                 disabled={!pendingFrom}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-md font-medium transition-colors"
+                className="px-3 py-1.5 bg-chess-accent hover:bg-chess-accent/80 disabled:opacity-40 text-white rounded-md font-medium transition-colors"
               >
                 적용
               </button>
@@ -257,7 +257,7 @@ function DashboardContent() {
       )}
 
       {!submitted && (
-        <div className="flex flex-col items-center py-24 gap-3 text-zinc-600">
+        <div className="flex flex-col items-center py-24 gap-3 text-chess-muted">
           <span className="text-5xl select-none">♟️</span>
           <p className="text-sm">유저명을 입력하고 분석을 시작하세요.</p>
         </div>
@@ -273,17 +273,17 @@ function DashboardContent() {
                 <img
                   src={profile.avatar_url}
                   alt={submitted}
-                  className="w-16 h-16 rounded-full border-2 border-zinc-700"
+                  className="w-16 h-16 rounded-full border-2 border-chess-border"
                 />
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-2xl font-bold text-white truncate">{submitted}</h2>
-                  <span className="text-sm text-zinc-500 bg-zinc-800 px-2.5 py-1 rounded-full capitalize">
+                  <h2 className="text-2xl font-bold text-chess-primary truncate">{submitted}</h2>
+                  <span className="text-sm text-chess-muted bg-chess-surface px-2.5 py-1 rounded-full capitalize">
                     {submittedPlatform}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-3 text-sm text-zinc-400 mt-1">
+                <div className="flex flex-wrap gap-3 text-sm text-chess-muted mt-1">
                   {profile.rating_bullet != null && (
                     <span className="flex items-center gap-1">
                       <span className="text-yellow-500">🔫</span>
@@ -294,15 +294,15 @@ function DashboardContent() {
                   {profile.rating_blitz != null && (
                     <span className="flex items-center gap-1">
                       <span className="text-orange-400">⚡</span>
-                      <span className="text-zinc-500">Blitz</span>
-                      <span className="text-white font-semibold">{profile.rating_blitz}</span>
+                      <span className="text-chess-muted">Blitz</span>
+                      <span className="text-chess-primary font-semibold">{profile.rating_blitz}</span>
                     </span>
                   )}
                   {profile.rating_rapid != null && (
                     <span className="flex items-center gap-1">
                       <span className="text-blue-400">⏱</span>
-                      <span className="text-zinc-500">Rapid</span>
-                      <span className="text-white font-semibold">{profile.rating_rapid}</span>
+                      <span className="text-chess-muted">Rapid</span>
+                      <span className="text-chess-primary font-semibold">{profile.rating_rapid}</span>
                     </span>
                   )}
                 </div>
@@ -311,7 +311,7 @@ function DashboardContent() {
           )}
 
           {isLoading && (
-            <div className="text-center py-16 text-zinc-400 animate-pulse">
+            <div className="text-center py-16 text-chess-muted animate-pulse">
               데이터 불러오는 중...
             </div>
           )}
@@ -333,7 +333,7 @@ function DashboardContent() {
               )}
 
               {/* ── Section 1 ── */}
-              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+              <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                 <SectionHeader title="백 / 흑 첫 수 선호도 및 승률" desc="가장 많이 사용한 오프닝 계열과 결과 분포" />
                 {loadingFirst ? (
@@ -348,7 +348,7 @@ function DashboardContent() {
 
               {/* ── Section 2 ── */}
               <section className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative">
+                <div className="lg:col-span-2 bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
                   {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                   <SectionHeader title="오프닝 트리 탐색기" desc="오프닝별 게임 수 및 승률 — 클릭하여 전개" />
                   {/* 백/흑 탭 */}
@@ -360,9 +360,9 @@ function DashboardContent() {
                         className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
                           treeViewSide === s
                             ? s === "white"
-                              ? "bg-zinc-200 text-zinc-900"
-                              : "bg-zinc-700 text-zinc-100"
-                            : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                              ? "bg-chess-bg text-chess-primary"
+                              : "bg-chess-primary text-white"
+                            : "bg-chess-border/50 text-chess-muted hover:text-chess-primary"
                         }`}
                       >
                         {s === "white" ? "⬜ 백" : "⬛ 흑"}
@@ -377,7 +377,7 @@ function DashboardContent() {
                     />
                   )}
                 </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative">
+                <div className="bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
                   {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                   <SectionHeader title="오프닝 퍼포먼스" desc="Best / Worst 오프닝 요약" />
                   {loadingBW ? (
@@ -385,20 +385,20 @@ function DashboardContent() {
                   ) : bestWorst ? (
                     <BestWorstCard data={bestWorst} />
                   ) : (
-                    <p className="text-zinc-500 text-sm">데이터 없음</p>
+                    <p className="text-chess-muted text-sm">데이터 없음</p>
                   )}
                 </div>
               </section>
 
               {/* ── Section 3 – 시간 압박 블런더 비율 ── */}
-              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+              <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                 <SectionHeader title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" />
                 {loadingTP ? <TimelineSkeleton /> : <BlunderTimeline data={timePressure} />}
               </section>
 
               {/* ── Section 4 – 전술 패턴 분석 ── */}
-              <section className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+              <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
                 <SectionHeader title="전술 패턴 분석" desc="게임 패턴 기반 강점 · 약점 분석" />
                 <TacticalPatternsCard
