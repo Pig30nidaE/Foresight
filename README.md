@@ -45,11 +45,7 @@ Foresight/
 
 ## 개발 단계 (Steps)
 
-- [x] **Step 1** — 프로젝트 구조 초기화
-- [ ] **Step 2** — FastAPI 백엔드 기반 세팅
-- [ ] **Step 3** — Next.js 프론트엔드 기반 세팅
-- [ ] **Step 4** — Chess.com / Lichess API 연동 레이어
-- [ ] **Step 5** — 데이터 파이프라인 (PGN 파싱, Pandas)
+	- Note: Lichess Explorer API는 공개 호출이 가능하며 별도의 토큰이 필요하지 않습니다.
 - [ ] **Step 6** — 분석 엔진 (오프닝, 승률, ML 약점 탐지)
 - [ ] **Step 7** — 프론트 UI / 대시보드 구현
 - [ ] **Step 8** — Docker Compose + Vercel 배포 설정

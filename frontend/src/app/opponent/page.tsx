@@ -27,22 +27,22 @@ function OpponentContent() {
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold text-white mb-1">🎯 상대 분석</h1>
-        <p className="text-zinc-400 text-sm">
+        <h1 className="text-2xl font-bold text-chess-primary mb-1">🎯 상대 분석</h1>
+        <p className="text-chess-muted text-sm">
           대회 상대의 유저명을 입력하면 오프닝 패턴과 약점을 분석합니다.
         </p>
       </div>
 
       {/* Search */}
       <form onSubmit={handleSearch} className="flex gap-3">
-        <div className="flex rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+        <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
           {(["chess.com", "lichess"] as Platform[]).map((p) => (
             <button
               key={p}
               type="button"
               onClick={() => setPlatform(p)}
               className={`px-3 py-2 text-sm font-medium transition-colors ${
-                platform === p ? "bg-emerald-500 text-white" : "bg-zinc-900 text-zinc-400"
+                platform === p ? "bg-chess-accent text-white" : "bg-chess-surface text-chess-muted"
               }`}
             >
               {p === "chess.com" ? "Chess.com" : "Lichess"}
@@ -52,7 +52,7 @@ function OpponentContent() {
         <select
           value={timeClass}
           onChange={(e) => setTimeClass(e.target.value as TimeClass)}
-          className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-300 text-sm"
+          className="bg-chess-surface border border-chess-border rounded-lg px-3 py-2 text-chess-primary text-sm"
         >
           <option value="blitz">Blitz</option>
           <option value="rapid">Rapid</option>
@@ -62,18 +62,18 @@ function OpponentContent() {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="상대 유저명"
-          className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+          className="flex-1 bg-chess-surface border border-chess-border rounded-lg px-4 py-2 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent"
         />
         <button
           type="submit"
-          className="bg-emerald-500 hover:bg-emerald-400 text-white font-semibold px-5 py-2 rounded-lg transition-colors"
+          className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-5 py-2 rounded-lg transition-colors"
         >
           분석
         </button>
       </form>
 
       {isLoading && (
-        <p className="text-zinc-400 animate-pulse text-center py-10">분석 중...</p>
+        <p className="text-chess-muted animate-pulse text-center py-10">분석 중...</p>
       )}
       {error && (
         <p className="text-red-400 text-sm">오류가 발생했습니다. 유저명을 확인해주세요.</p>
@@ -91,9 +91,9 @@ function OpponentContent() {
 
           {/* Frequent Openings */}
           {data.frequent_openings.length > 0 && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-              <h2 className="text-lg font-semibold mb-1">자주 사용하는 오프닝</h2>
-              <p className="text-zinc-500 text-sm mb-4">
+            <div className="bg-chess-surface border border-chess-border rounded-xl p-6">
+              <h2 className="text-lg font-semibold text-chess-primary mb-1">자주 사용하는 오프닝</h2>
+              <p className="text-chess-muted text-sm mb-4">
                 이 오프닝에 대한 준비를 강화하세요
               </p>
               <OpeningsChart data={data.frequent_openings.slice(0, 8)} />
@@ -101,10 +101,10 @@ function OpponentContent() {
           )}
 
           {/* Openings Table */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="bg-chess-surface border border-chess-border rounded-xl overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="border-b border-zinc-800">
-                <tr className="text-zinc-500 text-xs uppercase">
+              <thead className="border-b border-chess-border">
+                <tr className="text-chess-muted text-xs uppercase">
                   <th className="text-left px-4 py-3">오프닝</th>
                   <th className="text-right px-4 py-3">게임</th>
                   <th className="text-right px-4 py-3">승률</th>
@@ -112,12 +112,12 @@ function OpponentContent() {
               </thead>
               <tbody>
                 {data.frequent_openings.map((op) => (
-                  <tr key={op.eco} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
+                  <tr key={op.eco} className="border-b border-chess-border/50 hover:bg-chess-border/20">
                     <td className="px-4 py-3">
-                      <span className="text-zinc-400 mr-2">{op.eco}</span>
-                      <span className="text-white truncate">{op.name}</span>
+                      <span className="text-chess-muted mr-2">{op.eco}</span>
+                      <span className="text-chess-primary truncate">{op.name}</span>
                     </td>
-                    <td className="px-4 py-3 text-right text-zinc-400">{op.games}</td>
+                    <td className="px-4 py-3 text-right text-chess-muted">{op.games}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${
                       op.win_rate >= 55 ? "text-emerald-400" : op.win_rate >= 45 ? "text-amber-400" : "text-red-400"
                     }`}>
