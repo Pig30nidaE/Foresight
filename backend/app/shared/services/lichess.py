@@ -4,10 +4,19 @@ Docs: https://lichess.org/api
 공개 게임은 토큰 없이 접근 가능, 자신의 게임은 OAuth 토큰 필요
 """
 import httpx
+from datetime import datetime, timezone
 from typing import List, Optional
 from app.core.config import settings
 from app.models.schemas import PlayerProfile, GameSummary, GameResult, Platform
 from app.shared.services import opening_db
+
+
+def _lichess_ts_to_iso(ts: object) -> str:
+    """Lichess createdAt (Unix 밀리초 정수) → ISO 8601 문자열."""
+    try:
+        return datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc).isoformat()
+    except (TypeError, ValueError, OSError):
+        return ""
 
 
 class LichessService:
@@ -102,13 +111,13 @@ class LichessService:
             import json
             try:
                 raw = json.loads(line)
-                games.append(self._parse_game(raw, username))
+                games.append(self._parse_game(raw, username, perf_type))
             except Exception:
                 continue
 
         return games
 
-    def _parse_game(self, raw: dict, username: str) -> GameSummary:
+    def _parse_game(self, raw: dict, username: str, perf_type: Optional[str] = None) -> GameSummary:
         players = raw.get("players", {})
         white = players.get("white", {})
         black = players.get("black", {})
@@ -125,7 +134,9 @@ class LichessService:
             result = GameResult.loss
 
         opening = raw.get("opening", {})
-        speed = raw.get("speed", "")  # bullet, blitz, rapid, classical
+        # perf_type 파라미터로 받았다면 사용 (이미 필터된 데이터)
+        # 아니면 응답의 speed 필드 사용
+        speed = perf_type or raw.get("speed", "")
 
         eco_code: Optional[str] = opening.get("eco")
         # Lichess가 제공하는 이름이 우선 (이미 동일 DB 사용)
@@ -144,6 +155,6 @@ class LichessService:
             opening_eco=eco_code,
             opening_name=opening_name,
             pgn=raw.get("pgn"),
-            played_at=str(raw.get("createdAt", "")),
+            played_at=_lichess_ts_to_iso(raw.get("createdAt")),
             url=f"https://lichess.org/{raw.get('id', '')}",
         )
