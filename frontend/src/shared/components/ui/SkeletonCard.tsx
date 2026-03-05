@@ -55,7 +55,7 @@ export function BestWorstSkeleton() {
   return (
     <div className="space-y-3">
       {[0, 1].map((i) => (
-        <div key={i} className="p-4 rounded-xl border border-zinc-800 space-y-2">
+        <div key={i} className="p-4 rounded-xl border border-chess-border space-y-2">
           <Skeleton className="h-3 w-16" />
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-3 w-24" />
@@ -79,7 +79,7 @@ export function TimelineSkeleton() {
     <div className="space-y-4">
       <div className="flex gap-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="flex-1 p-3 rounded-lg border border-zinc-800 space-y-2">
+          <div key={i} className="flex-1 p-3 rounded-lg border border-chess-border space-y-2">
             <Skeleton className="h-3 w-20" />
             <Skeleton className="h-6 w-12" />
           </div>

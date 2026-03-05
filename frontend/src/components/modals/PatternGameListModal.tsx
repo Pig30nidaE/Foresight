@@ -23,13 +23,13 @@ function toAnalysisUrl(url: string): string {
 const RESULT_BADGE: Record<string, { label: string; cls: string }> = {
   win:  { label: "승리", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" },
   loss: { label: "패배", cls: "bg-red-500/20 text-red-300 border-red-500/30" },
-  draw: { label: "무승부", cls: "bg-zinc-500/20 text-zinc-300 border-zinc-600/30" },
+  draw: { label: "무승부", cls: "bg-chess-border/30 text-chess-muted border-chess-muted/30" },
 };
 
 const RESULT_DOT: Record<string, string> = {
   win:  "bg-emerald-400",
   loss: "bg-red-400",
-  draw: "bg-zinc-400",
+  draw: "bg-chess-muted",
 };
 
 function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
@@ -41,21 +41,21 @@ function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
       href={toAnalysisUrl(game.url)}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60
-                 px-4 py-3 hover:border-zinc-600 hover:bg-zinc-800/60 transition-all duration-150"
+      className="group flex items-center gap-3 rounded-xl border border-chess-border bg-chess-surface/60
+                 px-4 py-3 hover:border-chess-primary hover:bg-chess-surface transition-all duration-150"
     >
       {/* Rank */}
-      <span className="text-xs font-mono text-zinc-600 w-5 shrink-0 text-right">#{rank}</span>
+      <span className="text-xs font-mono text-chess-muted w-5 shrink-0 text-right">#{rank}</span>
 
       {/* Result dot */}
       <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
 
       {/* Opening info */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-zinc-200 font-medium truncate leading-snug">
+        <p className="text-sm text-chess-primary font-medium truncate leading-snug">
           {game.opening_name ?? "오프닝 정보 없음"}
         </p>
-        <p className="text-xs text-zinc-500 mt-0.5">
+        <p className="text-xs text-chess-muted mt-0.5">
           {game.played_at
             ? new Date(game.played_at).toLocaleDateString("ko-KR", {
                 year: "numeric", month: "short", day: "numeric",
@@ -75,7 +75,7 @@ function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
       </span>
 
       {/* Arrow */}
-      <span className="text-zinc-600 group-hover:text-zinc-400 transition-colors text-sm shrink-0">→</span>
+      <span className="text-chess-muted group-hover:text-chess-primary transition-colors text-sm shrink-0">→</span>
     </a>
   );
 }
@@ -107,22 +107,22 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
   const modal = (
     /* Backdrop */
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       {/* Panel */}
       <div
         className="relative w-full max-w-xl max-h-[85vh] flex flex-col
-                   bg-zinc-950 border border-zinc-700/60 rounded-2xl shadow-2xl overflow-hidden"
+                   bg-chess-bg border border-chess-border/60 rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-4 border-b border-zinc-800">
+        <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-4 border-b border-chess-border">
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-2xl leading-none">{pattern.icon}</span>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-bold text-zinc-100 leading-snug">
+                <h2 className="text-base font-bold text-chess-primary leading-snug">
                   {pattern.label}
                 </h2>
                 {pattern.is_strength ? (
@@ -131,12 +131,12 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                   <span className="text-xs text-red-400 font-bold">▼ 약점</span>
                 )}
               </div>
-              <p className="text-xs text-zinc-500 mt-0.5">{pattern.description}</p>
+              <p className="text-xs text-chess-muted mt-0.5">{pattern.description}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 text-zinc-500 hover:text-zinc-200 transition-colors text-xl leading-none p-1"
+            className="shrink-0 text-chess-muted hover:text-chess-primary transition-colors text-xl leading-none p-1"
             aria-label="닫기"
           >
             ✕
@@ -144,29 +144,29 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
         </div>
 
         {/* Score bar */}
-        <div className="px-6 py-3 border-b border-zinc-800/60 space-y-1">
+        <div className="px-6 py-3 border-b border-chess-border/60 space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-500">{pattern.detail}</span>
+            <span className="text-xs text-chess-muted">{pattern.detail}</span>
             <span className={`text-sm font-bold ${scoreColor}`}>{pattern.score}점</span>
           </div>
-          <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+          <div className="w-full bg-chess-border rounded-full h-1.5 overflow-hidden">
             <div
               className={`h-full rounded-full ${scoreBg} transition-all`}
               style={{ width: `${pattern.score}%` }}
             />
           </div>
-          <p className="text-xs text-zinc-600">{total}게임 분석 기반</p>
+          <p className="text-xs text-chess-muted">{total}게임 분석 기반</p>
         </div>
 
         {/* Game list */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
           {games.length === 0 ? (
-            <p className="text-sm text-zinc-500 text-center py-8">
+            <p className="text-sm text-chess-muted text-center py-8">
               URL 있는 대표 게임이 없습니다.
             </p>
           ) : (
             <>
-              <p className="text-xs text-zinc-600 uppercase tracking-wider mb-3">
+              <p className="text-xs text-chess-muted uppercase tracking-wider mb-3">
                 관련도 높은 대표 게임 ({games.length}개)
               </p>
               {games.map((g, i) => (
@@ -177,11 +177,11 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-zinc-800/60 flex items-center justify-between">
-          <p className="text-xs text-zinc-600">클릭하여 분석 보드에서 게임 리뷰</p>
+        <div className="px-6 py-3 border-t border-chess-border/60 flex items-center justify-between">
+          <p className="text-xs text-chess-muted">클릭하여 분석 보드에서 게임 리뷰</p>
           <button
             onClick={onClose}
-            className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-600"
+            className="text-xs text-chess-muted hover:text-chess-primary transition-colors px-3 py-1.5 rounded-lg border border-chess-border hover:border-chess-primary"
           >
             닫기
           </button>
