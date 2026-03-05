@@ -3,6 +3,34 @@ from typing import Optional, List
 from enum import Enum
 
 
+class Tier(str, Enum):
+    S = "S"
+    A = "A"
+    B = "B"
+    C = "C"
+    D = "D"
+
+
+class OpeningTierEntry(BaseModel):
+    eco: str
+    name: str
+    tier: Tier
+    white_wins: int
+    draws: int
+    black_wins: int
+    total_games: int
+    win_rate: float
+    draw_rate: float
+    tier_score: float
+
+
+class RatingBracket(BaseModel):
+    lichess_rating: int
+    chesscom_rating: int
+    label_lichess: str
+    label_chesscom: str
+
+
 class Platform(str, Enum):
     chessdotcom = "chess.com"
     lichess = "lichess"
