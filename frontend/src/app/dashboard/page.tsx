@@ -9,7 +9,6 @@ import {
   getBestWorstOpenings,
   getTimePressure,
   getTacticalPatterns,
-  getAiInsights,
 } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
 import { Suspense, useState, useEffect, useMemo } from "react";
@@ -92,7 +91,7 @@ function DashboardContent() {
     }
   }, [profile?.preferred_time_class]);
 
-  const { data: firstMoves, isLoading: loadingFirst } = useQuery({
+  const { data: firstMoves, isLoading: loadingFirst, isSuccess: firstMovesLoaded } = useQuery({
     queryKey: ["first-moves", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
     queryFn: () => getFirstMoveStats(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
     enabled,
@@ -119,7 +118,7 @@ function DashboardContent() {
     staleTime: 120_000,
   });
 
-  // 전술 패턴 분석 (ML 기반)
+  // 전술 패턴 분석
   const { data: tacticalPatterns, isLoading: loadingTactical } = useQuery({
     queryKey: ["tactical-patterns", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
     queryFn: () => getTacticalPatterns(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
@@ -128,24 +127,16 @@ function DashboardContent() {
     retry: 1,
   });
 
-  // AI 코치 인사이트 (GPT-4o-mini 또는 규칙 기반 fallback)
-  const { data: aiInsightsData, isLoading: loadingAI } = useQuery({
-    queryKey: ["ai-insights", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getAiInsights(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
-    enabled: enabled && !!tacticalPatterns,
-    staleTime: 300_000,
-    retry: 1,
-  });
-
   const isLoading = loadingFirst || loadingTreeW || loadingTreeB || loadingBW || loadingTP;
 
   const totalGames = useMemo(() => {
-    const w = (firstMoves?.white ?? []).reduce((s, e) => s + e.games, 0);
-    const b = (firstMoves?.black ?? []).reduce((s, e) => s + e.games, 0);
-    return w + b;
+    // total_games: 백엔드가 첫수 필터 전 실제 집계한 전체 게임 수
+    // (firstMoves.white/black 합산은 첫수 5판 미만 오프닝을 제외해 0이 될 수 있음)
+    return firstMoves?.total_games ?? 0;
   }, [firstMoves]);
 
-  const insufficientData = !loadingFirst && submitted !== "" && totalGames < 10;
+  // isSuccess: 데이터가 실제 돌아온 경우만 판단 (에러 또는 로딩 중에는 오판 안 함)
+  const insufficientData = firstMovesLoaded && submitted !== "" && totalGames < 5;
 
   const tcGameCount = (tc: TimeClass): number | undefined => {
     if (!profile) return undefined;
@@ -295,9 +286,9 @@ function DashboardContent() {
                 <div className="flex flex-wrap gap-3 text-sm text-chess-muted mt-1">
                   {profile.rating_bullet != null && (
                     <span className="flex items-center gap-1">
-                      <span className="text-yellow-500">&#9889;</span>
-                      <span className="text-chess-muted">Bullet</span>
-                      <span className="text-chess-primary font-semibold">{profile.rating_bullet}</span>
+                      <span className="text-yellow-500">🔫</span>
+                      <span className="text-zinc-500">Bullet</span>
+                      <span className="text-white font-semibold">{profile.rating_bullet}</span>
                     </span>
                   )}
                   {profile.rating_blitz != null && (
@@ -327,15 +318,15 @@ function DashboardContent() {
 
           {!isLoading && (
             <div className="space-y-6 animate-fade-in">
-              {/* 10게임 미만 블러 오버레이 */}
+              {/* 5게임 미만 블러 오버레이 */}
               {insufficientData && (
                 <div className="flex items-center gap-3 bg-amber-950/40 border border-amber-700/50 rounded-2xl px-5 py-4">
                   <span className="text-2xl leading-none select-none">⚠️</span>
                   <div>
                     <p className="font-semibold text-amber-300 text-sm">데이터 부족 — 분석 불가</p>
                     <p className="text-amber-400/70 text-xs mt-0.5">
-                      현재 {totalGames}게임 · 최소 10게임이 있어야 정확한 분석이 가능합니다.
-                      기간을 늘리거나 다른 타임클래스를 선택해 보세요.
+                      {timeClass.toUpperCase()} · {PERIOD_OPTIONS.find(p => p.value === period)?.label ?? period} 기간에서 {totalGames}게임 조회됨.
+                      최소 5게임이 필요합니다. 기간을 늘리거나 분류에 다른 타임클래스를 선택해 보세요.
                     </p>
                   </div>
                 </div>
@@ -409,12 +400,10 @@ function DashboardContent() {
               {/* ── Section 4 – 전술 패턴 분석 ── */}
               <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                <SectionHeader title="전술 패턴 분석" desc="ML 기반 10종 전술 패턴 강점 · 약점 분석" />
+                <SectionHeader title="전술 패턴 분석" desc="게임 패턴 기반 강점 · 약점 분석" />
                 <TacticalPatternsCard
                   data={tacticalPatterns}
                   isLoading={loadingTactical}
-                  aiInsights={aiInsightsData?.insights}
-                  isLoadingInsights={loadingAI}
                 />
               </section>
             </div>

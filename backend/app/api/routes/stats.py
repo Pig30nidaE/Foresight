@@ -2,6 +2,9 @@
 첫 수 선호도, 오프닝 트리, 수 품질 분석 엔드포인트
 MVP 섹션 1, 2, 3 대응
 """
+import asyncio
+import functools
+import logging
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.models.schemas import Platform
@@ -10,6 +13,8 @@ from app.shared.services.lichess import LichessService
 from app.features.dashboard.services.analysis import AnalysisService
 from app.shared.services.pgn_parser import parse_games_bulk
 from app.features.dashboard.services.tactical_analysis import TacticalAnalysisService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 chessdotcom_svc = ChessDotComService()
@@ -23,7 +28,7 @@ async def get_first_move_stats(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=5000),
+    max_games: int = Query(default=500, le=5000),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
 ):
@@ -32,6 +37,7 @@ async def get_first_move_stats(
     since_ms / until_ms (Unix ms) 로 기간 필터 가능.
     """
     try:
+        logger.info(f"[First Moves] {platform}:{username} (timeClass={time_class})")
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
             until_ts = until_ms // 1000 if until_ms else None
@@ -39,12 +45,21 @@ async def get_first_move_stats(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
+        logger.info(f"  → API returned {len(games)} games")
+        
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
+        # → GameSummary의 time_class 필드가 일관되게 설정됨
         df = analysis_svc.build_dataframe(games)
+        logger.info(f"  → DataFrame: {len(df)} rows, columns={list(df.columns) if not df.empty else 'EMPTY'}")
+        
         if not df.empty:
-            df = df[df["time_class"] == time_class]
+            logger.info(f"  → time_class distribution: {df['time_class'].value_counts().to_dict() if 'time_class' in df.columns else 'NO time_class COLUMN'}")
 
-        return analysis_svc.get_first_move_stats(df, username.lower())
+        result = analysis_svc.get_first_move_stats(df, username.lower())
+        logger.info(f"  → Result: white={len(result['white'])}, black={len(result['black'])}, total_games={result.get('total_games', 'N/A')}")
+        return result
     except Exception as e:
+        logger.error(f"  → ERROR: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -53,7 +68,7 @@ async def get_opening_tree(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=5000),
+    max_games: int = Query(default=500, le=5000),
     depth: int = Query(default=3, ge=1, le=5),
     side: Optional[str] = Query(default=None, description="white | black — 특정 색 게임만 필터"),
     since_ms: Optional[int] = Query(default=None),
@@ -71,9 +86,9 @@ async def get_opening_tree(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         df = analysis_svc.build_dataframe(games)
-        if not df.empty:
-            df = df[df["time_class"] == time_class]
+        if not df.empty and side:
             if side == "white" and "white" in df.columns:
                 df = df[df["white"].str.lower() == username.lower()]
             elif side == "black" and "black" in df.columns:
@@ -89,7 +104,7 @@ async def get_best_worst_openings(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=5000),
+    max_games: int = Query(default=500, le=5000),
     min_games: int = Query(default=10),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
@@ -105,10 +120,8 @@ async def get_best_worst_openings(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         df = analysis_svc.build_dataframe(games)
-        if not df.empty:
-            df = df[df["time_class"] == time_class]
-
         return analysis_svc.get_best_worst_openings(df, min_games)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -140,9 +153,7 @@ async def get_time_pressure(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
-        if time_class:
-            games = [g for g in games if g.time_class == time_class]
-
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         parsed = parse_games_bulk(games, pressure_threshold=pressure_threshold)
         return analysis_svc.get_time_pressure_stats(parsed, username)
     except Exception as e:
@@ -171,7 +182,11 @@ async def get_tactical_patterns(
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         games = [g for g in games if g.time_class == time_class]
-        return tactical_svc.analyze(games, username)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            functools.partial(tactical_svc.analyze, games, username),
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -198,7 +213,11 @@ async def get_tactical_ai_insights(
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         games = [g for g in games if g.time_class == time_class]
-        analysis = tactical_svc.analyze(games, username)
+        loop = asyncio.get_event_loop()
+        analysis = await loop.run_in_executor(
+            None,
+            functools.partial(tactical_svc.analyze, games, username),
+        )
 
         from app.features.dashboard.services.ai_insights import generate_tactical_insights
         insights = await generate_tactical_insights(analysis, username)
