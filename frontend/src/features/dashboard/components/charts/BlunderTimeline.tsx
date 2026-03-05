@@ -41,8 +41,9 @@ export default function BlunderTimeline({ data }: Props) {
   const isMock = !hasClock;
 
   // ── 수 번호별 압박 비율 (실제 or 목) ─────────────────────
+  const perMove = data?.per_move ?? [];
   const moveData = hasClock
-    ? (data.per_move || []).filter((_, i) => i % 2 === 0 || data.per_move.length <= 15) // 너무 많으면 격수 표시
+    ? perMove.filter((_, i) => i % 2 === 0 || perMove.length <= 15) // 너무 많으면 격수 표시
     : MOCK_MOVE_DATA;
 
   // ── 페이즈별 압박 비율 (실제) ─────────────────────────────
