@@ -116,40 +116,40 @@ LICHESS_API_TOKEN=lip_...
 
 ### Type 목록
 
-| Type | 설명 | 예시 |
-|------|------|------|
-| `feat` | 새 기능 추가 | `feat(analysis): 블런더 타임라인 API 추가` |
-| `fix` | 버그 수정 | `fix(engine): 메이트 점수 센티폰 변환 오류 수정` |
+| Type       | 설명                     | 예시                                                  |
+| ---------- | ------------------------ | ----------------------------------------------------- |
+| `feat`     | 새 기능 추가             | `feat(analysis): 블런더 타임라인 API 추가`            |
+| `fix`      | 버그 수정                | `fix(engine): 메이트 점수 센티폰 변환 오류 수정`      |
 | `refactor` | 기능 변경 없는 코드 개선 | `refactor(tactical): SF 분석 대상 게임 수 파라미터화` |
-| `perf` | 성능 개선 | `perf(engine): SF_DEPTH 10→8 blitz 분석 속도 개선` |
-| `style` | 포맷/공백 등 비기능 변경 | `style(frontend): Tailwind 클래스 정렬` |
-| `test` | 테스트 추가/수정 | `test(opening): ECO 캐시 로드 통합 테스트 추가` |
-| `docs` | 문서 수정 | `docs: CONTRIBUTING.md 업데이트` |
-| `chore` | 빌드/의존성/설정 변경 | `chore: requirements.txt xgboost 추가` |
-| `ci` | CI/CD 파이프라인 변경 | `ci: GitHub Actions 빌드 스크립트 추가` |
+| `perf`     | 성능 개선                | `perf(engine): SF_DEPTH 10→8 blitz 분석 속도 개선`    |
+| `style`    | 포맷/공백 등 비기능 변경 | `style(frontend): Tailwind 클래스 정렬`               |
+| `test`     | 테스트 추가/수정         | `test(opening): ECO 캐시 로드 통합 테스트 추가`       |
+| `docs`     | 문서 수정                | `docs: CONTRIBUTING.md 업데이트`                      |
+| `chore`    | 빌드/의존성/설정 변경    | `chore: requirements.txt xgboost 추가`                |
+| `ci`       | CI/CD 파이프라인 변경    | `ci: GitHub Actions 빌드 스크립트 추가`               |
 
 ### Scope 목록
 
-| Scope | 대상 |
-|-------|------|
-| `engine` | `backend/app/ml/engine.py` — Stockfish 래퍼 |
-| `classifier` | `backend/app/ml/move_classifier.py` |
-| `tactical` | `backend/app/features/dashboard/services/tactical_analysis.py` |
-| `analysis` | `backend/app/features/dashboard/services/analysis.py` |
-| `pgn` | `backend/app/shared/services/pgn_parser.py` |
-| `opening` | `backend/app/shared/services/opening_db.py` |
-| `ai` | `backend/app/features/dashboard/services/ai_insights.py` |
-| `opponent` | `backend/app/features/opponent/services/` |
-| `opening-tier` | `backend/app/features/opening_tier/` |
-| `api` | `backend/app/api/routes/` |
-| `schema` | `backend/app/models/schemas.py` |
-| `config` | `backend/app/core/config.py` |
-| `dashboard` | `frontend/src/features/dashboard/` |
-| `charts` | `frontend/src/features/dashboard/components/charts/` |
-| `shared` | `frontend/src/shared/` |
-| `types` | `frontend/src/shared/types/index.ts` |
-| `api-client` | `frontend/src/shared/lib/api.ts` |
-| `deps` | 의존성 패키지 |
+| Scope          | 대상                                                           |
+| -------------- | -------------------------------------------------------------- |
+| `engine`       | `backend/app/ml/engine.py` — Stockfish 래퍼                    |
+| `classifier`   | `backend/app/ml/move_classifier.py`                            |
+| `tactical`     | `backend/app/features/dashboard/services/tactical_analysis.py` |
+| `analysis`     | `backend/app/features/dashboard/services/analysis.py`          |
+| `pgn`          | `backend/app/shared/services/pgn_parser.py`                    |
+| `opening`      | `backend/app/shared/services/opening_db.py`                    |
+| `ai`           | `backend/app/features/dashboard/services/ai_insights.py`       |
+| `opponent`     | `backend/app/features/opponent/services/`                      |
+| `opening-tier` | `backend/app/features/opening_tier/`                           |
+| `api`          | `backend/app/api/routes/`                                      |
+| `schema`       | `backend/app/models/schemas.py`                                |
+| `config`       | `backend/app/core/config.py`                                   |
+| `dashboard`    | `frontend/src/features/dashboard/`                             |
+| `charts`       | `frontend/src/features/dashboard/components/charts/`           |
+| `shared`       | `frontend/src/shared/`                                         |
+| `types`        | `frontend/src/shared/types/index.ts`                           |
+| `api-client`   | `frontend/src/shared/lib/api.ts`                               |
+| `deps`         | 의존성 패키지                                                  |
 
 ### 규칙
 
@@ -338,7 +338,11 @@ interface Props {
 }
 
 // 컴포넌트 본문
-export default function ChartComponent({ username, platform, timeClass }: Props) {
+export default function ChartComponent({
+  username,
+  platform,
+  timeClass,
+}: Props) {
   // 1. hooks
   // 2. derived state (useMemo)
   // 3. handlers
@@ -493,7 +497,7 @@ BOARD_BUDGET_GAMES = 80
 
 ```typescript
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
   timeout: 30000,
 });
 ```
@@ -550,7 +554,7 @@ new QueryClient({
       retry: 1,
     },
   },
-})
+});
 ```
 
 > `staleTime`을 늘리면 최신 게임 데이터가 즉시 반영되지 않습니다. `retry`를 늘리면 Stockfish 분석처럼 느린 요청이 중복 실행될 수 있습니다.
@@ -630,11 +634,11 @@ GET /api/v1/{resource}/{platform}/{username}
 
 ### Query Parameter 기본값
 
-| 파라미터 | 기본값 | 범위 |
-|----------|--------|------|
+| 파라미터     | 기본값  | 범위                              |
+| ------------ | ------- | --------------------------------- |
 | `time_class` | `blitz` | `bullet\|blitz\|rapid\|classical` |
-| `max_games` | `100` | `10~500` |
-| `top_n` | `10` | `1~30` |
+| `max_games`  | `100`   | `10~500`                          |
+| `top_n`      | `10`    | `1~30`                            |
 
 > 범위를 변경하면 프론트엔드 `lib/api.ts` 의 기본값과 불일치가 생깁니다.
 
@@ -654,13 +658,14 @@ except Exception as e:
 
 ## 10. 환경변수 관리
 
-| 변수명 | 위치 | 필수 여부 | 설명 |
-|--------|------|-----------|------|
-| `OPENAI_API_KEY` | `.env` (루트) | 선택 | 없으면 규칙 기반 폴백 |
-| `LICHESS_API_TOKEN` | `.env` (루트) | 선택 | 없으면 public API 사용 (레이트 리밋 낮음) |
-| `NEXT_PUBLIC_API_URL` | `.env` (루트) | 선택 | 기본값 `http://localhost:8000/api/v1` |
+| 변수명                | 위치          | 필수 여부 | 설명                                      |
+| --------------------- | ------------- | --------- | ----------------------------------------- |
+| `OPENAI_API_KEY`      | `.env` (루트) | 선택      | 없으면 규칙 기반 폴백                     |
+| `LICHESS_API_TOKEN`   | `.env` (루트) | 선택      | 옵션 – Explorer 등 일부 호출에만 활용, 없어도 기본 기능은 동작 |
+| `NEXT_PUBLIC_API_URL` | `.env` (루트) | 선택      | 기본값 `http://localhost:8000/api/v1`     |
 
 **절대 규칙:**
+
 - `.env` 파일은 절대 Git에 커밋하지 않습니다 (`.gitignore` 확인)
 - API 키를 코드에 하드코딩하지 않습니다
 - `config.py`의 `Settings` 클래스를 통해서만 접근합니다
