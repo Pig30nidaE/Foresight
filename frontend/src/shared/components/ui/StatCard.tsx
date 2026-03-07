@@ -21,8 +21,8 @@ export default function StatCard({ label, value, highlight, color }: StatCardPro
       <span
         className={clsx(
           "text-2xl font-bold",
-          color === "emerald" && "text-emerald-400",
-          color === "red" && "text-red-400",
+          color === "emerald" && "text-emerald-700",
+          color === "red" && "text-red-700",
           !color && "text-chess-primary"
         )}
       >

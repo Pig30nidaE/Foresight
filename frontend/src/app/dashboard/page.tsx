@@ -287,8 +287,8 @@ function DashboardContent() {
                   {profile.rating_bullet != null && (
                     <span className="flex items-center gap-1">
                       <span className="text-yellow-500">🔫</span>
-                      <span className="text-zinc-500">Bullet</span>
-                      <span className="text-white font-semibold">{profile.rating_bullet}</span>
+                      <span className="text-chess-muted">Bullet</span>
+                      <span className="text-chess-primary font-semibold">{profile.rating_bullet}</span>
                     </span>
                   )}
                   {profile.rating_blitz != null && (
@@ -320,11 +320,11 @@ function DashboardContent() {
             <div className="space-y-6 animate-fade-in">
               {/* 5게임 미만 블러 오버레이 */}
               {insufficientData && (
-                <div className="flex items-center gap-3 bg-amber-950/40 border border-amber-700/50 rounded-2xl px-5 py-4">
+                <div className="flex items-center gap-3 bg-amber-700/8 border border-amber-700/35 rounded-2xl px-5 py-4">
                   <span className="text-2xl leading-none select-none">⚠️</span>
                   <div>
-                    <p className="font-semibold text-amber-300 text-sm">데이터 부족 — 분석 불가</p>
-                    <p className="text-amber-400/70 text-xs mt-0.5">
+                    <p className="font-semibold text-amber-700 text-sm">데이터 부족 — 분석 불가</p>
+                    <p className="text-amber-700/70 text-xs mt-0.5">
                       {timeClass.toUpperCase()} · {PERIOD_OPTIONS.find(p => p.value === period)?.label ?? period} 기간에서 {totalGames}게임 조회됨.
                       최소 5게임이 필요합니다. 기간을 늘리거나 분류에 다른 타임클래스를 선택해 보세요.
                     </p>

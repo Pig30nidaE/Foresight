@@ -120,10 +120,10 @@ function AnalysisContent() {
                       <span className="text-chess-primary">{op.name}</span>
                     </td>
                     <td className="px-4 py-3 text-right text-chess-muted">{op.games}</td>
-                    <td className="px-4 py-3 text-right text-emerald-400">{op.wins}</td>
-                    <td className="px-4 py-3 text-right text-red-400">{op.losses}</td>
+                    <td className="px-4 py-3 text-right text-emerald-700">{op.wins}</td>
+                    <td className="px-4 py-3 text-right text-red-700">{op.losses}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${
-                      op.win_rate >= 55 ? "text-emerald-400" : op.win_rate >= 45 ? "text-amber-400" : "text-red-400"
+                      op.win_rate >= 55 ? "text-emerald-700" : op.win_rate >= 45 ? "text-amber-700" : "text-red-700"
                     }`}>
                       {op.win_rate}%
                     </td>

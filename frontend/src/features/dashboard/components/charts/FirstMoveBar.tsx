@@ -8,9 +8,9 @@ interface Props {
 }
 
 function winRateBadge(wr: number) {
-  if (wr >= 55) return { bg: "bg-emerald-500/20", text: "text-emerald-400", border: "border-emerald-500/40" };
-  if (wr >= 45) return { bg: "bg-amber-500/20",   text: "text-amber-400",   border: "border-amber-500/40" };
-  return          { bg: "bg-red-500/20",    text: "text-red-400",    border: "border-red-500/40" };
+  if (wr >= 55) return { bg: "bg-emerald-700/10", text: "text-emerald-700", border: "border-emerald-700/35" };
+  if (wr >= 45) return { bg: "bg-amber-700/10",   text: "text-amber-700",   border: "border-amber-700/35" };
+  return          { bg: "bg-red-600/10",    text: "text-red-700",    border: "border-red-600/35" };
 }
 
 const SIDE_LABEL: Record<"white" | "black", string> = {
@@ -21,7 +21,7 @@ const SIDE_LABEL: Record<"white" | "black", string> = {
 export default function FirstMoveBar({ data, side }: Props) {
   if (!data.length) {
     return (
-      <p className="text-zinc-500 text-sm py-4 text-center">데이터가 부족합니다.</p>
+      <p className="text-chess-muted text-sm py-4 text-center">데이터가 부족합니다.</p>
     );
   }
 
@@ -30,7 +30,7 @@ export default function FirstMoveBar({ data, side }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="text-sm font-semibold text-zinc-300 mb-4">{SIDE_LABEL[side]}</div>
+      <div className="text-sm font-semibold text-chess-primary mb-4">{SIDE_LABEL[side]}</div>
 
       {sorted.map((entry) => {
         const widthPct = Math.round((entry.games / maxGames) * 100);
@@ -43,10 +43,10 @@ export default function FirstMoveBar({ data, side }: Props) {
             {/* Label row */}
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm font-mono font-bold text-emerald-300 shrink-0 w-10">
+                <span className="text-sm font-mono font-bold text-chess-accent shrink-0 w-10">
                   {entry.eco}
                 </span>
-                <span className="text-sm text-zinc-300 truncate max-w-[200px]">
+                <span className="text-sm text-chess-primary truncate max-w-[200px]">
                   {entry.first_move_category}
                 </span>
               </div>
@@ -57,39 +57,39 @@ export default function FirstMoveBar({ data, side }: Props) {
                 >
                   {entry.win_rate.toFixed(1)}%
                 </span>
-                <span className="text-xs text-zinc-500">{entry.games}국</span>
+                <span className="text-xs text-chess-muted">{entry.games}국</span>
               </div>
             </div>
 
             {/* Composite Bar — always full-width proportional */}
-            <div className="w-full bg-zinc-800 rounded-full h-7 overflow-hidden">
+            <div className="w-full bg-chess-border/50 rounded-full h-7 overflow-hidden">
               <div
                 className="h-full rounded-full flex overflow-hidden transition-all duration-300"
                 style={{ width: `${widthPct}%` }}
               >
                 <div className="bg-emerald-600 h-full" style={{ width: `${wPct}%` }} />
-                <div className="bg-zinc-500 h-full" style={{ width: `${dPct}%` }} />
+                <div className="bg-chess-muted h-full" style={{ width: `${dPct}%` }} />
                 <div className="bg-red-700 h-full flex-1" />
               </div>
             </div>
 
             {/* W / D / L */}
-            <div className="flex gap-3 mt-1 text-xs text-zinc-500">
-              <span className="text-emerald-500 font-medium">{entry.wins}W</span>
-              <span className="text-zinc-400">{entry.draws}D</span>
-              <span className="text-red-500 font-medium">{entry.losses}L</span>
+            <div className="flex gap-3 mt-1 text-xs text-chess-muted">
+              <span className="text-emerald-700 font-medium">{entry.wins}W</span>
+              <span className="text-chess-muted">{entry.draws}D</span>
+              <span className="text-red-700 font-medium">{entry.losses}L</span>
             </div>
           </div>
         );
       })}
 
       {/* Legend */}
-      <div className="flex gap-5 text-xs text-zinc-500 pt-2 border-t border-zinc-800/60">
+      <div className="flex gap-5 text-xs text-chess-muted pt-2 border-t border-chess-border/70">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm bg-emerald-600 inline-block" /> 승
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-zinc-500 inline-block" /> 무
+          <span className="w-3 h-3 rounded-sm bg-chess-muted inline-block" /> 무
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm bg-red-700 inline-block" /> 패
