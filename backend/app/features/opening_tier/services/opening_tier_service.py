@@ -79,9 +79,23 @@ SPEED_MAP: Dict[str, str] = {
 
 # ── 캐시 설정 ─────────────────────────────────────────────────────────
 CACHE_TTL = timedelta(days=30)
+DATA_WINDOW_MONTHS = 6  # 최근 N개월 데이터만 사용
 
-# 인메모리 캐시: (rating, speed) → (openings, timestamp)
-_cache: Dict[Tuple[int, str], Tuple[Dict[str, "_OpeningNode"], datetime]] = {}
+# 인메모리 캐시: (rating, speed, since, until) → (openings, timestamp)
+_cache: Dict[Tuple[int, str, str, str], Tuple[Dict[str, "_OpeningNode"], datetime]] = {}
+
+
+def _compute_date_range() -> Tuple[str, str]:
+    """현재 시각 기준 DATA_WINDOW_MONTHS 전 ~ 현재 월 반환 (YYYY-MM)."""
+    now = datetime.utcnow()
+    month = now.month - DATA_WINDOW_MONTHS
+    year = now.year
+    while month <= 0:
+        month += 12
+        year -= 1
+    since = f"{year:04d}-{month:02d}"
+    until = now.strftime("%Y-%m")
+    return since, until
 
 
 # 디스크 캐시 디렉터리: backend/data/opening_tier_cache/
@@ -131,8 +145,8 @@ class OpeningTierService:
         self, rating: int, speed: str, color: str
     ) -> Tuple[List[Dict[str, Any]], str]:
         """오프닝 티어 목록과 데이터 기간 반환. 캐시 미스 시 카탈로그/BFS 탐색 수행."""
-        openings = await self._get_or_fetch(rating, speed)
-        return self._assign_tiers(openings, color), "all-time"
+        openings, since, until = await self._get_or_fetch(rating, speed)
+        return self._assign_tiers(openings, color), f"{since} ~ {until}"
 
     def get_bracket_labels(self, speed: str) -> List[RatingBracket]:
         """레이팅 구간 목록 반환 (Lichess + Chess.com 라벨 포함)."""
@@ -197,8 +211,9 @@ class OpeningTierService:
 
     def invalidate_cache(self, rating: int, speed: str) -> None:
         """인메모리 + 디스크 캐시 무효화."""
-        _cache.pop((rating, speed), None)
-        path = self._disk_cache_path(rating, speed)
+        since, until = _compute_date_range()
+        _cache.pop((rating, speed, since, until), None)
+        path = self._disk_cache_path(rating, speed, since, until)
         if path.exists():
             try:
                 path.unlink()
@@ -211,23 +226,24 @@ class OpeningTierService:
 
     async def _get_or_fetch(
         self, rating: int, speed: str
-    ) -> Dict[str, _OpeningNode]:
-        cache_key = (rating, speed)
+    ) -> Tuple[Dict[str, "_OpeningNode"], str, str]:
+        since, until = _compute_date_range()
+        cache_key = (rating, speed, since, until)
 
         # 1. 인메모리 캐시
         if cache_key in _cache:
             result, ts = _cache[cache_key]
             if datetime.utcnow() - ts < CACHE_TTL:
-                return result
+                return result, since, until
 
         # 2. 디스크 캐시
-        disk_result = self._disk_cache_load(rating, speed)
+        disk_result = self._disk_cache_load(rating, speed, since, until)
         if disk_result is not None:
             _cache[cache_key] = (disk_result, datetime.utcnow())
-            return disk_result
+            return disk_result, since, until
 
         # 3. 카탈로그 기반 병렬 탐색 (Primary)
-        openings = await self._catalog_explore(rating, speed)
+        openings = await self._catalog_explore(rating, speed, since, until)
 
         # 4. BFS 폴백 (카탈로그 결과 부족 시)
         if len(openings) < MIN_CATALOG_RESULTS:
@@ -235,26 +251,26 @@ class OpeningTierService:
                 "Catalog returned %d entries for rating=%s speed=%s, falling back to BFS",
                 len(openings), rating, speed,
             )
-            bfs_openings = await self._bfs_explore(rating, speed)
+            bfs_openings = await self._bfs_explore(rating, speed, since, until)
             for eco, node in bfs_openings.items():
                 if eco not in openings or node.depth > openings[eco].depth:
                     openings[eco] = node
 
         # 5. 캐시 저장
         _cache[cache_key] = (openings, datetime.utcnow())
-        self._disk_cache_save(rating, speed, openings)
-        return openings
+        self._disk_cache_save(rating, speed, since, until, openings)
+        return openings, since, until
 
     # ── 디스크 캐시 헬퍼 ─────────────────────────────────────────────
 
     @staticmethod
-    def _disk_cache_path(rating: int, speed: str) -> Path:
-        return CACHE_DIR / f"{rating}_{speed}.json"
+    def _disk_cache_path(rating: int, speed: str, since: str, until: str) -> Path:
+        return CACHE_DIR / f"{rating}_{speed}_{since}_{until}.json"
 
     def _disk_cache_load(
-        self, rating: int, speed: str
-    ) -> Optional[Dict[str, _OpeningNode]]:
-        path = self._disk_cache_path(rating, speed)
+        self, rating: int, speed: str, since: str, until: str
+    ) -> Optional[Dict[str, "_OpeningNode"]]:
+        path = self._disk_cache_path(rating, speed, since, until)
         if not path.exists():
             return None
         try:
@@ -267,31 +283,31 @@ class OpeningTierService:
                 return None
             return {eco: _OpeningNode(**node) for eco, node in raw.items()}
         except Exception as exc:
-            logger.warning("Disk cache load failed %s_%s_%s: %s", rating, speed, month, exc)
+            logger.warning("Disk cache load failed %s_%s_%s_%s: %s", rating, speed, since, until, exc)
             return None
 
     def _disk_cache_save(
-        self, rating: int, speed: str, openings: Dict[str, _OpeningNode]
+        self, rating: int, speed: str, since: str, until: str, openings: Dict[str, "_OpeningNode"]
     ) -> None:
         if not openings:
             return
         try:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            path = self._disk_cache_path(rating, speed)
+            path = self._disk_cache_path(rating, speed, since, until)
             payload = {eco: asdict(node) for eco, node in openings.items()}
             with path.open("w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
             logger.info("Disk cache saved: %s", path)
         except Exception as exc:
-            logger.warning("Disk cache save failed %s_%s_%s: %s", rating, speed, month, exc)
+            logger.warning("Disk cache save failed %s_%s_%s_%s: %s", rating, speed, since, until, exc)
 
     # ─────────────────────────────────────────────────
     # 카탈로그 기반 병렬 탐색 (Primary)
     # ─────────────────────────────────────────────────
 
     async def _catalog_explore(
-        self, rating: int, speed: str
-    ) -> Dict[str, _OpeningNode]:
+        self, rating: int, speed: str, since: str, until: str
+    ) -> Dict[str, "_OpeningNode"]:
         """OPENINGS_CATALOG 기반 FEN 생성 후 Lichess Explorer 병렬 조회.
 
         asyncio.Semaphore(MAX_CONCURRENT)로 동시 요청 수를 제한하며
@@ -301,7 +317,7 @@ class OpeningTierService:
 
         async def fetch_one(
             entry: OpeningEntry,
-        ) -> Optional[Tuple[str, _OpeningNode]]:
+        ) -> Optional[Tuple[str, "_OpeningNode"]]:
             # python-chess로 UCI 수 목록 → FEN 생성
             board = chess.Board()
             depth = len(entry["moves"])
@@ -318,7 +334,7 @@ class OpeningTierService:
 
             async with semaphore:
                 await asyncio.sleep(CATALOG_REQUEST_DELAY)
-                data = await self._fetch_position(fen, rating, speed)
+                data = await self._fetch_position(fen, rating, speed, since, until)
 
             if not data:
                 return None
@@ -372,13 +388,13 @@ class OpeningTierService:
     # ─────────────────────────────────────────────────
 
     async def _bfs_explore(
-        self, rating: int, speed: str
-    ) -> Dict[str, _OpeningNode]:
+        self, rating: int, speed: str, since: str, until: str
+    ) -> Dict[str, "_OpeningNode"]:
         """Lichess Explorer API를 BFS로 탐색 (카탈로그 부족 시 폴백)."""
         board = chess.Board()
         queue: deque[Tuple[chess.Board, int]] = deque([(board, 0)])
         visited: set[str] = set()
-        openings: Dict[str, _OpeningNode] = {}
+        openings: Dict[str, "_OpeningNode"] = {}
         node_count = 0
 
         while queue and node_count < MAX_NODES:
@@ -391,7 +407,7 @@ class OpeningTierService:
             visited.add(fen_key)
 
             await asyncio.sleep(REQUEST_DELAY)
-            data = await self._fetch_position(fen, rating, speed)
+            data = await self._fetch_position(fen, rating, speed, since, until)
             if not data:
                 logger.warning(
                     "_fetch_position no data: fen=%s rating=%s speed=%s",
@@ -459,7 +475,7 @@ class OpeningTierService:
     # ─────────────────────────────────────────────────
 
     async def _fetch_position(
-        self, fen: str, rating: int, speed: str
+        self, fen: str, rating: int, speed: str, since: str, until: str
     ) -> Optional[Dict[str, Any]]:
         speed_val = SPEED_MAP.get(speed, speed)
         fen_encoded = urllib.parse.quote(fen, safe="")
@@ -470,6 +486,7 @@ class OpeningTierService:
             f"&speeds[]={speed_val}"
             f"&moves={TOP_N_MOVES}"
             f"&topGames=0&recentGames=0"
+            f"&since={since}&until={until}"
         )
         try:
             headers = {"Accept": "application/json"}

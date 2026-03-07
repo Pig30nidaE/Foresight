@@ -4,7 +4,7 @@
  * Endpoint: GET /api/v1/opening-tier/*
  */
 import api from "@/shared/lib/api";
-import type { OpeningTierResponse, BracketsResponse } from "./types";
+import type { OpeningTierResponse, BracketsResponse, OpeningDetail } from "./types";
 
 export const getOpeningTiers = async (
   rating: number,
@@ -25,6 +25,18 @@ export const getRatingBrackets = async (
     params: { speed },
   });
   return data as BracketsResponse;
+};
+
+export const getOpeningDetail = async (
+  eco: string,
+  name: string,
+  color: string = "white"
+): Promise<OpeningDetail> => {
+  const { data } = await api.get("/opening-tier/detail", {
+    params: { eco, name, color },
+    timeout: 30_000,
+  });
+  return data as OpeningDetail;
 };
 
 export { api };
