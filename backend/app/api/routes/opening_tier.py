@@ -3,6 +3,7 @@
 ====================
 GET  /api/v1/opening-tier/global    → 레이팅 구간별 오프닝 티어 랭킹
 GET  /api/v1/opening-tier/brackets  → 레이팅 구간 목록 (Lichess + Chess.com 라벨)
+GET  /api/v1/opening-tier/detail    → 오프닝 핵심 포인트 + YouTube 링크
 GET  /api/v1/opening-tier/export    → CSV 또는 JSON 파일 다운로드
 DELETE /api/v1/opening-tier/cache   → 특정 구간 캐시 무효화
 """
@@ -10,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 from app.features.opening_tier.services.opening_tier_service import OpeningTierService
+from app.features.opening_tier.services.opening_detail_service import get_opening_detail
 
 router = APIRouter()
 _service = OpeningTierService()
@@ -83,6 +85,25 @@ async def get_rating_brackets(
         "speed": speed,
         "brackets": [b.model_dump() for b in brackets],
     }
+
+
+@router.get("/detail")
+async def get_opening_detail_route(
+    eco: str = Query(..., description="ECO 코드 (예: B20)"),
+    name: str = Query(..., description="오프닝 이름 (예: Sicilian Defense)"),
+    color: str = Query("white", description="기준 색상 (white/black)"),
+):
+    """오프닝 핵심 포인트 + YouTube 한국어 해설 영상 검색 링크 반환.
+
+    color=white이면 백 입장에서의 핵심 아이디어,
+    color=black이면 흑 입장에서의 핵심 아이디어를 반환합니다.
+    """
+    _validate_color(color)
+    try:
+        result = await get_opening_detail(eco=eco, name=name, color=color)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return result
 
 
 @router.get("/export")
