@@ -40,6 +40,14 @@ export interface BracketsResponse {
   brackets: RatingBracket[];
 }
 
+export interface OpeningDetail {
+  eco: string;
+  name: string;
+  color: string;
+  tips: string[];
+  youtube_search_url: string;
+}
+
 export const TIER_CONFIG: Record<
   Tier,
   { color: string; bg: string; border: string }
