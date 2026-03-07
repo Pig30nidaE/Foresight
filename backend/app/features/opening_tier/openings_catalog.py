@@ -25,12 +25,17 @@ class OpeningEntry(TypedDict):
 # 주요 오프닝 카탈로그 (A~E ECO 시리즈, 60+ 오프닝)
 OPENINGS_CATALOG: List[OpeningEntry] = [
     # ── A 시리즈 (1.c4, 1.Nf3, 비정규 오프닝) ──────────────────────
-    {"eco": "A00", "name": "Starting Position",          "moves": []},
+    {"eco": "A01", "name": "Nimzo-Larsen Attack",        "moves": ["b2b3"]},
+    {"eco": "A02", "name": "Bird's Opening",             "moves": ["f2f4"]},
+    {"eco": "A04", "name": "Reti Opening",               "moves": ["g1f3"]},
     {"eco": "A10", "name": "English Opening",            "moves": ["c2c4"]},
     {"eco": "A20", "name": "English: 1...e5",            "moves": ["c2c4", "e7e5"]},
     {"eco": "A30", "name": "English: Symmetrical",       "moves": ["c2c4", "c7c5"]},
     {"eco": "A45", "name": "Indian Defense",             "moves": ["d2d4", "g8f6"]},
     {"eco": "A46", "name": "Indian: London System",      "moves": ["d2d4", "g8f6", "g1f3"]},
+    {"eco": "A52", "name": "Budapest Gambit",            "moves": ["d2d4", "g8f6", "c2c4", "e7e5"]},
+    {"eco": "A57", "name": "Benko Gambit",               "moves": ["d2d4", "g8f6", "c2c4", "c7c5", "d4d5", "b7b5"]},
+    {"eco": "A80", "name": "Dutch Defense",              "moves": ["d2d4", "f7f5"]},
     # ── B 시리즈 (1.e4 응답: 시실리언, 카로칸, 스칸디나비안 등) ─────
     {"eco": "B00", "name": "King's Pawn Game",           "moves": ["e2e4"]},
     {"eco": "B01", "name": "Scandinavian Defense",       "moves": ["e2e4", "d7d5"]},
@@ -51,9 +56,13 @@ OPENINGS_CATALOG: List[OpeningEntry] = [
     {"eco": "B90", "name": "Sicilian: Najdorf",          "moves": ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "a7a6"]},
     # ── C 시리즈 (1.e4 e5 킹스폰 계열, 프렌치) ─────────────────────
     {"eco": "C00", "name": "French Defense",             "moves": ["e2e4", "e7e6"]},
+    {"eco": "C01", "name": "French: Exchange",           "moves": ["e2e4", "e7e6", "d2d4", "d7d5", "e4d5", "e6d5"]},
     {"eco": "C02", "name": "French: Advance",            "moves": ["e2e4", "e7e6", "d2d4", "d7d5", "e4e5"]},
     {"eco": "C10", "name": "French: Classical",          "moves": ["e2e4", "e7e6", "d2d4", "d7d5", "b1c3"]},
+    {"eco": "C15", "name": "French: Winawer",            "moves": ["e2e4", "e7e6", "d2d4", "d7d5", "b1c3", "f8b4"]},
     {"eco": "C20", "name": "King's Pawn: 1.e4 e5",       "moves": ["e2e4", "e7e5"]},
+    {"eco": "C24", "name": "Bishop's Opening",           "moves": ["e2e4", "e7e5", "f1c4"]},
+    {"eco": "C25", "name": "Vienna Game",                "moves": ["e2e4", "e7e5", "b1c3"]},
     {"eco": "C30", "name": "King's Gambit",              "moves": ["e2e4", "e7e5", "f2f4"]},
     {"eco": "C40", "name": "King's Knight Opening",      "moves": ["e2e4", "e7e5", "g1f3"]},
     {"eco": "C41", "name": "Philidor Defense",           "moves": ["e2e4", "e7e5", "g1f3", "d7d6"]},
@@ -63,6 +72,7 @@ OPENINGS_CATALOG: List[OpeningEntry] = [
     {"eco": "C46", "name": "Three Knights Game",         "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "b1c3"]},
     {"eco": "C47", "name": "Four Knights Game",          "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "b1c3", "g8f6"]},
     {"eco": "C50", "name": "Italian Game",               "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"]},
+    {"eco": "C51", "name": "Evans Gambit",               "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5", "b2b4"]},
     {"eco": "C55", "name": "Two Knights Defense",        "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6"]},
     {"eco": "C60", "name": "Ruy Lopez",                  "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"]},
     {"eco": "C65", "name": "Ruy Lopez: Berlin Defense",  "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "g8f6"]},
@@ -72,10 +82,12 @@ OPENINGS_CATALOG: List[OpeningEntry] = [
     # ── D 시리즈 (1.d4 d5) ─────────────────────────────────────────
     {"eco": "D00", "name": "Queen's Pawn Game",          "moves": ["d2d4", "d7d5"]},
     {"eco": "D02", "name": "London System",              "moves": ["d2d4", "d7d5", "g1f3", "g8f6", "c1f4"]},
+    {"eco": "D04", "name": "Colle System",               "moves": ["d2d4", "d7d5", "g1f3", "g8f6", "e2e3"]},
     {"eco": "D06", "name": "Queen's Gambit",             "moves": ["d2d4", "d7d5", "c2c4"]},
     {"eco": "D10", "name": "Slav Defense",               "moves": ["d2d4", "d7d5", "c2c4", "c7c6"]},
     {"eco": "D20", "name": "Queen's Gambit Accepted",    "moves": ["d2d4", "d7d5", "c2c4", "d5c4"]},
     {"eco": "D30", "name": "Queen's Gambit Declined",    "moves": ["d2d4", "d7d5", "c2c4", "e7e6"]},
+    {"eco": "D32", "name": "Tarrasch Defense",           "moves": ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "c7c5"]},
     {"eco": "D37", "name": "QGD: 4.Nf3",                "moves": ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "g1f3"]},
     {"eco": "D43", "name": "Semi-Slav Defense",          "moves": ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "g1f3", "c7c6"]},
     {"eco": "D50", "name": "QGD: 4.Bg5",                "moves": ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5"]},
@@ -84,9 +96,11 @@ OPENINGS_CATALOG: List[OpeningEntry] = [
     # ── E 시리즈 (1.d4 Nf6: 인디안 디펜스 계열) ────────────────────
     {"eco": "E00", "name": "Catalan Opening",            "moves": ["d2d4", "g8f6", "c2c4", "e7e6", "g2g3"]},
     {"eco": "E10", "name": "Queen's Indian Defense",     "moves": ["d2d4", "g8f6", "c2c4", "e7e6", "g1f3", "b7b6"]},
+    {"eco": "E11", "name": "Bogo-Indian Defense",        "moves": ["d2d4", "g8f6", "c2c4", "e7e6", "g1f3", "f8b4"]},
     {"eco": "E20", "name": "Nimzo-Indian Defense",       "moves": ["d2d4", "g8f6", "c2c4", "e7e6", "b1c3", "f8b4"]},
     {"eco": "E60", "name": "King's Indian Defense",      "moves": ["d2d4", "g8f6", "c2c4", "g7g6"]},
     {"eco": "E80", "name": "KID: Samisch Variation",     "moves": ["d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6", "f2f3"]},
+    {"eco": "E91", "name": "KID: Classical",             "moves": ["d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6", "g1f3"]},
 ]
 
 

@@ -16,7 +16,7 @@ from app.features.opening_tier.services.opening_detail_service import get_openin
 router = APIRouter()
 _service = OpeningTierService()
 
-_VALID_RATINGS = {400, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500}
+_VALID_RATINGS = {400, 1000, 1400, 1800, 2200}
 _VALID_SPEEDS = {"bullet", "blitz", "rapid", "classical"}
 
 
