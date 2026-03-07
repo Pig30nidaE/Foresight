@@ -21,7 +21,6 @@ import io
 import json
 import logging
 import statistics
-import urllib.parse
 from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -48,19 +47,25 @@ MAX_DEPTH = 10
 MAX_NODES = 200
 MIN_CATALOG_RESULTS = 10     # 이보다 적으면 BFS 폴백
 
-# ── 레이팅 구간 ─────────────────────────────────────────────────────
-RATING_BRACKETS = [400, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500]
+# ── 레이팅 구간 (400pt 폭) ────────────────────────────────────────
+RATING_BRACKETS = [400, 1000, 1400, 1800, 2200]
 
 _BRACKET_RANGES: Dict[int, Tuple[int, Optional[int]]] = {
     400:  (0,    1000),
-    1000: (1000, 1200),
-    1200: (1200, 1400),
-    1400: (1400, 1600),
-    1600: (1600, 1800),
-    1800: (1800, 2000),
-    2000: (2000, 2200),
-    2200: (2200, 2500),
-    2500: (2500, None),
+    1000: (1000, 1400),
+    1400: (1400, 1800),
+    1800: (1800, 2200),
+    2200: (2200, None),
+}
+
+# Lichess Explorer API는 200pt 단위 구간 ID를 사용하므로
+# 400pt 구간을 만들기 위해 인접 두 개 ID를 합산합니다.
+_LICHESS_RATINGS_PARAMS: Dict[int, List[int]] = {
+    400:  [400],
+    1000: [1000, 1200],
+    1400: [1400, 1600],
+    1800: [1800, 2000],
+    2200: [2200, 2500],
 }
 
 CHESSCOM_OFFSET: Dict[str, int] = {
@@ -477,38 +482,111 @@ class OpeningTierService:
     async def _fetch_position(
         self, fen: str, rating: int, speed: str, since: str, until: str
     ) -> Optional[Dict[str, Any]]:
+        """400pt 구간의 경우 두 개의 200pt 브래킷을 순차 호출 후 게임 수를 합산합니다."""
+        lichess_ids = _LICHESS_RATINGS_PARAMS.get(rating, [rating])
+
+        if len(lichess_ids) == 1:
+            return await self._fetch_single(fen, lichess_ids[0], speed, since, until)
+
+        # 두 구간 순차 호출
+        all_data: List[Dict[str, Any]] = []
+        for lid in lichess_ids:
+            data = await self._fetch_single(fen, lid, speed, since, until)
+            if data is not None:
+                all_data.append(data)
+
+        if not all_data:
+            return None
+        if len(all_data) == 1:
+            return all_data[0]
+
+        # 게임 수 합산, opening/moves는 첫 번째 결과 기준
+        merged: Dict[str, Any] = dict(all_data[0])
+        merged["white"] = sum(d.get("white", 0) for d in all_data)
+        merged["draws"] = sum(d.get("draws", 0) for d in all_data)
+        merged["black"] = sum(d.get("black", 0) for d in all_data)
+        # BFS용 moves: 게임 수가 더 많은 구간 기준
+        total0 = all_data[0].get("white", 0) + all_data[0].get("draws", 0) + all_data[0].get("black", 0)
+        total1 = all_data[1].get("white", 0) + all_data[1].get("draws", 0) + all_data[1].get("black", 0)
+        if total1 > total0 and "moves" in all_data[1]:
+            merged["moves"] = all_data[1]["moves"]
+        return merged
+
+    async def _fetch_single(
+        self, fen: str, lichess_rating: int, speed: str, since: str, until: str
+    ) -> Optional[Dict[str, Any]]:
+        """Lichess Explorer API 단건 호출.
+
+        httpx params 방식으로 URL을 구성하여 ratings[], speeds[] 배열 파라미터가
+        올바르게 인코딩되도록 합니다.
+        """
         speed_val = SPEED_MAP.get(speed, speed)
-        fen_encoded = urllib.parse.quote(fen, safe="")
-        url = (
-            f"{EXPLORER_URL}?"
-            f"fen={fen_encoded}"
-            f"&ratings[]={rating}"
-            f"&speeds[]={speed_val}"
-            f"&moves={TOP_N_MOVES}"
-            f"&topGames=0&recentGames=0"
-            f"&since={since}&until={until}"
-        )
+        # list-of-tuples 형식으로 배열 파라미터(ratings[], speeds[]) 정확히 전달
+        params = [
+            ("fen", fen),
+            ("ratings[]", lichess_rating),
+            ("speeds[]", speed_val),
+            ("moves", TOP_N_MOVES),
+            ("topGames", 0),
+            ("recentGames", 0),
+            ("since", since),
+            ("until", until),
+        ]
         try:
             headers = {"Accept": "application/json"}
             if settings.LICHESS_API_TOKEN:
                 headers["Authorization"] = f"Bearer {settings.LICHESS_API_TOKEN}"
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url, headers=headers)
+                resp = await client.get(EXPLORER_URL, params=params, headers=headers)
                 resp.raise_for_status()
                 return resp.json()
         except Exception as err:
-            logger.error("Lichess Explorer failed url=%s exc=%s", url, err)
+            logger.error("Lichess Explorer failed rating=%s speed=%s exc=%s", lichess_rating, speed_val, err)
             return None
 
     # ─────────────────────────────────────────────────
     # 티어 배정 (Z-score 기반)
     # ─────────────────────────────────────────────────
 
+    @staticmethod
+    def _merge_families(
+        openings: Dict[str, "_OpeningNode"],
+    ) -> Dict[str, "_OpeningNode"]:
+        """':' 기준으로 같은 오프닝 계열을 하나로 합산.
+
+        예: 'Sicilian Defense', 'Sicilian Defense: Dragon Variation',
+           'Sicilian Defense: Najdorf Variation' → 'Sicilian Defense' 하나로 합산.
+        대표 항목 선정 기준: ':' 없는 기본 항목 우선, 그 다음 depth 오름차순.
+        """
+        family_groups: Dict[str, List[_OpeningNode]] = {}
+        for node in openings.values():
+            family = node.name.split(":")[0].strip()
+            family_groups.setdefault(family, []).append(node)
+
+        merged: Dict[str, _OpeningNode] = {}
+        for family_name, nodes in family_groups.items():
+            base = min(
+                nodes,
+                key=lambda n: (1 if ":" in n.name else 0, n.depth),
+            )
+            merged[base.eco] = _OpeningNode(
+                eco=base.eco,
+                name=family_name,
+                white_wins=sum(n.white_wins for n in nodes),
+                draws=sum(n.draws for n in nodes),
+                black_wins=sum(n.black_wins for n in nodes),
+                depth=base.depth,
+                moves=base.moves,
+            )
+        return merged
+
     def _assign_tiers(
         self, openings: Dict[str, _OpeningNode], color: str
     ) -> List[Dict[str, Any]]:
         if not openings:
             return []
+
+        openings = self._merge_families(openings)
 
         scored: List[Tuple[str, float, _OpeningNode]] = []
         for eco, node in openings.items():
