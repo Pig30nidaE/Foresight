@@ -61,7 +61,7 @@ export default function BlunderTimeline({ data }: Props) {
   return (
     <div className="space-y-4">
       {isMock && (
-        <p className="text-xs text-amber-400/80 text-center">
+        <p className="text-xs text-amber-700/80 text-center">
           ⚠️ 클록 데이터 없음 — 예시 곡선
         </p>
       )}
@@ -69,20 +69,20 @@ export default function BlunderTimeline({ data }: Props) {
       {/* 클록 데이터가 있을 때: 요약 배지 */}
       {hasClock && overall && (
         <div className="flex gap-3 flex-wrap text-xs">
-          <div className="bg-zinc-800 rounded-lg px-3 py-2">
-            <span className="text-zinc-500">분석 게임</span>
-            <span className="ml-2 font-bold text-white">{data.games_with_clock}게임</span>
+          <div className="bg-chess-bg border border-chess-border rounded-lg px-3 py-2">
+            <span className="text-chess-muted">분석 게임</span>
+            <span className="ml-2 font-bold text-chess-primary">{data.games_with_clock}게임</span>
           </div>
-          <div className="bg-zinc-800 rounded-lg px-3 py-2">
-            <span className="text-zinc-500">시간 압박 비율</span>
-            <span className={`ml-2 font-bold ${overall.pressure_ratio >= 0.3 ? "text-red-400" : overall.pressure_ratio >= 0.15 ? "text-amber-400" : "text-emerald-400"}`}>
+          <div className="bg-chess-bg border border-chess-border rounded-lg px-3 py-2">
+            <span className="text-chess-muted">시간 압박 비율</span>
+            <span className={`ml-2 font-bold ${overall.pressure_ratio >= 0.3 ? "text-red-700" : overall.pressure_ratio >= 0.15 ? "text-amber-700" : "text-emerald-700"}`}>
               {Math.round(overall.pressure_ratio * 100)}%
             </span>
           </div>
           {overall.avg_time_spent != null && (
-            <div className="bg-zinc-800 rounded-lg px-3 py-2">
-              <span className="text-zinc-500">평균 사고 시간</span>
-              <span className="ml-2 font-bold text-zinc-200">{overall.avg_time_spent}초</span>
+            <div className="bg-chess-bg border border-chess-border rounded-lg px-3 py-2">
+              <span className="text-chess-muted">평균 사고 시간</span>
+              <span className="ml-2 font-bold text-chess-primary">{overall.avg_time_spent}초</span>
             </div>
           )}
         </div>
@@ -93,15 +93,15 @@ export default function BlunderTimeline({ data }: Props) {
         {/* 페이즈별 압박률 막대 */}
         {phaseData && phaseData.length > 0 && (
           <div>
-            <p className="text-xs text-zinc-500 mb-2">페이즈별 시간 압박 비율</p>
+            <p className="text-xs text-chess-muted mb-2">페이즈별 시간 압박 비율</p>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={phaseData} margin={{ left: -15, right: 4, top: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis dataKey="phase" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `${v}%`} tick={{ fill: "#71717a", fontSize: 11 }} domain={[0, 100]} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#C8CBC5" />
+                <XAxis dataKey="phase" tick={{ fill: "#5C5755", fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => `${v}%`} tick={{ fill: "#5C5755", fontSize: 11 }} domain={[0, 100]} />
                 <Tooltip
                   formatter={(v) => [`${v}%`, "시간압박"]}
-                  contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                  contentStyle={{ background: "#FBFBF2", border: "1px solid #C8CBC5", borderRadius: 8, fontSize: 12 }}
                 />
                 <Bar dataKey="pressure_pct" radius={[4, 4, 0, 0]}>
                   {phaseData.map((entry, i) => (
@@ -118,7 +118,7 @@ export default function BlunderTimeline({ data }: Props) {
 
         {/* 수 번호별 압박률 곡선 */}
         <div>
-          <p className="text-xs text-zinc-500 mb-2">
+          <p className="text-xs text-chess-muted mb-2">
             수 번호별 시간 압박 비율{isMock ? " (예시)" : ""}
           </p>
           <ResponsiveContainer width="100%" height={180}>
@@ -129,15 +129,15 @@ export default function BlunderTimeline({ data }: Props) {
                   <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#C8CBC5" />
               <XAxis
                 dataKey="move_number"
                 tickFormatter={(v) => `${v}수`}
-                tick={{ fill: "#71717a", fontSize: 11 }}
+                tick={{ fill: "#5C5755", fontSize: 11 }}
               />
               <YAxis
                 tickFormatter={(v) => `${v}%`}
-                tick={{ fill: "#71717a", fontSize: 11 }}
+                tick={{ fill: "#5C5755", fontSize: 11 }}
                 domain={[0, 100]}
               />
               <Tooltip
@@ -146,7 +146,7 @@ export default function BlunderTimeline({ data }: Props) {
                   name === "pressure_pct" ? "시간압박" : "평균사고",
                 ]}
                 labelFormatter={(v) => `${v}수`}
-                contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                contentStyle={{ background: "#FBFBF2", border: "1px solid #C8CBC5", borderRadius: 8, fontSize: 12 }}
               />
               <Area
                 type="monotone"
