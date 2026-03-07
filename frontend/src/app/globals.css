@@ -3,17 +3,17 @@
 /* ── Chess 커스텀 팔레트 ─────────────────────────────────── */
 @theme {
   --color-chess-bg: #FBFBF2;
-  --color-chess-surface: #E5E6E4;
-  --color-chess-border: #CFD2CD;
-  --color-chess-muted: #7A7676;
-  --color-chess-primary: #847577;
-  --color-chess-accent: #B38A58;
+  --color-chess-surface: #EEEEE8;
+  --color-chess-border: #C8CBC5;
+  --color-chess-muted: #5C5755;
+  --color-chess-primary: #2D2926;
+  --color-chess-accent: #A67C44;
 }
 
 /* ── 기본 색상 변수 ─────────────────────────────────────── */
 :root {
   --background: #FBFBF2;
-  --foreground: #847577;
+  --foreground: #2D2926;
 }
 
 body {
@@ -29,12 +29,12 @@ body {
   width: 6px;
   height: 6px;
 }
-::-webkit-scrollbar-track  { background: #E5E6E4; }
-::-webkit-scrollbar-thumb  { background: #CFD2CD; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #A6A2A2; }
+::-webkit-scrollbar-track  { background: #EEEEE8; }
+::-webkit-scrollbar-thumb  { background: #C8CBC5; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9A9690; }
 
 /* ── 텍스트 선택 색상 ───────────────────────────────────── */
-::selection { background: #B38A58; color: #fff; }
+::selection { background: #A67C44; color: #fff; }
 
 /* ── 페이드인 애니메이션 ─────────────────────────────────── */
 @keyframes fadeIn {
@@ -51,7 +51,7 @@ body {
   100% { background-position:  400px 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #CFD2CD 25%, #E5E6E4 50%, #CFD2CD 75%);
+  background: linear-gradient(90deg, #C8CBC5 25%, #EEEEE8 50%, #C8CBC5 75%);
   background-size: 800px 100%;
   animation: shimmer 1.4s infinite linear;
   border-radius: 0.375rem;
