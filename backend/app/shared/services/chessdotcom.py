@@ -87,7 +87,7 @@ class ChessDotComService:
 
     async def get_player_profile(self, username: str) -> PlayerProfile:
         """플레이어 기본 프로필 조회"""
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             profile_resp = await client.get(
                 f"{self.BASE_URL}/player/{username}", headers=self.HEADERS
             )
@@ -134,7 +134,7 @@ class ChessDotComService:
 
     async def _get_archives(self, username: str) -> List[str]:
         """아카이브 URL 목록 조회 (최신순)"""
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             resp = await client.get(
                 f"{self.BASE_URL}/player/{username}/games/archives",
                 headers=self.HEADERS,
@@ -148,7 +148,7 @@ class ChessDotComService:
     ) -> List[GameSummary]:
         """특정 월의 게임 목록 조회"""
         url = f"{self.BASE_URL}/player/{username}/games/{year}/{month:02d}"
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             resp = await client.get(url, headers=self.HEADERS)
             resp.raise_for_status()
         games_data = resp.json().get("games", [])
@@ -175,7 +175,7 @@ class ChessDotComService:
         # 이로 인해 모든 엔드포인트가 무조건 5000게임을 가져와 응답이 25-30초 소요됨
         effective_cap = min(max(max_games, 1), HARD_CAP)
 
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             for archive_url in archives:
                 if len(games) >= effective_cap:
                     break

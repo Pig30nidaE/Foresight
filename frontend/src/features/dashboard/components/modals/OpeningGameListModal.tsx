@@ -19,14 +19,14 @@ function toAnalysisUrl(url: string): string {
 }
 
 const RESULT_BADGE: Record<string, { label: string; cls: string }> = {
-  win:  { label: "승리", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" },
-  loss: { label: "패배", cls: "bg-red-500/20 text-red-300 border-red-500/30" },
+  win:  { label: "승리", cls: "bg-emerald-700/10 text-emerald-700 border-emerald-700/30" },
+  loss: { label: "패배", cls: "bg-red-600/10 text-red-700 border-red-600/30" },
   draw: { label: "무승부", cls: "bg-chess-border/30 text-chess-muted border-chess-muted/30" },
 };
 
 const RESULT_DOT: Record<string, string> = {
-  win:  "bg-emerald-400",
-  loss: "bg-red-400",
+  win:  "bg-emerald-600",
+  loss: "bg-red-600",
   draw: "bg-chess-muted",
 };
 
@@ -85,8 +85,8 @@ export default function OpeningGameListModal({ node, onClose }: Props) {
   const total = node.games;
   const winRate = node.win_rate;
   const winRateColor =
-    winRate >= 55 ? "text-emerald-400" :
-    winRate >= 45 ? "text-amber-400"   : "text-red-400";
+    winRate >= 55 ? "text-emerald-700" :
+    winRate >= 45 ? "text-amber-700"   : "text-red-700";
 
   const modal = (
     <div
@@ -133,16 +133,16 @@ export default function OpeningGameListModal({ node, onClose }: Props) {
         {/* W/D/L bar */}
         <div className="px-6 py-3 border-b border-chess-border/60">
           <div className="flex gap-2 text-xs mb-2">
-            <span className="text-emerald-400 font-semibold">{node.wins}승</span>
+            <span className="text-emerald-700 font-semibold">{node.wins}승</span>
             <span className="text-chess-muted">/</span>
             <span className="text-chess-muted">{node.draws}무</span>
             <span className="text-chess-muted">/</span>
-            <span className="text-red-400 font-semibold">{node.losses}패</span>
+            <span className="text-red-700 font-semibold">{node.losses}패</span>
           </div>
           {total > 0 && (
             <div className="flex w-full h-1.5 rounded-full overflow-hidden gap-px">
               <div
-                className="bg-emerald-500 rounded-l-full"
+                className="bg-emerald-600 rounded-l-full"
                 style={{ width: `${(node.wins / total) * 100}%` }}
               />
               <div
@@ -150,7 +150,7 @@ export default function OpeningGameListModal({ node, onClose }: Props) {
                 style={{ width: `${(node.draws / total) * 100}%` }}
               />
               <div
-                className="bg-red-500 rounded-r-full flex-1"
+                className="bg-red-600 rounded-r-full flex-1"
               />
             </div>
           )}
