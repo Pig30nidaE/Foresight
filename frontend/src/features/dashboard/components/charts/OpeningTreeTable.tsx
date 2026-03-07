@@ -25,7 +25,7 @@ function flatten(nodes: OpeningTreeNode[], expanded: Set<string>): RowMeta[] {
 }
 
 const winColor = (r: number) =>
-  r >= 55 ? "text-emerald-400" : r >= 45 ? "text-amber-400" : "text-red-400";
+  r >= 55 ? "text-emerald-700" : r >= 45 ? "text-amber-700" : "text-red-700";
 
 export default function OpeningTreeTable({ data }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -96,11 +96,11 @@ export default function OpeningTreeTable({ data }: Props) {
           <div className="flex items-center gap-3 text-xs shrink-0 ml-2">
             <span className="text-chess-muted">{node.games}게임</span>
             <div className="flex gap-1">
-              <span className="text-emerald-400">{node.wins}승</span>
+              <span className="text-emerald-700">{node.wins}승</span>
               <span className="text-chess-muted">/</span>
               <span className="text-chess-muted">{node.draws}무</span>
               <span className="text-chess-muted">/</span>
-              <span className="text-red-400">{node.losses}패</span>
+              <span className="text-red-700">{node.losses}패</span>
             </div>
             <span className={`font-bold w-10 text-right ${winColor(node.win_rate)}`}>
               {node.win_rate}%

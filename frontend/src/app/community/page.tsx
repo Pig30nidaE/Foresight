@@ -15,7 +15,7 @@ export default function CommunityPage() {
           <p className="text-chess-muted text-lg">🚧 개발 예정</p>
           <p className="text-chess-muted text-sm mt-2">
             구현 시작 위치:{" "}
-            <code className="text-amber-400">src/features/community/</code>
+            <code className="text-amber-700">src/features/community/</code>
           </p>
         </div>
       </div>

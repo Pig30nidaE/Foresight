@@ -135,14 +135,18 @@ export interface TacticalPattern {
   key_metric_label?: string;
   key_metric_unit?: string;
   evidence_count?: number;
-  /** streak 깊이별 수 품질 추이 (상황 5 틸트 전용) */
+  insufficient_data?: boolean;
+  /** 패턴별 차트/분석 데이터 */
   chart_data?: {
-    normal_avg:   number;
-    win_trend:    Array<{ depth: string; avg_q: number }>;
-    loss_trend:   Array<{ depth: string; avg_q: number }>;
-    win_count:    number;
-    loss_count:   number;
-    normal_count: number;
+    /** 우위 유지력 (situation_id=4) — 유지/역전 파트 분석 */
+    type:          "advantage_breakdown";
+    total:         number;
+    maintained:    number;
+    reversed_mid:  number;
+    reversed_end:  number;
+    mid_avg_move:  number | null;
+    end_avg_move:  number | null;
+    maintain_rate: number;
   } | null;
 }
 

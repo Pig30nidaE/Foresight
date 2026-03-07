@@ -86,9 +86,9 @@ export default function OpeningTierPage() {
 
         {/* Chess.com info note */}
         {platform === "chess.com" && (
-          <div className="flex items-start gap-2 bg-amber-950/40 border border-amber-700/30 rounded-xl px-4 py-3 text-sm">
-            <span className="text-amber-400 shrink-0 mt-0.5">ℹ</span>
-            <p className="text-amber-300/80">
+          <div className="flex items-start gap-2 bg-amber-700/8 border border-amber-700/28 rounded-xl px-4 py-3 text-sm">
+            <span className="text-amber-700 shrink-0 mt-0.5">ℹ</span>
+            <p className="text-amber-800">
               Chess.com 레이팅 수치는 대략적인 환산값입니다. 실제 데이터는 Lichess 기보를 기반으로 집계됩니다.
             </p>
           </div>
@@ -109,7 +109,7 @@ export default function OpeningTierPage() {
 
         {/* Error */}
         {error && !showLoading && (
-          <div className="bg-red-950/40 border border-red-700/30 rounded-xl px-5 py-4 text-sm text-red-300">
+          <div className="bg-red-600/8 border border-red-600/30 rounded-xl px-5 py-4 text-sm text-red-700">
             데이터 로드에 실패했습니다. 잠시 후 다시 시도해 주세요.
           </div>
         )}
