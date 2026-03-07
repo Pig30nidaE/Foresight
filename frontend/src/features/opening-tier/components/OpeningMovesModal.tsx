@@ -6,6 +6,7 @@ import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
 import type { OpeningTierEntry, OpeningDetail } from "../types";
 import { getOpeningDetail } from "../api";
+import { getOpeningDescription } from "../openingDescriptions";
 
 interface Props {
   entry: OpeningTierEntry | null;
@@ -22,6 +23,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
   const [currentIndex, setCurrentIndex] = useState(0);
   const [detail, setDetail] = useState<OpeningDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [tipsOpen, setTipsOpen] = useState(false);
 
   // UCI moves → FEN array + SAN array
   const positions = useMemo((): Position[] | null => {
@@ -47,6 +49,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
   useEffect(() => {
     setCurrentIndex(0);
     setDetail(null);
+    setTipsOpen(false);
     if (!entry) return;
     setDetailLoading(true);
     getOpeningDetail(entry.eco, entry.name, color)
@@ -81,6 +84,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
   if (!entry) return null;
 
   const maxIndex = positions ? positions.length - 1 : 0;
+  const description = entry ? getOpeningDescription(entry.name) : null;
   const currentFen =
     positions?.[currentIndex]?.fen ??
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -171,70 +175,106 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
               </div>
             </div>
 
-            {/* 수 순서 목록 */}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
-                수 순서
-              </p>
-              <div className="flex flex-wrap gap-1 content-start">
-                {positions?.slice(1).map((pos, i) => {
-                  const moveNum = Math.floor(i / 2) + 1;
-                  const isWhiteMove = i % 2 === 0;
-                  const isActive = currentIndex === i + 1;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentIndex(i + 1)}
-                      className={`px-2 py-0.5 rounded text-xs font-mono transition-colors ${
-                        isActive
-                          ? "bg-chess-accent/30 text-chess-accent border border-chess-accent/40"
-                          : "text-chess-muted hover:text-chess-primary hover:bg-chess-border"
-                      }`}
-                    >
-                      {isWhiteMove && (
-                        <span className="text-chess-border mr-0.5">{moveNum}.</span>
-                      )}
-                      {pos.san}
-                    </button>
-                  );
-                })}
+            {/* 수 순서 목록 + 메인 아이디어 */}
+            <div className="flex-1 min-w-0 flex flex-col gap-4">
+              <div>
+                <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
+                  수 순서
+                </p>
+                <div className="flex flex-wrap gap-1 content-start">
+                  {positions?.slice(1).map((pos, i) => {
+                    const moveNum = Math.floor(i / 2) + 1;
+                    const isWhiteMove = i % 2 === 0;
+                    const isActive = currentIndex === i + 1;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentIndex(i + 1)}
+                        className={`px-2 py-0.5 rounded text-xs font-mono transition-colors ${
+                          isActive
+                            ? "bg-chess-accent/30 text-chess-accent border border-chess-accent/40"
+                            : "text-chess-muted hover:text-chess-primary hover:bg-chess-border"
+                        }`}
+                      >
+                        {isWhiteMove && (
+                          <span className="text-chess-border mr-0.5">{moveNum}.</span>
+                        )}
+                        {pos.san}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+
+              {/* 메인 아이디어 */}
+              {description && (
+                <div className="rounded-lg bg-chess-accent/5 border border-chess-accent/20 px-3 py-2.5">
+                  <p className="text-xs text-chess-muted mb-1 font-medium uppercase tracking-wide">
+                    메인 아이디어
+                  </p>
+                  <p className="text-sm text-chess-primary leading-relaxed">
+                    {description}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* 핵심 포인트 & YouTube 링크 */}
-        <div className="px-5 pb-4 space-y-4 border-t border-chess-border pt-4">
-          {/* 핵심 포인트 */}
+        <div className="px-5 pb-4 border-t border-chess-border pt-4">
+          {/* 핵심 포인트 — 접기/펼치기 */}
           <div>
-            <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
-              핵심 포인트
-            </p>
-            {detailLoading ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="h-4 rounded bg-chess-border/40 animate-pulse"
-                    style={{ width: `${70 + i * 8}%` }}
-                  />
-                ))}
-              </div>
-            ) : detail && detail.tips.length > 0 ? (
-              <ol className="space-y-1.5 list-none">
-                {detail.tips.map((tip, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-chess-primary">
-                    <span className="shrink-0 text-chess-accent font-mono font-bold">
-                      {i + 1}.
-                    </span>
-                    <span>{tip}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="text-xs text-chess-muted">
-                핵심 포인트를 불러올 수 없습니다.
+            <button
+              type="button"
+              onClick={() => setTipsOpen((v) => !v)}
+              className="flex items-center gap-1.5 w-full text-left group mb-2"
+            >
+              <p className="text-xs text-chess-muted font-medium uppercase tracking-wide">
+                핵심 포인트
               </p>
+              <svg
+                className={`w-3.5 h-3.5 text-chess-muted transition-transform duration-200 ${tipsOpen ? "rotate-180" : ""}`}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+
+            {tipsOpen && (
+              <div className="mb-4">
+                {detailLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="h-4 rounded bg-chess-border/40 animate-pulse"
+                        style={{ width: `${70 + i * 8}%` }}
+                      />
+                    ))}
+                  </div>
+                ) : detail && detail.tips.length > 0 ? (
+                  <ol className="space-y-1.5 list-none">
+                    {detail.tips.map((tip, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-chess-primary">
+                        <span className="shrink-0 text-chess-accent font-mono font-bold">
+                          {i + 1}.
+                        </span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-xs text-chess-muted">
+                    핵심 포인트를 불러올 수 없습니다.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
