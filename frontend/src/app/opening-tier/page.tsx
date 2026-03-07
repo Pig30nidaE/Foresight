@@ -151,6 +151,7 @@ export default function OpeningTierPage() {
       <OpeningMovesModal
         entry={selectedOpening}
         onClose={() => setSelectedOpening(null)}
+        color={color}
       />
     </main>
   );

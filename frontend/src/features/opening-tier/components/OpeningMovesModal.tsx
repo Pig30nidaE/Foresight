@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
-import type { OpeningTierEntry } from "../types";
+import type { OpeningTierEntry, OpeningDetail } from "../types";
+import { getOpeningDetail } from "../api";
 
 interface Props {
   entry: OpeningTierEntry | null;
   onClose: () => void;
+  color?: string;
 }
 
 interface Position {
@@ -16,8 +18,10 @@ interface Position {
   san: string;
 }
 
-export default function OpeningMovesModal({ entry, onClose }: Props) {
+export default function OpeningMovesModal({ entry, onClose, color = "white" }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [detail, setDetail] = useState<OpeningDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // UCI moves → FEN array + SAN array
   const positions = useMemo((): Position[] | null => {
@@ -39,10 +43,17 @@ export default function OpeningMovesModal({ entry, onClose }: Props) {
     return result;
   }, [entry]);
 
-  // 엔트리 변경 시 인덱스 초기화
+  // 엔트리 변경 시 인덱스 및 상세 정보 초기화 + fetch
   useEffect(() => {
     setCurrentIndex(0);
-  }, [entry]);
+    setDetail(null);
+    if (!entry) return;
+    setDetailLoading(true);
+    getOpeningDetail(entry.eco, entry.name, color)
+      .then(setDetail)
+      .catch(() => setDetail(null))
+      .finally(() => setDetailLoading(false));
+  }, [entry, color]);
 
   // ESC + 화살표 키 처리
   useEffect(() => {
@@ -191,6 +202,84 @@ export default function OpeningMovesModal({ entry, onClose }: Props) {
             </div>
           </div>
         )}
+
+        {/* 핵심 포인트 & YouTube 링크 */}
+        <div className="px-5 pb-4 space-y-4 border-t border-chess-border pt-4">
+          {/* 핵심 포인트 */}
+          <div>
+            <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
+              핵심 포인트
+            </p>
+            {detailLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="h-4 rounded bg-chess-border/40 animate-pulse"
+                    style={{ width: `${70 + i * 8}%` }}
+                  />
+                ))}
+              </div>
+            ) : detail && detail.tips.length > 0 ? (
+              <ol className="space-y-1.5 list-none">
+                {detail.tips.map((tip, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-chess-primary">
+                    <span className="shrink-0 text-chess-accent font-mono font-bold">
+                      {i + 1}.
+                    </span>
+                    <span>{tip}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-xs text-chess-muted">
+                핵심 포인트를 불러올 수 없습니다.
+              </p>
+            )}
+          </div>
+
+          {/* YouTube 검색 링크 */}
+          <div>
+            <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
+              유튜브 한국어 해설
+            </p>
+            {detail ? (
+              <a
+                href={detail.youtube_search_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-colors"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                </svg>
+                YouTube에서 {entry.name} 해설 영상 검색
+              </a>
+            ) : detailLoading ? (
+              <div className="h-7 w-48 rounded-lg bg-chess-border/40 animate-pulse" />
+            ) : (
+              <a
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(entry.name + " " + entry.eco + " 체스 오프닝 강의 한국어")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-colors"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                </svg>
+                YouTube에서 {entry.name} 해설 영상 검색
+              </a>
+            )}
+          </div>
+        </div>
 
         {/* Footer */}
         <div className="px-6 py-2.5 border-t border-chess-border text-center">
