@@ -73,6 +73,11 @@ SF_DEPTH = 8            # 10→8: blitz 분석에 충분, 속도 2-3배 개선
 SF_BUDGET_GAMES = 15    # 25→15: 엔진 분석 대상 게임 수 축소
 SF_BUDGET_MOVES = 30    # 40→30: 중반까지만 분석
 BOARD_BUDGET_GAMES = 80  # 120→80: 보드 루프 게임 수 축소
+# 우위 유지력(_p_advantage_throw) 전용 SF 예산
+# 더 많은 게임을 20수까지만 depth 6으로 분석 → 충분한 우위게임 샘플 확보
+SF_ADV_BUDGET_GAMES = 50  # 전용 분석 대상 게임 수
+SF_ADV_BUDGET_MOVES = 21  # SCAN_MAX(20) + 피크 직후 1수
+SF_ADV_DEPTH = 6          # 속도 우선 (20수 이전 구간이므로 충분)
 BLUNDER_CP = 150   # centipawn 손실 ≥150 → 블런더 (하위 호환 유지)
 SF_PARALLEL_WORKERS = 4  # 병렬 Stockfish 인스턴스 수 (CPU 코어 수 초과 권장 안 함)
 
@@ -217,6 +222,9 @@ def _to_dict(p: PatternResult) -> dict:
                 "played_at":    g.played_at,
                 "white":        g.white,
                 "black":        g.black,
+                "pgn":                extra.get("pgn"),
+                "sacrifice_move_no":  extra.get("sacrifice_move_no"),
+                "sacrifice_color":    extra.get("sacrifice_color"),
             })
         d["top_games"] = games_out
     else:
@@ -398,10 +406,24 @@ class TacticalAnalysisService:
         # Stockfish 분석 — 엔진 1번만 열어 배치 처리
         sf_cache: Dict[str, List[Dict]] = _sf.eval_batch(sf_games, username)
 
+        # 우위 유지력 전용: 더 많은 게임을 20수까지만 shallow 분석
+        # → 15게임 샘플로 5게임 조건을 못 채우는 문제 해결
+        adv_cache: Dict[str, List[Dict]] = {}
+        if _sf.available:
+            adv_games_raw = [g for g in games[:SF_ADV_BUDGET_GAMES] if g.pgn and g.game_id not in sf_cache]
+            if adv_games_raw:
+                adv_cache = _sf.eval_batch(
+                    adv_games_raw, username,
+                    max_moves=SF_ADV_BUDGET_MOVES,
+                    depth=SF_ADV_DEPTH,
+                )
+        # 기존 sf_cache 우선(더 깊은 분석) + 추가 분석 병합
+        adv_sf_cache: Dict[str, List[Dict]] = {**adv_cache, **sf_cache}
+
         patterns: List[PatternResult] = []
 
         # ── §2 시간 관리 & 심리 (상황 4) ────────────────
-        p = self._p_advantage_throw(games, username, sf_cache)   # 상황 4 → 우위 유지
+        p = self._p_advantage_throw(games, username, adv_sf_cache)   # 상황 4 → 우위 유지
         if p:
             patterns.append(p)
 
@@ -423,7 +445,7 @@ class TacticalAnalysisService:
         # 항상 12개 패턴이 나타나도록 고정. 데이터가 부족한 패턴은
         # insufficient_data=True 로 표시되어 프론트에서 블러 처리됨.
         _PATTERN_REGISTRY = [
-            dict(label="우위 유지력",           icon="📈",  description="오프닝 구간(5~20수) SF 피크 우위(+1폰↑) 달성 게임에서 역전 없이 마무리한 비율", category="time",     situation_id=4),
+            dict(label="우위 유지력",           icon="📈",  description="오프닝(5~20수) 연속 +0.75폰↑ 우위게임에서 Smooth/Shaky/Blown 3단계 전환율 분석", category="time",     situation_id=4),
             dict(label="불리 포지션 방어력",     icon="🛡️",  description="Stockfish ≤-2.0 불리 상황에서 블런더 없이 버텨낸 비율 분석",        category="position", situation_id=13),
             dict(label="기물 희생 정확도",       icon="💥",  description="희생 수 자체의 Stockfish 정확도 기반 유효성 분석",                  category="position", situation_id=3),
             dict(label="반대 방향 캐슬링 난전",  icon="🏹",  description="서로 반대쪽으로 캐슬링한 폰 스톰 상황 승률 분석",                   category="position", situation_id=7),
@@ -898,38 +920,36 @@ class TacticalAnalysisService:
     # 상황 4. 우위 유지력 — 오프닝 종료 후 우위게임 분석
     # ────────────────────────────────────────────────────────
     def _p_advantage_throw(self, games, username, sf_cache) -> Optional[PatternResult]:
-        """오프닝~초반 미들게임 구간(5~20수)에서 Stockfish +1폰 이상 피크 우위를 기록한 게임(우위게임)에서
-        해당 우위를 끝까지 유지했는지, 역전됐다면 어느 파트(미들게임/엔드게임) 몇 수에서였는지 분석.
+        """오프닝~초반 미들게임 구간(5~20수)에서 Stockfish +0.75폰 이상을 연속 3수 이상 유지한 게임(우위게임)에서
+        우위를 실제 승리로 전환했는지 3단계로 분류.
 
-        기준 정의:
-          - 접전 구간: -0.9 ~ +0.9폰 → 우위게임 해당 없음
-          - 우위게임: 탐색 구간(5~20수) 피크 cp_after >= +1폰(100cp)
-          - 역전 판정: 피크 이후 cp_after < 0 (마이너스 전환 = 우위 상실)
-          - 최소 5게임 이상 우위게임 달성 시 패턴 표시
+        분류 체계:
+          - Smooth Conversion: 피크 이후 cp_after 가 한 번도 0 아래로 떨어지지 않고 승리→ 최상 전환
+          - Shaky Conversion: 피크 이후 음수로 떨어졌지만 승리 달성→ 실전 대처력 우수
+          - Blown Advantage: 피크 이후 무승부 또는 패전→ 우위 유지력 약점
 
-        버그 수정 이력:
-          - cp_before → cp_after 로 변경: cp_after 는 SF가 현재 보드를 직접 평가한 값.
-            cp_before 는 한 반수 이전 포지션의 평가를 부호 반전한 간접 값으로 실제 우위를 과소평가.
-          - 탐색 구간 확대: 10~12수 → 8~16수 (피크 우위 탐색; 오프닝이 일찍/늦게 끝나는 경우 포함)
+        조건 정의:
+          - 우위게임 진입 기준: 탐색 구간(5~20수) 내 연속 3수 이상 cp_after >= +0.75폰(75cp)
+          - 역전 판정 기준: 피크 이후 cp_after < 0 (마이너스 진입 = 게임 주도권 이전)
+          - 점수: (smooth + shaky) / total × 100 = 우위를 실제 승리로 전환한 비율
+          - 최소 5게임 우위게임 달성 시 패턴 표시
         """
         if not sf_cache:
-            return None   # Stockfish 분석 없으면 측정 불가
+            return None
 
-        SCAN_MIN    = 5    # 오프닝 우위 탐색 시작 수 (날카로운 오프닝 포함)
-        SCAN_MAX    = 20   # 오프닝 우위 탐색 종료 수 (느린 오프닝/초반 미들게임 포함)
-        ADV_CP      = 100  # +1폰(100cp) 이상 = 우위게임 기준 (±0.9폰 접전 제외)
-        LOST_ADV_CP = 0    # 0 미만(마이너스 진입) = 역전 기준
+        SCAN_MIN  = 5    # 오프닝 우위 탐색 시작 수
+        SCAN_MAX  = 20   # 오프닝 우위 탐색 종료 수
+        ADV_CP    = 75   # +0.75폰(75cp) 이상 = 우위게임 기준
+        SUSTAINED = 3    # 연속 몰수 최소 유지 회수 (1회성 스파이크 필터링)
 
         # ── 우위게임 탐색 ─────────────────────────────────────────
-        # (g, cp_peak, reversal_move_no | None, phase | None, sf_detected, peak_move_no)
+        # (g, cp_peak, first_neg_no, phase, sf_detected, peak_move_no, conv_type)
         adv_games_data: list = []
 
         for g in games:
             moves = sf_cache.get(g.game_id, [])
             if not moves:
                 continue
-            # cp_after: SF 가 '현재 보드'를 직접 평가한 값 (is_my_move 기준)
-            # cp_before 대신 cp_after 사용 — 한 반수 이전 간접값이 아닌 직접 평가
             my_mvs = [m for m in moves if m["is_my_move"]]
             if not my_mvs:
                 continue
@@ -937,116 +957,155 @@ class TacticalAnalysisService:
             # ── 오프닝 구간 피크 우위 탐색 ───────────────────────
             scan_mvs = [m for m in my_mvs if SCAN_MIN <= m["move_no"] <= SCAN_MAX]
             if not scan_mvs:
-                # 폴백: SF 범위 내에서 가장 이른 수 5개
                 fallback = [m for m in my_mvs if m["move_no"] >= SCAN_MIN - 2]
                 if not fallback:
                     continue
                 scan_mvs = fallback[:5]
 
-            # 피크 우위 수 탐색 (cp_after = 현재 포지션 직접 평가)
-            peak_mv      = max(scan_mvs, key=lambda m: m["cp_after"])
+            # ── 연속 SUSTAINED수 이상 ADV_CP 유지 여부 확인 (순간 스파이크 필터링) ──
+            scan_sorted    = sorted(scan_mvs, key=lambda m: m["move_no"])
+            max_streak     = 0
+            cur_streak     = 0
+            for sm in scan_sorted:
+                if sm["cp_after"] >= ADV_CP:
+                    cur_streak += 1
+                    max_streak  = max(max_streak, cur_streak)
+                else:
+                    cur_streak  = 0
+            if max_streak < SUSTAINED:
+                continue  # 순간적 스파이크 또는 진짜 우위 미달라
+
+            # 피크 수 탐색
+            peak_mv      = max(scan_sorted, key=lambda m: m["cp_after"])
             cp_opn       = peak_mv["cp_after"]
             peak_move_no = peak_mv["move_no"]
 
-            if cp_opn < ADV_CP:
-                continue  # 오프닝 구간에 유의미한 우위 없음 → 우위게임 아님
-
-            # ── 역전 탐지 (피크 이후) ────────────────────────────
-            post_mvs = [m for m in my_mvs if m["move_no"] > peak_move_no]
-            reversal_no: Optional[int] = None
-            sf_detected = False
+            # ── 피크 이후 음수 진입 여부 확인 ────────────────────────────
+            post_mvs      = [m for m in my_mvs if m["move_no"] > peak_move_no]
+            first_neg_no: Optional[int] = None
+            sf_detected   = False
 
             for m in post_mvs:
-                # cp_after 사용 — 현재 포지션의 직접 SF 평가
-                if m["cp_after"] < LOST_ADV_CP:
-                    reversal_no = m["move_no"]
-                    sf_detected = True
+                if m["cp_after"] < 0:
+                    first_neg_no = m["move_no"]
+                    sf_detected  = True
                     break
 
-            # SF 범위 밖에서 역전 — 게임 결과로 보완
+            # SF 범위 밖 역전은 게임 결과로 보완 (패전이면 역전 추정)
             if not sf_detected and g.result.value == "loss":
-                total_hm   = _estimate_total_moves(g.pgn or "")
-                total_full = max(total_hm // 2, peak_move_no + 1)
-                last_sf    = post_mvs[-1]["move_no"] if post_mvs else peak_move_no
-                reversal_no = max(last_sf + 3, total_full // 2)
-                sf_detected = False  # 추정값 표시용
+                total_hm     = _estimate_total_moves(g.pgn or "")
+                total_full   = max(total_hm // 2, peak_move_no + 1)
+                last_sf      = post_mvs[-1]["move_no"] if post_mvs else peak_move_no
+                first_neg_no = max(last_sf + 3, total_full // 2)
+                sf_detected  = False  # 추정값 표시용
 
-            # ── 파트 분류 ─────────────────────────────────────────
-            if reversal_no is not None:
-                phase: Optional[str] = "미들게임" if reversal_no <= 30 else "엔드게임"
+            # ── 3단계 분류 ─────────────────────────────────────────
+            result_val = g.result.value  # "win" | "draw" | "loss"
+            ever_negative = (first_neg_no is not None)
+
+            if result_val == "win" and not ever_negative:
+                conv_type = "smooth"   # 피크 이후 한번도 음수 안 됨 + 승리
+            elif result_val == "win" and ever_negative:
+                conv_type = "shaky"    # 음수로 떨어졌지만 승리
+            else:
+                conv_type = "blown"    # 무승부/패전
+
+            # 파트 분류 (역전/Blown 기준)
+            if first_neg_no is not None:
+                phase: Optional[str] = "미들게임" if first_neg_no <= 30 else "엔드게임"
             else:
                 phase = None
 
-            adv_games_data.append((g, cp_opn, reversal_no, phase, sf_detected, peak_move_no))
+            adv_games_data.append((g, cp_opn, first_neg_no, phase, sf_detected, peak_move_no, conv_type))
 
         total = len(adv_games_data)
         if total < 5:
             return None
 
         # ── 집계 ─────────────────────────────────────────────────
-        maintained = [(g, cp, rv, rp, sf, pm) for g, cp, rv, rp, sf, pm in adv_games_data if rp is None]
-        reversed_g = [(g, cp, rv, rp, sf, pm) for g, cp, rv, rp, sf, pm in adv_games_data if rp is not None]
-        mid_rev    = [(g, cp, rv, rp, sf, pm) for g, cp, rv, rp, sf, pm in reversed_g if rp == "미들게임"]
-        end_rev    = [(g, cp, rv, rp, sf, pm) for g, cp, rv, rp, sf, pm in reversed_g if rp == "엔드게임"]
+        smooth_g = [(g, cp, fn, rp, sf, pm, ct) for g, cp, fn, rp, sf, pm, ct in adv_games_data if ct == "smooth"]
+        shaky_g  = [(g, cp, fn, rp, sf, pm, ct) for g, cp, fn, rp, sf, pm, ct in adv_games_data if ct == "shaky"]
+        blown_g  = [(g, cp, fn, rp, sf, pm, ct) for g, cp, fn, rp, sf, pm, ct in adv_games_data if ct == "blown"]
 
-        rate  = len(maintained) / total * 100
-        score = max(0, min(100, int(rate)))
+        converted   = len(smooth_g) + len(shaky_g)   # 승리로 전환
+        conv_rate   = converted / total * 100
+        smooth_rate = len(smooth_g) / total * 100
+        score       = max(0, min(100, int(conv_rate)))
 
-        mid_avg = round(sum(x[2] for x in mid_rev) / len(mid_rev)) if mid_rev else None
-        end_avg = round(sum(x[2] for x in end_rev) / len(end_rev)) if end_rev else None
+        # 마이너스 진입 평균 수 (lown 및 shaky 중 첫 마이너스 수 기준)
+        neg_g   = [(g, cp, fn, rp, sf, pm, ct) for g, cp, fn, rp, sf, pm, ct in adv_games_data
+                   if fn is not None]
+        neg_avg = round(sum(x[2] for x in neg_g) / len(neg_g)) if neg_g else None
+
+        mid_blown = [(g, cp, fn, rp, sf, pm, ct) for g, cp, fn, rp, sf, pm, ct in blown_g if rp == "미들게임"]
+        end_blown = [(g, cp, fn, rp, sf, pm, ct) for g, cp, fn, rp, sf, pm, ct in blown_g if rp == "엔드게임"]
+        mid_avg   = round(sum(x[2] for x in mid_blown) / len(mid_blown)) if mid_blown else None
+        end_avg   = round(sum(x[2] for x in end_blown) / len(end_blown)) if end_blown else None
 
         # ── 대표 게임 리스트 ─────────────────────────────────────
-        won_rep: List[Tuple] = [
+        smooth_rep: List[Tuple] = [
             (g, cp, {
                 "is_success":   True,
                 "metric_value": round(cp),
-                "metric_label": f"오프닝 피크 cp 우위 ({pm}수)",
-                "context":      f"{pm}수 시점 +{cp:.0f}cp 우위 → 끝까지 유지",
-            }) for g, cp, rv, rp, sf, pm in maintained
+                "metric_label": f"피크 cp ({pm}수) — Smooth",
+                "context":      f"{pm}수 +{cp:.0f}cp 우위 → 두 번 다 음수 없이 승리",
+            }) for g, cp, fn, rp, sf, pm, ct in smooth_g
         ]
-        lost_rep: List[Tuple] = [
+        shaky_rep: List[Tuple] = [
+            (g, cp, {
+                "is_success":   True,
+                "metric_value": round(cp),
+                "metric_label": f"피크 cp ({pm}수) — Shaky",
+                "context":      f"{pm}수 +{cp:.0f}cp 우위 → {fn}수 음수 진입했지만 승리",
+            }) for g, cp, fn, rp, sf, pm, ct in shaky_g
+        ]
+        blown_rep: List[Tuple] = [
             (g, cp, {
                 "is_success":   False,
-                "metric_value": float(rv),
-                "metric_label": f"{'SF 탐지' if sf else '추정'} 역전 수",
-                "context":      f"{pm}수 +{cp:.0f}cp 우위 → {rp} {rv}수 부근 역전{'(추정)' if not sf else ''}",
-            }) for g, cp, rv, rp, sf, pm in reversed_g
+                "metric_value": float(fn) if fn else 0,
+                "metric_label": f"{'SF 탐지' if sf else '추정'} 음수 진입 수",
+                "context":      (f"{pm}수 +{cp:.0f}cp 우위 → {rp or ''} {fn or '?'}수 부근 음수{'(추정)' if not sf else ''} → 전환 실패"),
+            }) for g, cp, fn, rp, sf, pm, ct in blown_g
         ]
 
         # ── 차트 데이터 ───────────────────────────────────────────
         chart_data = {
             "type":          "advantage_breakdown",
             "total":         total,
-            "maintained":    len(maintained),
-            "reversed_mid":  len(mid_rev),
-            "reversed_end":  len(end_rev),
+            "smooth":        len(smooth_g),
+            "shaky":         len(shaky_g),
+            "blown":         len(blown_g),
+            "converted":     converted,
+            "conv_rate":     round(conv_rate, 1),
+            "smooth_rate":   round(smooth_rate, 1),
+            "neg_avg_move":  neg_avg,
             "mid_avg_move":  mid_avg,
             "end_avg_move":  end_avg,
-            "maintain_rate": round(rate, 1),
         }
 
         # ── 인사이트 ─────────────────────────────────────────────
-        parts = [f"오프닝 구간(5~20수)에서 +1폰 이상 우위 달성 {total}게임(우위게임) 분석."]
-        parts.append(f"우위 유지 {len(maintained)}게임 ({rate:.0f}%), 역전 허용 {len(reversed_g)}게임.")
-        if mid_rev:
-            parts.append(f"미들게임 역전 {len(mid_rev)}건 — 평균 {mid_avg}수 부근.")
-        if end_rev:
-            parts.append(f"엔드게임 역전 {len(end_rev)}건 — 평균 {end_avg}수 부근.")
-        if not reversed_g:
-            parts.append("우위 게임을 모두 마무리했습니다!")
+        parts = [f"오프닝 구간(5~20수)에서 +0.75폰 연속 우위 달성 {total}게임 분석."]
+        parts.append(f"전환 성공 {converted}게임({conv_rate:.0f}%): "
+                     f"Smooth {len(smooth_g)}게임 + Shaky {len(shaky_g)}게임, Blown {len(blown_g)}게임.")
+        if mid_blown:
+            parts.append(f"미들게임에서 전환 실패 {len(mid_blown)}건 (평균 {mid_avg}수 음수 진입).")
+        if end_blown:
+            parts.append(f"엔드게임에서 전환 실패 {len(end_blown)}건 (평균 {end_avg}수 음수 진입).")
+        if not blown_g:
+            parts.append("우위 게임을 모두 승리로 마무리했습니다!")
 
         return PatternResult(
             label="우위 유지력", icon="📈",
-            description="오프닝 구간(5~20수) Stockfish 피크 우위(+1폰↑) 달성 게임에서 역전 없이 마무리한 비율",
-            score=score, is_strength=rate >= 65,
+            description="오프닝 구간(5~20수) 연속 +0.75폰↑ 우위(우위게임)에서 Smooth/Shaky/Blown 3단계로 전환력 분석",
+            score=score, is_strength=conv_rate >= 65,
             games_analyzed=total,
-            detail=(f"우위게임 {total}개: 유지 {len(maintained)} "
-                    f"/ 미들게임 역전 {len(mid_rev)} / 엔드게임 역전 {len(end_rev)} ({rate:.0f}%)"),
+            detail=(f"우위게임 {total}개: Smooth {len(smooth_g)} / Shaky {len(shaky_g)} / Blown {len(blown_g)} "
+                    f"(전환율 {conv_rate:.0f}%)"),
             category="time", situation_id=4,
             insight=" ".join(parts),
-            key_metric_value=rate, key_metric_label="우위 유지율", key_metric_unit="%",
+            key_metric_value=conv_rate, key_metric_label="우위 전환율", key_metric_unit="%",
             evidence_count=total,
-            representative_games=won_rep + lost_rep,
+            representative_games=smooth_rep + shaky_rep + blown_rep,
             chart_data=chart_data,
         )
 
@@ -1382,41 +1441,131 @@ class TacticalAnalysisService:
             sac_flag = False
             sac_ok_flag = False
             max_sac_val = 0.0   # 게임 내 가장 값비싼 희생의 기물 가치
+            sac_move_no: Optional[int] = None   # 희생이 발생한 fullmove 번호
+            sac_move_clr: Optional[str] = None  # 희생 수를 둔 색
             g_closed_bad = g_closed_total = 0
 
             for node in parsed.mainline():
                 is_my = board.turn == my_color
                 move = node.move
                 try:
-                    # 12. Sacrifice — 더 비싼 기물 희생일수록 패턴이 극명
+                    # 12. Sacrifice — SacrificeAlgorithm.md 5단계 판별
                     if is_my:
-                        tgt = board.piece_at(move.to_square)
-                        src_pc = board.piece_at(move.from_square)
-                        if (tgt and tgt.color == opp_color and src_pc
-                                and src_pc.piece_type > tgt.piece_type):
-                            sac_flag = True
-                            # 희생 기물 가치 추적: 희생한 쪽(src) - 얻은 쪽(tgt) 차이
-                            val_diff = (_PIECE_VAL.get(src_pc.piece_type, 0)
-                                        - _PIECE_VAL.get(tgt.piece_type, 0))
-                            if val_diff > max_sac_val:
-                                max_sac_val = float(val_diff)
-                            # 희생 수 자체의 Stockfish 정확도 확인
-                            sf_data = sf_cache.get(g.game_id, [])
-                            if sf_data:
-                                mv_clr = "white" if board.turn == chess.WHITE else "black"
-                                sf_m = next(
-                                    (m for m in sf_data
-                                     if m.get("move_no") == board.fullmove_number
-                                     and m.get("color") == mv_clr),
-                                    None,
-                                )
-                                if sf_m:
-                                    # 희생 수 자체가 Good 이상(가중치≥0)이면 정확한 희생
-                                    sac_ok_flag = _move_weight(float(sf_m.get("cp_loss", 0))) >= 0
+                        sac_src = board.piece_at(move.from_square)
+                        _SAC_TYPES = (chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN)
+
+                        if sac_src is not None and sac_src.piece_type in _SAC_TYPES:
+                            src_val = _PIECE_VAL.get(sac_src.piece_type, 0)  # type: ignore[union-attr]
+                            sac_tgt = board.piece_at(move.to_square)
+                            _is_real_capture = (
+                                sac_tgt is not None
+                                and sac_tgt.color == opp_color
+                                and not board.is_en_passant(move)
+                            )
+                            tgt_val = (
+                                _PIECE_VAL.get(sac_tgt.piece_type, 0)  # type: ignore[union-attr]
+                                if _is_real_capture else 0
+                            )
+                            # 즉각적 물질 손해 (양수 = 내가 더 비싼 기물 내어줌)
+                            net_loss = src_val - tgt_val
+
+                            # 사전 필터: net_loss >= 2 (같은 가치 교환·이득 수 제외)
+                            if net_loss >= 2:
+                                # ── 조건 1: 합법 포획 가능성 ─────────────────────────────────
+                                # board.attackers()는 핀된 기물·킹이 보호받는 칸으로 이동하는
+                                # 불법 착수도 포함하므로, generate_legal_moves()로 실제 합법
+                                # 포획 착수만 추출함.
+                                # → 보호받는 체크(룩·비숍 뒤에서 보호) 오탐 방지 핵심 수정.
+                                _tb = board.copy()
+                                _tb.push(move)
+                                _legal_opp_caps = [
+                                    m for m in _tb.generate_legal_moves()
+                                    if m.to_square == move.to_square
+                                ]
+                                _can_be_legally_captured = bool(_legal_opp_caps)
+
+                                if not _can_be_legally_captured:
+                                    # 상대가 합법적으로 잡을 수 없음 = 희생 아님
+                                    # (보호받는 체크, 기물이 안전한 칸에 위치 등)
+                                    pass
                                 else:
-                                    sac_ok_flag = g.result.value == "win"
-                            else:
-                                sac_ok_flag = g.result.value == "win"
+                                    # ── 조건 2: 합법 포획 시 순 기물 손해 시뮬레이션 ─────────
+                                    # 상대가 가장 싼 합법 기물로 포획했을 때 → 내가 재캡처 가능?
+                                    # 3플라이 SEE 근사:
+                                    #   ply1: 상대(opp_min_legal_cap)가 내 기물(src_val)을 잡음
+                                    #   ply2: 내 합법 재캡처(my_min_legal_recap) 가능한가?
+                                    #   opp_net_gain = src_val - (재캡처 가능하면 opp_min_cap_val, 없으면 0)
+                                    # ── 가장 싼 합법 포획자 ──
+                                    def _pv(sq: int) -> int:
+                                        pc = _tb.piece_at(sq)
+                                        return _PIECE_VAL.get(pc.piece_type, 99) if pc else 99
+                                    opp_min_legal_cap = min(_legal_opp_caps, key=lambda m: _pv(m.from_square))
+                                    opp_cap_piece_val = _pv(opp_min_legal_cap.from_square)
+
+                                    # ply2: 상대 포획 후 내 재캡처 시뮬레이션
+                                    _tb2 = _tb.copy()
+                                    _tb2.push(opp_min_legal_cap)
+                                    _legal_my_recaps = [
+                                        m for m in _tb2.generate_legal_moves()
+                                        if m.to_square == move.to_square
+                                    ]
+
+                                    if _legal_my_recaps:
+                                        # 내가 재캡처 가능: 상대는 자신의 포획 기물을 잃음
+                                        # 상대 순이득 = src_val - opp_cap_piece_val
+                                        opp_net_gain = src_val - opp_cap_piece_val
+                                    else:
+                                        # 재캡처 불가: 상대가 공짜로 기물 획득
+                                        opp_net_gain = src_val
+
+                                    # 상대 순이득 >= 2: 진짜 기물 손해 발생
+                                    # (net == 0·1은 교환 또는 미미한 차이 → 제외)
+                                    if opp_net_gain >= 2:
+                                        sac_flag = True
+                                        val_diff = float(net_loss)
+                                        if val_diff > max_sac_val:
+                                            max_sac_val = val_diff
+                                            sac_move_no  = board.fullmove_number
+                                            sac_move_clr = (
+                                                "white" if board.turn == chess.WHITE else "black"
+                                            )
+
+                                        # ── 조건 3·4·5: Eval Spike + False Advantage ─
+                                        sf_data = sf_cache.get(g.game_id, [])
+                                        if sf_data:
+                                            mv_clr = (
+                                                "white" if board.turn == chess.WHITE else "black"
+                                            )
+                                            sf_m = next(
+                                                (m for m in sf_data
+                                                 if m.get("move_no") == board.fullmove_number
+                                                 and m.get("color") == mv_clr),
+                                                None,
+                                            )
+                                            if sf_m and sf_m.get("cp_before") is not None:
+                                                cp_before_sf = float(sf_m["cp_before"])
+                                                cp_after_sf  = float(sf_m.get("cp_after", 0))
+                                                cp_loss_val  = float(sf_m.get("cp_loss", 999))
+
+                                                # 조건 3: Eval Spike +1.5폰 이상 상승
+                                                eval_spike  = cp_loss_val <= -150
+                                                # 강제 체크메이트 전환
+                                                forced_mate = cp_after_sf >= 1900
+
+                                                # 조건 4: False Advantage Filter
+                                                # 이미 +3폰(300cp) 이상 압도적 우위이면 제외
+                                                false_adv = (
+                                                    cp_before_sf >= 300 and not forced_mate
+                                                )
+
+                                                sac_ok_flag = (
+                                                    (eval_spike or forced_mate)
+                                                    and not false_adv
+                                                )
+                                            else:
+                                                sac_ok_flag = g.result.value == "win"
+                                        else:
+                                            sac_ok_flag = g.result.value == "win"
 
                     # 13. Closed Position
                     if is_my and board.fullmove_number >= 10:
@@ -1481,18 +1630,24 @@ class TacticalAnalysisService:
                 if sac_ok_flag:
                     sac_ok += 1
                     sac_ok_games.append((g, sac_val, {
-                        "is_success":   True,
-                        "metric_value": sac_val,
-                        "metric_label": "희생 기물 가치",
-                        "context":      "희생 수 정확 (Stockfish ≥ Good)",
+                        "is_success":      True,
+                        "metric_value":    sac_val,
+                        "metric_label":    "희생 기물 가치",
+                        "context":         "희생 수 정확 (Stockfish Excellent 이상)",
+                        "pgn":             g.pgn,
+                        "sacrifice_move_no":  sac_move_no,
+                        "sacrifice_color":    sac_move_clr,
                     }))
                 else:
                     sac_bad += 1
                     sac_bad_games.append((g, sac_val, {
-                        "is_success":   False,
-                        "metric_value": sac_val,
-                        "metric_label": "희생 기물 가치",
-                        "context":      "희생 수 부정확 (Stockfish 기준)",
+                        "is_success":      False,
+                        "metric_value":    sac_val,
+                        "metric_label":    "희생 기물 가치",
+                        "context":         "희생 수 부정확 (Stockfish 기준)",
+                        "pgn":             g.pgn,
+                        "sacrifice_move_no":  sac_move_no,
+                        "sacrifice_color":    sac_move_clr,
                     }))
 
             # 닫힌 포지션 - 무리한 폰 전진이 있었던 게임일수록 관련도 높음
@@ -1540,11 +1695,11 @@ class TacticalAnalysisService:
             s = max(0, min(100, int(rate)))
             results.append(PatternResult(
                 label="기물 희생 정확도", icon="💥",
-                description="희생 수 자체의 Stockfish 정확도 기반 판별 (Good 이상이면 정확한 희생)",
+                description="희생 수 자체의 Stockfish 정확도 기반 판별 (Excellent 이상 = CP 20 이내 손실)",
                 score=s, is_strength=rate >= 55, games_analyzed=analyzed,
                 detail=f"희생 {sac_total}회: 유효 {sac_ok} / 무효 {sac_bad} ({rate:.0f}%)",
                 category="position", situation_id=3,
-                insight=(f"기물 희생 {sac_total}회 시도 — {sac_ok}회 Stockfish 정확(≥Good), {sac_bad}회 부정확. "
+                insight=(f"기물 희생 {sac_total}회 시도 — {sac_ok}회 Stockfish 정확(Excellent↑), {sac_bad}회 부정확. "
                          f"희생 정확도 {rate:.0f}% — {'전술적 희생 능력 우수' if rate >= 55 else '무리한 희생 주의'}"),
                 key_metric_value=rate, key_metric_label="희생 성공률", key_metric_unit="%",
                 evidence_count=sac_total,
