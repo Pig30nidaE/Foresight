@@ -10,13 +10,13 @@ DELETE /api/v1/opening-tier/cache   → 특정 구간 캐시 무효화
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
-from app.features.opening_tier.services.opening_tier_service import OpeningTierService
+from app.features.opening_tier.services.opening_tier_service import OpeningTierService, RATING_BRACKETS
 from app.features.opening_tier.services.opening_detail_service import get_opening_detail
 
 router = APIRouter()
 _service = OpeningTierService()
 
-_VALID_RATINGS = {400, 1000, 1400, 1800, 2200}
+_VALID_RATINGS = set(RATING_BRACKETS)  # 서비스 정의와 자동 동기화
 _VALID_SPEEDS = {"bullet", "blitz", "rapid", "classical"}
 
 
@@ -46,7 +46,7 @@ def _validate_color(color: str) -> None:
 
 @router.get("/global")
 async def get_global_opening_tiers(
-    rating: int = Query(..., description="Lichess 레이팅 구간 (400/1000/…/2500)"),
+    rating: int = Query(..., description="Lichess 레이팅 구간 (400/800/1200/1600/2000/2400)"),
     speed: str = Query("blitz", description="타임클래스 (bullet/blitz/rapid/classical)"),
     color: str = Query("white", description="기준 색상 (white/black)"),
 ):

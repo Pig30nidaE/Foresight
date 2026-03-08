@@ -13,19 +13,21 @@ function WinRateBar({
   const win = Math.round(winRate * 100);
   const draw = Math.round(drawRate * 100);
   const loss = Math.max(0, 100 - win - draw);
+  const winColor = color === "white" ? "bg-chess-primary/60" : "bg-chess-primary";
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 flex rounded-sm overflow-hidden h-2 min-w-24">
-        <div
-          className={color === "white" ? "bg-chess-primary/60" : "bg-chess-primary"}
-          style={{ width: `${win}%` }}
-        />
+    <div className="flex flex-col gap-1">
+      <div className="flex rounded-sm overflow-hidden h-2 min-w-32">
+        <div className={winColor} style={{ width: `${win}%` }} />
         <div className="bg-chess-muted/50" style={{ width: `${draw}%` }} />
         <div className="bg-red-800/60" style={{ width: `${loss}%` }} />
       </div>
-      <span className="text-xs text-chess-primary tabular-nums w-8 text-right">
-        {win}%
-      </span>
+      <div className="flex gap-2 tabular-nums text-[10px] leading-none">
+        <span className={color === "white" ? "text-chess-primary/80" : "text-chess-primary"}>
+          W {win}%
+        </span>
+        <span className="text-chess-muted">D {draw}%</span>
+        <span className="text-red-400/80">L {loss}%</span>
+      </div>
     </div>
   );
 }

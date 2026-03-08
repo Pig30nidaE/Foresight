@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { TacticalPattern, PatternGameItem } from "@/features/dashboard/types";
+import SacrificePatternModal from "@/features/dashboard/components/modals/SacrificePatternModal";
 
 // Chess.com 게임 URL → 분석 URL 변환
 function toAnalysisUrl(url: string): string {
@@ -29,7 +30,7 @@ interface PatternDisplayConfig {
 const PATTERN_CONFIG: Record<number, PatternDisplayConfig> = {
   1:  { successLabel: "핀 정확 대응",     failureLabel: "핀 기물 블런더",    drawLabel: "핀 발생",         analysisType: "quality",    analysisDesc: "핀된 기물 무리 이동 → Stockfish 블런더(≥150cp) 발생 여부" },
   3:  { successLabel: "효과적 희생",      failureLabel: "무효 희생",          drawLabel: "희생 발생",       analysisType: "quality",    analysisDesc: "기물 희생 후 후속 공격 Stockfish 기준 유효성 (avg CP손실 <80)" },
-  4:  { successLabel: "우위 유지 성공",   failureLabel: "역전 허용",           drawLabel: "무승부",          analysisType: "quality",    analysisDesc: "오프닝 구간(5~20수) SF 피크 우위(+1폰↑) 달성 게임에서 마이너스 전환 없이 마무리한 결과" },
+  4:  { successLabel: "전환 성공(Smooth/Shaky)", failureLabel: "전환 실패(Blown)", drawLabel: "무승부", analysisType: "quality", analysisDesc: "오프닝(5~20수) 연속 +0.75폰↑ 우위게임에서 승리로 전환(Smooth: 음수 없이 / Shaky: 음수 진입 후 만회) 비율" },
 
   6:  { successLabel: "결정적 순간 포착", failureLabel: "결정적 순간 실착",   drawLabel: "무승부",          analysisType: "quality",    analysisDesc: "불리(≤-2.0) + 시간 여유(≥120초) 상황의 수 품질" },
   7:  { successLabel: "반대 캐슬 공략",   failureLabel: "반대 캐슬 패배",     drawLabel: "무승부",          analysisType: "win_rate",   analysisDesc: "서로 반대쪽 캐슬링 → 폰 스톰 난전 결과" },
@@ -274,12 +275,15 @@ function StatSummary({ games, config }: { games: PatternGameItem[]; config: Patt
 interface Props {
   pattern: TacticalPattern | null;
   onClose: () => void;
+  username?: string | null;
 }
 
-export default function PatternGameListModal({ pattern, onClose }: Props) {
-  // ESC 키 닫기
+export default function PatternGameListModal({ pattern, onClose, username }: Props) {
+  const isSacrifice = pattern?.situation_id === 3;
+
+  // ESC 키 닫기 (희생 모달에서는 SacrificePatternModal이 자체 처리)
   useEffect(() => {
-    if (!pattern) return;
+    if (!pattern || isSacrifice) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
@@ -287,9 +291,14 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, pattern]);
+  }, [onClose, pattern, isSacrifice]);
 
   if (!pattern) return null;
+
+  // situation_id=3(희생 패턴) → 전용 모달 위임
+  if (isSacrifice) {
+    return <SacrificePatternModal pattern={pattern} onClose={onClose} />;
+  }
 
   const games: PatternGameItem[] = pattern.top_games ?? [];
   const cfg = (pattern.situation_id && PATTERN_CONFIG[pattern.situation_id]) || DEFAULT_CONFIG;
