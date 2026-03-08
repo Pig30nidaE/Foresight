@@ -13,6 +13,7 @@ import type {
   TacticalAnalysis,
   AiInsightsResponse,
   MoveQualityStats,
+  GameSummaryItem,
 } from "./types";
 
 // ────────────────────────────────────────────
@@ -72,11 +73,10 @@ export const getTimePressure = async (
   platform: Platform,
   username: string,
   timeClass: TimeClass = "blitz",
-  maxGames = 100,
   sinceMs?: number,
   untilMs?: number,
 ): Promise<TimePressureStats> => {
-  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
+  const params: Record<string, unknown> = { time_class: timeClass };
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
   const { data } = await api.get(`/stats/time-pressure/${platform}/${username}`, { params });
@@ -131,4 +131,23 @@ export const getMoveQuality = async (
     timeout: 300_000,
   });
   return data as MoveQualityStats;
+};
+
+// ────────────────────────────────────────────
+// 전적 조회
+// ────────────────────────────────────────────
+export const getRecentGamesList = async (
+  platform: Platform,
+  username: string,
+  timeClass?: TimeClass,
+  maxGames = 50,
+  sinceMs?: number,
+  untilMs?: number,
+): Promise<GameSummaryItem[]> => {
+  const params: Record<string, unknown> = { max_games: maxGames };
+  if (timeClass) params.time_class = timeClass;
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  const { data } = await api.get(`/games/${platform}/${username}`, { params });
+  return data as GameSummaryItem[];
 };

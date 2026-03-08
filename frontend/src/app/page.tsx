@@ -27,7 +27,7 @@ export default function Home() {
       </div>
 
       {/* Feature Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl mt-4 relative z-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl mt-4 relative z-10">
         <Link
           href="/opening-tier"
           className="bg-chess-surface/80 backdrop-blur-sm border border-chess-border rounded-xl p-5 text-left hover:border-chess-accent/60 hover:bg-chess-border/60 transition-all group"
@@ -41,7 +41,7 @@ export default function Home() {
           </p>
         </Link>
         <Link
-          href="/opponent"
+          href="/dashboard"
           className="bg-chess-surface/80 backdrop-blur-sm border border-chess-border rounded-xl p-5 text-left hover:border-chess-accent/60 hover:bg-chess-border/60 transition-all group"
         >
           <div className="text-2xl mb-3">🎯</div>
@@ -50,18 +50,6 @@ export default function Home() {
           </h3>
           <p className="text-chess-muted text-sm mt-1">
             대회 상대의 패턴 · 오프닝 · 약점 리포트
-          </p>
-        </Link>
-        <Link
-          href="/dashboard"
-          className="bg-chess-surface/80 backdrop-blur-sm border border-chess-border rounded-xl p-5 text-left hover:border-chess-accent/60 hover:bg-chess-border/60 transition-all group"
-        >
-          <div className="text-2xl mb-3">🏆</div>
-          <h3 className="font-semibold text-chess-primary group-hover:text-chess-accent transition-colors">
-            대회 준비
-          </h3>
-          <p className="text-chess-muted text-sm mt-1">
-            Chess.com · Lichess 계정 연동 통합 뷰
           </p>
         </Link>
       </div>

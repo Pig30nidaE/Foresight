@@ -4,11 +4,34 @@ Docs: https://lichess.org/api
 공개 게임은 토큰 없이 접근 가능, 자신의 게임은 OAuth 토큰 필요
 """
 import httpx
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 from app.core.config import settings
 from app.models.schemas import PlayerProfile, GameSummary, GameResult, Platform
 from app.shared.services import opening_db
+
+# PGN CP eval 추출 (Lichess evals=true 요청 시 포함됨)
+_RE_EVAL = re.compile(r'\[%eval\s+([+-]?(?:\d+\.?\d*|#[+-]?\d+))\]')
+
+
+def _parse_cp_evals(pgn: str) -> Optional[List[Optional[float]]]:
+    """PGN에서 %eval 어노테이션을 파싱해 수별 CP 평가 리스트 반환."""
+    if not pgn:
+        return None
+    matches = _RE_EVAL.findall(pgn)
+    if not matches:
+        return None
+    result: List[Optional[float]] = []
+    for m in matches:
+        if "#" in m:
+            result.append(999.0 if "-" not in m else -999.0)
+        else:
+            try:
+                result.append(float(m))
+            except ValueError:
+                result.append(None)
+    return result if result else None
 
 
 def _lichess_ts_to_iso(ts: object) -> str:
@@ -87,6 +110,7 @@ class LichessService:
             "max": 5000,
             "opening": "true",
             "clocks": "false",
+            "evals": "true",
         }
         if perf_type:
             params["perfType"] = perf_type
@@ -157,4 +181,7 @@ class LichessService:
             pgn=raw.get("pgn"),
             played_at=_lichess_ts_to_iso(raw.get("createdAt")),
             url=f"https://lichess.org/{raw.get('id', '')}",
+            rating_white=white.get("rating"),
+            rating_black=black.get("rating"),
+            cp_evals=_parse_cp_evals(raw.get("pgn") or ""),
         )

@@ -133,6 +133,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                     allowDragging: false,
                     animationDurationInMs: 200,
                     showAnimations: true,
+                    boardOrientation: color === "black" ? "black" : "white",
                     boardStyle: { width: "100%", aspectRatio: "1" },
                   }}
                 />

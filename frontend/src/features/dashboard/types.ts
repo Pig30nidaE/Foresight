@@ -3,6 +3,26 @@
 // ============================================================
 
 // ────────────────────────────────────────────
+// 전적 조회
+// ────────────────────────────────────────────
+export interface GameSummaryItem {
+  game_id: string;
+  platform: "chess.com" | "lichess";
+  white: string;
+  black: string;
+  result: "win" | "loss" | "draw";
+  time_class: string;
+  opening_eco: string | null;
+  opening_name: string | null;
+  pgn: string | null;
+  played_at: string | null;
+  url: string | null;
+  rating_white: number | null;
+  rating_black: number | null;
+  cp_evals: (number | null)[] | null;
+}
+
+// ────────────────────────────────────────────
 // Stats (MVP 섹션 1, 2)
 // ────────────────────────────────────────────
 export interface FirstMoveEntry {
@@ -27,6 +47,10 @@ export interface PatternGameItem {
   played_at?: string | null;
   white?: string | null;
   black?: string | null;
+  // 희생 패턴 전용 필드 (situation_id=3)
+  pgn?: string | null;
+  sacrifice_move_no?: number | null;
+  sacrifice_color?: "white" | "black" | null;
 }
 
 export interface OpeningTreeNode {
