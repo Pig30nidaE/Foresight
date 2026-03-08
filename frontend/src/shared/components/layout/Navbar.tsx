@@ -6,19 +6,18 @@ import { usePathname, useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
   { href: "/opening-tier", label: "오프닝 티어표" },
-  { href: "/opponent",     label: "상대 분석" },
+  { href: "/dashboard",    label: "상대 분석" },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [platform, setPlatform] = useState<"chess.com" | "lichess">("chess.com");
   const [username, setUsername] = useState("");
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim()) return;
-    router.push(`/dashboard?platform=${encodeURIComponent(platform)}&username=${encodeURIComponent(username.trim())}`);
+    router.push(`/dashboard?username=${encodeURIComponent(username.trim())}`);
     setUsername("");
   };
 
@@ -56,29 +55,12 @@ export default function Navbar() {
 
         {/* Search Bar */}
         <form onSubmit={handleSearch} className="flex items-center gap-1.5 shrink-0">
-          {/* Platform Toggle */}
-          <div className="flex rounded-md overflow-hidden border border-chess-border text-xs">
-            {(["chess.com", "lichess"] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPlatform(p)}
-                className={`px-2.5 py-1.5 font-medium transition-colors ${
-                  platform === p
-                    ? "bg-chess-accent text-white"
-                    : "bg-chess-surface text-chess-muted hover:text-chess-primary"
-                }`}
-              >
-                {p === "chess.com" ? "Chess.com" : "Lichess"}
-              </button>
-            ))}
-          </div>
           <input
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="유저명 검색..."
-            className="w-40 bg-chess-surface border border-chess-border rounded-md px-3 py-1.5 text-sm text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors"
+            className="w-44 bg-chess-surface border border-chess-border rounded-md px-3 py-1.5 text-sm text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors"
           />
           <button
             type="submit"

@@ -8,7 +8,6 @@
  */
 export * from "@/shared/lib/api";          // getPlayerProfile, getRecentGames, etc.
 export * from "@/features/dashboard/api";  // 대시보드 분석 API
-export * from "@/features/opponent/api";   // 상대 분석 API
 
 import api from "@/shared/lib/api";
 export default api;

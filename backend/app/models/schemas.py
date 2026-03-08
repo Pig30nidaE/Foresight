@@ -74,6 +74,10 @@ class GameSummary(BaseModel):
     pgn: Optional[str] = None
     played_at: Optional[str] = None
     url: Optional[str] = None
+    # 추가 필드 (전적 UI용)
+    rating_white: Optional[int] = None
+    rating_black: Optional[int] = None
+    cp_evals: Optional[List[Optional[float]]] = None  # 수별 centipawn eval
 
 
 class OpeningStats(BaseModel):
