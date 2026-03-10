@@ -198,12 +198,30 @@ function SacrificeBoardPanel({ game, onClose }: { game: PatternGameItem; onClose
 
       {/* 보드 — 고정 크기로 스크롤 없이 표시 */}
       <div className="w-full max-w-[260px] mx-auto">
+        {/* 상단 선수명/색 표시 */}
+        <div className="flex items-center justify-between px-3 py-2 text-[11px] font-semibold">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: orientation === "black" ? "#e2e8f0" : "#4a5568" }} />
+            {orientation === "black" ? game.black : game.white}
+          </span>
+          <span className="text-chess-muted text-[10px]">{orientation === "black" ? "백" : "흑"}</span>
+        </div>
+        
         <Chessboard options={{
           position: cur.fen, boardOrientation: orientation, allowDragging: false,
           arrows: cur.arrows, animationDurationInMs: 400, showAnimations: true,
           boardStyle: { borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.45)", width: "100%", aspectRatio: "1" },
           darkSquareStyle: { backgroundColor: "#4a5568" }, lightSquareStyle: { backgroundColor: "#e2e8f0" },
         }} />
+        
+        {/* 하단 선수명/색 표시 */}
+        <div className="flex items-center justify-between px-3 py-2 text-[11px] font-semibold">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: orientation === "white" ? "#e2e8f0" : "#4a5568" }} />
+            {orientation === "white" ? game.black : game.white}
+          </span>
+          <span className="text-chess-muted text-[10px]">{orientation === "white" ? "백" : "흑"}</span>
+        </div>
       </div>
 
       {/* 현재 수 레이블 */}

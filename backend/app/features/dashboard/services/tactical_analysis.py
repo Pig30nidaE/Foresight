@@ -1486,44 +1486,67 @@ class TacticalAnalysisService:
 
                                 # ── 조건 1-추가: 강제수 필터 ──────────────────────────────
                                 # 디스커버드 공격 등으로 캡처가 강제되는 상황인지 확인
-                                # 만약 상대방이 캡처하지 않고 다른 수를 두면 심각한 위협이
-                                # 없어야 "자발적 희생"으로 간주
+                                # Re5 사례: 룩이 폰에 공격받지만, 상대 퀸이 우리 퀸에 공격받음
+                                # → 동등 또는 더 비싼 기물을 반격으로 잡을 수 있으면 강제수
                                 _is_forced_exchange = False
                                 if _can_be_legally_captured:
-                                    # 상대의 캡처 외 선택지 확인
-                                    _alt_moves = [
+                                    # ── 1단계: 반격(Counter-Capture) 확인 ───────────────────
+                                    # 포획 후, 우리가 상대 어떤 기물을 반격으로 잡을 수 있나?
+                                    def _pv(sq: int) -> int:
+                                        pc = _tb.piece_at(sq)
+                                        return _PIECE_VAL.get(pc.piece_type, 99) if pc else 99
+                                    
+                                    _recap_moves = [
                                         m for m in _tb.generate_legal_moves()
-                                        if _tb.piece_at(m.to_square) is None  # 캡처 아닌 수
+                                        if m.from_square == move.to_square 
+                                        and _tb.piece_at(m.to_square) is not None
+                                        and _tb.piece_at(m.to_square).color == opp_color
                                     ]
-                                    # 캡처가 거의 유일한 선택지인가? (체크 방어 강제 등)
-                                    # 또는 다른 수를 두면 내가 치명적 위협을 만드는가?
-                                    if len(_alt_moves) <= 2:  # 선택지 거의 없음
-                                        _is_forced_exchange = True
-                                    else:
-                                        # 내 다음 수가 강제로 상대를 위협하는지 확인
-                                        # (프로모션 위협, 체크, 핵심 기물 공격 등)
-                                        for alt_m in _alt_moves[:3]:  # 상위 3개만 샘플링
-                                            try:
-                                                _alt_tb = _tb.copy()
-                                                _alt_tb.push(alt_m)
-                                                # 내가 체크를 주거나 폰이 프로모션 임박하면 강제 아님
-                                                if _alt_tb.is_check():
-                                                    break
-                                                # 내 폰이 7랭크에 있으면 프로모션 위협
-                                                my_pawns = _alt_tb.pieces(
-                                                    chess.PAWN, my_color
-                                                )
-                                                if my_color == chess.WHITE:
-                                                    if any(p >= 48 for p in my_pawns):  # 7랭크
-                                                        break
-                                                else:
-                                                    if any(p < 16 for p in my_pawns):  # 2랭크
-                                                        break
-                                            except Exception:
-                                                pass
+                                    if _recap_moves:
+                                        # 반격으로 잡을 수 있는 기물 중 최고가
+                                        max_counter_val = max([_pv(m.to_square) for m in _recap_moves])
+                                        # 포획된 우리 기물 가치
+                                        target_piece = board.piece_at(move.to_square)
+                                        our_piece_val = _PIECE_VAL.get(target_piece.piece_type, 0) if target_piece else 0
+                                        
+                                        # Re5 사례: 룩(5) vs 반격으로 퀸(9) → 동등 이상 교환
+                                        if max_counter_val >= our_piece_val:
+                                            _is_forced_exchange = True
+                                    
+                                    # ── 2단계: 상대 선택지 분석 (반격 없을 때) ──────────────────
+                                    if not _is_forced_exchange:
+                                        _alt_moves = [
+                                            m for m in _tb.generate_legal_moves()
+                                            if _tb.piece_at(m.to_square) is None  # 캡처 아닌 수
+                                        ]
+                                        # 캡처가 거의 유일한 선택지인가? (체크 방어 강제 등)
+                                        if len(_alt_moves) <= 2:  # 선택지 거의 없음
+                                            _is_forced_exchange = True
                                         else:
-                                            # 모든 대안도 강제성 없음 → 강제 교환 아님
-                                            _is_forced_exchange = False
+                                            # 내 다음 수가 강제로 상대를 위협하는지 확인
+                                            # (프로모션 위협, 체크, 핵심 기물 공격 등)
+                                            for alt_m in _alt_moves[:3]:  # 상위 3개만 샘플링
+                                                try:
+                                                    _alt_tb = _tb.copy()
+                                                    _alt_tb.push(alt_m)
+                                                    # 내가 체크를 주거나 폰이 프로모션 임박하면 강제 아님
+                                                    if _alt_tb.is_check():
+                                                        break
+                                                    # 내 폰이 7랭크에 있으면 프로모션 위협
+                                                    my_pawns = _alt_tb.pieces(
+                                                        chess.PAWN, my_color
+                                                    )
+                                                    if my_color == chess.WHITE:
+                                                        if any(p >= 48 for p in my_pawns):  # 7랭크
+                                                            break
+                                                    else:
+                                                        if any(p < 16 for p in my_pawns):  # 2랭크
+                                                            break
+                                                except Exception:
+                                                    pass
+                                            else:
+                                                # 모든 대안도 강제성 없음 → 강제 교환 아님
+                                                _is_forced_exchange = False
 
                                 if _is_forced_exchange:
                                     # 강제수 → 희생이 아님
