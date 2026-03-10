@@ -1484,7 +1484,51 @@ class TacticalAnalysisService:
                                 ]
                                 _can_be_legally_captured = bool(_legal_opp_caps)
 
-                                if not _can_be_legally_captured:
+                                # ── 조건 1-추가: 강제수 필터 ──────────────────────────────
+                                # 디스커버드 공격 등으로 캡처가 강제되는 상황인지 확인
+                                # 만약 상대방이 캡처하지 않고 다른 수를 두면 심각한 위협이
+                                # 없어야 "자발적 희생"으로 간주
+                                _is_forced_exchange = False
+                                if _can_be_legally_captured:
+                                    # 상대의 캡처 외 선택지 확인
+                                    _alt_moves = [
+                                        m for m in _tb.generate_legal_moves()
+                                        if _tb.piece_at(m.to_square) is None  # 캡처 아닌 수
+                                    ]
+                                    # 캡처가 거의 유일한 선택지인가? (체크 방어 강제 등)
+                                    # 또는 다른 수를 두면 내가 치명적 위협을 만드는가?
+                                    if len(_alt_moves) <= 2:  # 선택지 거의 없음
+                                        _is_forced_exchange = True
+                                    else:
+                                        # 내 다음 수가 강제로 상대를 위협하는지 확인
+                                        # (프로모션 위협, 체크, 핵심 기물 공격 등)
+                                        for alt_m in _alt_moves[:3]:  # 상위 3개만 샘플링
+                                            try:
+                                                _alt_tb = _tb.copy()
+                                                _alt_tb.push(alt_m)
+                                                # 내가 체크를 주거나 폰이 프로모션 임박하면 강제 아님
+                                                if _alt_tb.is_check():
+                                                    break
+                                                # 내 폰이 7랭크에 있으면 프로모션 위협
+                                                my_pawns = _alt_tb.pieces(
+                                                    chess.PAWN, my_color
+                                                )
+                                                if my_color == chess.WHITE:
+                                                    if any(p >= 48 for p in my_pawns):  # 7랭크
+                                                        break
+                                                else:
+                                                    if any(p < 16 for p in my_pawns):  # 2랭크
+                                                        break
+                                            except Exception:
+                                                pass
+                                        else:
+                                            # 모든 대안도 강제성 없음 → 강제 교환 아님
+                                            _is_forced_exchange = False
+
+                                if _is_forced_exchange:
+                                    # 강제수 → 희생이 아님
+                                    pass
+                                elif not _can_be_legally_captured:
                                     # 상대가 합법적으로 잡을 수 없음 = 희생 아님
                                     # (보호받는 체크, 기물이 안전한 칸에 위치 등)
                                     pass
