@@ -1502,21 +1502,25 @@ class TacticalAnalysisService:
                                     # ══════ 필터 2: 반격(Counter-Capture) 확인 ═══════════
                                     # Re5 사례: 룩이 폰에 공격받지만, 상대 퀸이 우리 퀸에 공격받음
                                     # → 동등 또는 더 비싼 기물을 반격으로 잡을 수 있으면 강제수
+                                    # 버그 수정: e5에서만 찾지 말고, 전체 보드에서 반격 가능한 모든 상대 기물 확인
                                     if not _is_forced_exchange:
-                                        _recap_moves = [
+                                        # 우리가 잃을 기물 가치
+                                        our_moving_piece = board.piece_at(move.from_square)
+                                        our_piece_val = _PIECE_VAL.get(our_moving_piece.piece_type, 0) if our_moving_piece else 0
+                                        
+                                        # 전체 보드에서 우리가 포획할 수 있는 모든 상대 기물 찾기
+                                        all_our_captures = [
                                             m for m in _tb.generate_legal_moves()
-                                            if m.from_square == move.to_square 
-                                            and _tb.piece_at(m.to_square) is not None
+                                            if _tb.piece_at(m.to_square) is not None
                                             and _tb.piece_at(m.to_square).color == opp_color
                                         ]
-                                        if _recap_moves:
+                                        
+                                        if all_our_captures:
                                             # 반격으로 잡을 수 있는 기물 중 최고가
-                                            max_counter_val = max([_pv(m.to_square) for m in _recap_moves])
-                                            # 포획된 우리 기물 가치
-                                            target_piece = board.piece_at(move.to_square)
-                                            our_piece_val = _PIECE_VAL.get(target_piece.piece_type, 0) if target_piece else 0
+                                            max_counter_val = max([_pv(m.to_square) for m in all_our_captures])
                                             
-                                            # 룩(5) vs 반격 퀸(9) → 동등 이상 교환
+                                            # Re5 사례: 룩(5) vs 반격 퀸(9) → 동등 이상 교환
+                                            # 동등한 교환(5 vs 5)도 강제수로 처리
                                             if max_counter_val >= our_piece_val:
                                                 _is_forced_exchange = True
                                     
