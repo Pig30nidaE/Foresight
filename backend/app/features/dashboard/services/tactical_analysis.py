@@ -1484,36 +1484,97 @@ class TacticalAnalysisService:
                                 ]
                                 _can_be_legally_captured = bool(_legal_opp_caps)
 
-                                # ── 조건 1-추가: 강제수 필터 ──────────────────────────────
-                                # 디스커버드 공격 등으로 캡처가 강제되는 상황인지 확인
-                                # Re5 사례: 룩이 폰에 공격받지만, 상대 퀸이 우리 퀸에 공격받음
-                                # → 동등 또는 더 비싼 기물을 반격으로 잡을 수 있으면 강제수
+                                # ── 조건 1-추가: 강제수 필터 (다중 검증) ──────────────────
+                                # 사용자 피드백: 체크로 가로막게 하는 수도 희생으로 오판됨
+                                # → 체크, 메이트 위협, 핵심 기물 공격, 포크 등 모두 검증
                                 _is_forced_exchange = False
                                 if _can_be_legally_captured:
-                                    # ── 1단계: 반격(Counter-Capture) 확인 ───────────────────
-                                    # 포획 후, 우리가 상대 어떤 기물을 반격으로 잡을 수 있나?
                                     def _pv(sq: int) -> int:
                                         pc = _tb.piece_at(sq)
                                         return _PIECE_VAL.get(pc.piece_type, 99) if pc else 99
                                     
-                                    _recap_moves = [
-                                        m for m in _tb.generate_legal_moves()
-                                        if m.from_square == move.to_square 
-                                        and _tb.piece_at(m.to_square) is not None
-                                        and _tb.piece_at(m.to_square).color == opp_color
-                                    ]
-                                    if _recap_moves:
-                                        # 반격으로 잡을 수 있는 기물 중 최고가
-                                        max_counter_val = max([_pv(m.to_square) for m in _recap_moves])
-                                        # 포획된 우리 기물 가치
-                                        target_piece = board.piece_at(move.to_square)
-                                        our_piece_val = _PIECE_VAL.get(target_piece.piece_type, 0) if target_piece else 0
-                                        
-                                        # Re5 사례: 룩(5) vs 반격으로 퀸(9) → 동등 이상 교환
-                                        if max_counter_val >= our_piece_val:
+                                    # ══════ 필터 1: 체크 주는 수 ══════════════════════
+                                    # 체크를 주면 상대는 강제로 킹을 움직이거나 가로막거나 체크한 기물을 잡아야 함
+                                    # → 자발적 희생이 아님
+                                    if _tb.is_check():
+                                        _is_forced_exchange = True
+                                    
+                                    # ══════ 필터 2: 반격(Counter-Capture) 확인 ═══════════
+                                    # Re5 사례: 룩이 폰에 공격받지만, 상대 퀸이 우리 퀸에 공격받음
+                                    # → 동등 또는 더 비싼 기물을 반격으로 잡을 수 있으면 강제수
+                                    if not _is_forced_exchange:
+                                        _recap_moves = [
+                                            m for m in _tb.generate_legal_moves()
+                                            if m.from_square == move.to_square 
+                                            and _tb.piece_at(m.to_square) is not None
+                                            and _tb.piece_at(m.to_square).color == opp_color
+                                        ]
+                                        if _recap_moves:
+                                            # 반격으로 잡을 수 있는 기물 중 최고가
+                                            max_counter_val = max([_pv(m.to_square) for m in _recap_moves])
+                                            # 포획된 우리 기물 가치
+                                            target_piece = board.piece_at(move.to_square)
+                                            our_piece_val = _PIECE_VAL.get(target_piece.piece_type, 0) if target_piece else 0
+                                            
+                                            # 룩(5) vs 반격 퀸(9) → 동등 이상 교환
+                                            if max_counter_val >= our_piece_val:
+                                                _is_forced_exchange = True
+                                    
+                                    # ══════ 필터 3: 메이트 위협 (다음 수에 강제 메이트) ═══════
+                                    # 내 다음 수에 강제 체크메이트가 있으면 상대는 반드시 대응해야 함
+                                    if not _is_forced_exchange:
+                                        for my_next in list(_tb.generate_legal_moves())[:10]:  # 상위 10수 샘플
+                                            _test_b = _tb.copy()
+                                            try:
+                                                _test_b.push(my_next)
+                                                if _test_b.is_checkmate():
+                                                    _is_forced_exchange = True
+                                                    break
+                                            except Exception:
+                                                pass
+                                    
+                                    # ══════ 필터 4: 핵심 기물 즉시 위협 (퀸/룩) ═══════════
+                                    # 이 수로 상대 퀸이나 룩을 바로 공격하면 상대는 구해야 함
+                                    if not _is_forced_exchange:
+                                        _attacked_by_us = [
+                                            m for m in _tb.generate_legal_moves()
+                                            if m.from_square == move.to_square
+                                            and _tb.piece_at(m.to_square) is not None
+                                            and _tb.piece_at(m.to_square).color == opp_color
+                                        ]
+                                        for atk_m in _attacked_by_us:
+                                            atk_tgt = _tb.piece_at(atk_m.to_square)
+                                            if atk_tgt and atk_tgt.piece_type in (chess.QUEEN, chess.ROOK):
+                                                # 퀸이나 룩을 공격 → 상대는 반드시 대응
+                                                _is_forced_exchange = True
+                                                break
+                                    
+                                    # ══════ 필터 5: 포크(Fork) 패턴 ═══════════════════════
+                                    # 이 수로 2개 이상의 고가 기물(퀸/룩/비숍/나이트)을 동시 공격
+                                    if not _is_forced_exchange:
+                                        _attacked_pieces = [
+                                            _tb.piece_at(m.to_square)
+                                            for m in _tb.generate_legal_moves()
+                                            if m.from_square == move.to_square
+                                            and _tb.piece_at(m.to_square) is not None
+                                            and _tb.piece_at(m.to_square).color == opp_color
+                                        ]
+                                        _valuable_attacked = [
+                                            p for p in _attacked_pieces 
+                                            if p and p.piece_type in (chess.QUEEN, chess.ROOK, chess.BISHOP, chess.KNIGHT)
+                                        ]
+                                        if len(_valuable_attacked) >= 2:
+                                            # 포크 → 상대는 하나를 포기해야 함 (강제 교환)
                                             _is_forced_exchange = True
                                     
-                                    # ── 2단계: 상대 선택지 분석 (반격 없을 때) ──────────────────
+                                    # ══════ 필터 6: 상대 선택지 매우 부족 ═══════════════════
+                                    # 상대의 합법 수가 3개 이하면 강제 상황일 가능성
+                                    if not _is_forced_exchange:
+                                        _all_opp_moves = list(_tb.generate_legal_moves())
+                                        if len(_all_opp_moves) <= 3:
+                                            _is_forced_exchange = True
+                                    
+                                    # ══════ 필터 7: 상대 선택지 분석 (세부) ═══════════════════
                                     if not _is_forced_exchange:
                                         _alt_moves = [
                                             m for m in _tb.generate_legal_moves()
@@ -1524,7 +1585,6 @@ class TacticalAnalysisService:
                                             _is_forced_exchange = True
                                         else:
                                             # 내 다음 수가 강제로 상대를 위협하는지 확인
-                                            # (프로모션 위협, 체크, 핵심 기물 공격 등)
                                             for alt_m in _alt_moves[:3]:  # 상위 3개만 샘플링
                                                 try:
                                                     _alt_tb = _tb.copy()
