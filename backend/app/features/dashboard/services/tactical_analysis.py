@@ -222,7 +222,19 @@ def _to_dict(p: PatternResult) -> dict:
     # 3-튜플 (game, weight, extra_dict) 두 형식 모두 지원
     if p.representative_games:
         top_limit = 16 if p.situation_id == 3 else 8
-        top = sorted(p.representative_games, key=lambda x: x[1], reverse=True)[:top_limit]
+        if p.situation_id == 3:
+            # 희생 패턴은 기물 손해값만으로 정렬하면 T1/T2가 대표게임에서 밀릴 수 있다.
+            # 등급 우선(T1→T4), 등급 점수(metric), 가중치 순으로 정렬한다.
+            def _sac_rank_key(item):
+                extra = item[2] if len(item) > 2 and item[2] else {}
+                tier = int(extra.get("sac_tier") or 4)
+                metric = float(extra.get("metric_value") or 0.0)
+                weight = float(item[1] or 0.0)
+                return (-metric, tier, -weight)
+
+            top = sorted(p.representative_games, key=_sac_rank_key)[:top_limit]
+        else:
+            top = sorted(p.representative_games, key=lambda x: x[1], reverse=True)[:top_limit]
         games_out = []
         for item in top:
             g = item[0]
@@ -797,15 +809,15 @@ class TacticalAnalysisService:
             logger.exception("[analyze] _kmeans 실패")
 
         # Blunder 게임 집합 계산 (XGBoost 레이블용, data-leakage 방지)
+        # Stockfish 기반 검출 우선, 부족시 더 엄격한 폴백 (≤10 moves 손실)
         blunder_game_ids: set = {
             gid for gid, moves in sf_cache.items()
             if sum(1 for m in moves if m.get("is_blunder") and m["is_my_move"]) >= 2
         }
-        # Stockfish 없거나 부족하면 프록시: 20수 이하 패배
         if len(blunder_game_ids) < 5:
             blunder_game_ids |= {
                 g.game_id for g in games
-                if g.result.value == "loss" and _estimate_total_moves(g.pgn or "") <= 20
+                if g.result.value == "loss" and _estimate_total_moves(g.pgn or "") <= 10
             }
         xgb_profile = None
         try:
@@ -1858,8 +1870,10 @@ class TacticalAnalysisService:
                                     eval_pre_sac = float(sf_m["cp_after"])  # 희생 전, 내 관점
                                     # NOTE: `or 999.0` 대신 None 검사 사용 — cp_loss=0.0 (최선수)이 999로 뒤바뀌는 버그 방지
                                     _cp_loss_raw = sf_m.get("cp_loss")
-                                    cp_loss_played = float(_cp_loss_raw) if _cp_loss_raw is not None else 999.0
-                                    has_better_alternative = cp_loss_played > 70
+                                    cp_loss_known = _cp_loss_raw is not None
+                                    cp_loss_played = float(_cp_loss_raw) if cp_loss_known else 999.0
+                                    has_better_alternative = cp_loss_known and cp_loss_played > 70
+                                    is_engine_blunder = bool(sf_m.get("is_blunder", False))
 
                                     # 상대방 응수(다음 턴) entry 검색
                                     if mv_clr == "white":
@@ -1890,7 +1904,9 @@ class TacticalAnalysisService:
                                         is_not_catastrophic = eval_post_sac >= -(material_cost_cp + 300)
 
                                         # 3) 기존 우위 상태(+3.0)에서 eval 하락 시 단순 정리로 간주
-                                        is_not_simplification = not (eval_pre_sac > 300 and sac_delta < 0)
+                                        # 단순 정리는 "나쁜 희생"이 아닐 수 있어 T4 판정에서는 별도로 보호한다.
+                                        is_strategic_simplification = (eval_pre_sac > 300 and sac_delta < 0)
+                                        is_not_simplification = not is_strategic_simplification
 
                                         forced_mate = eval_post_sac >= 1900
 
@@ -1898,45 +1914,73 @@ class TacticalAnalysisService:
                                             (has_compensation and is_not_catastrophic and is_not_simplification)
                                             or forced_mate
                                         )
+                                        # T4 오탐 방지용: 단순 정리를 제외하고, 보상/안전성 기준을 만족하면 유효로 본다.
+                                        is_effective_sac = (
+                                            (has_compensation and is_not_catastrophic)
+                                            or forced_mate
+                                        )
 
-                                        # ── 3. 4단계 희생 등급 분류 (개선판) ──
+                                        # ── 3. 4단계 희생 등급 분류 (블리츠 특화) ──
                                         # T1: 탁월/유일(최선)수
-                                        # T2: cp가 올라가는 긍정적 수
-                                        # T3: 거절형/불필요하지만 나쁘지 않은 수
-                                        # T4: 해서는 안 되는 놓침/블런더
-                                        severe_drop = sac_delta <= -120
-                                        hard_blunder = cp_loss_played >= 120
-                                        # cp_loss_played <= 20: 엔진 최선수와 거의 차이 없는 최선/탁월 희생
-                                        # (기존 <= 8은 너무 엄격 — 0.0 bug fix 이후에도 거의 안 잡힘)
-                                        is_best_like = cp_loss_played <= 20
-                                        # sac_delta >= -30: 엔진 분석 편차(노이즈) 허용
-                                        # (T2에서 P2/P3 평가 일관성 차이 때문에 약간 음수일 수 있음)
-                                        is_brilliant_like = forced_mate or (is_best_like and sac_delta >= -30)
+                                        # T2: 좋은 전술 수
+                                        # T3: 선택형/받을 만한 수
+                                        # T4: 진정한 블런더 (명백한 손실)
+                                        
+                                        # is_valid_sac = True이면 기본적으로 수용할 만한 수로 봄
+                                        # (보상 충분 + 포지션 붕괴 없음 + 단순 정리 아님)
+                                        
+                                        # T1/T2 기준 재설정 (블리츠 현실성 반영)
+                                        # ─────────────────────────────────────
+                                        # T1: 탁월수 (최선에 가까움, 좋은 결과)
+                                        #   - cp_loss <= 30 (충분히 좋은 수준)
+                                        #   - sac_delta >= -15 (평가 거의 안 하락)
+                                        #   또는 forced_mate
+                                        is_best_like = cp_loss_played <= 35
+                                        is_brilliant_like = forced_mate or (is_best_like and sac_delta >= -25)
 
-                                        # 최선/탁월 후보는 최우선으로 보호한다.
+                                        # T2: 합리적인 수 (좋지만 완벽하진 않음)
+                                        #   - cp_loss <= 35 (손실 적당, 명확한 좋은 수)
+                                        #   - sac_delta >= -20 (약간의 하락만 허용)
+                                        is_sound = cp_loss_played <= 50 and sac_delta >= -40
+
+                                        # ── T1~T4 분류 로직 ──
                                         if is_brilliant_like and not has_better_alternative:
+                                            # T1: 탁월/유일형 (진정한 좋은 수)
                                             sac_tier = 1
                                             sac_tier_score = 100.0
                                             sac_reason = "탁월/유일형"
-                                        # T2: cp_loss가 60 이하이고 포지션이 급락하지 않은 경우
-                                        # sac_delta >= 10 → -60: P2 평가가 이미 희생수의 결과를 반영하므로
-                                        # sub-optimal 희생은 항상 sac_delta < 0. 급락(-60cp 이상 하락)만 배제.
-                                        elif cp_loss_played <= 60 and sac_delta >= -60:
+                                        elif is_sound:
+                                            # T2: 합리적인 수 (좋지만 최선은 아님)
                                             sac_tier = 2
                                             sac_tier_score = 75.0
-                                            sac_reason = "긍정상승형"
-                                        elif is_valid_sac and cp_loss_played <= 90 and sac_delta >= -60:
+                                            sac_reason = "정확한_선택형"
+                                        # T3: 선택형 (받을 만한 수, 유효한 희생)
+                                        elif ((is_valid_sac or is_effective_sac or is_strategic_simplification) and cp_loss_played <= 140 and sac_delta >= -120) or \
+                                            (cp_loss_played <= 100 and sac_delta >= -90):
                                             sac_tier = 3
                                             sac_tier_score = 60.0
-                                            sac_reason = "중립/선택형"
-                                        elif hard_blunder or severe_drop or (not is_valid_sac and cp_loss_played > 80 and sac_delta < -40):
+                                            sac_reason = "선택형"
+                                        # T4: 진정한 블런더만
+                                        # - cp_loss가 실제로 계산되었고
+                                        # - 엔진이 블런더로 판정되고 손실이 매우 크며
+                                        # - 보상 기준도 실패하고
+                                        # - 단순 정리 상황이 아닐 때만 T4
+                                        elif (
+                                            cp_loss_known
+                                            and is_engine_blunder
+                                            and cp_loss_played >= 220
+                                            and not is_effective_sac
+                                            and not is_strategic_simplification
+                                            and sac_delta <= -150
+                                        ):
                                             sac_tier = 4
                                             sac_tier_score = 0.0
-                                            sac_reason = "놓침/블런더"
+                                            sac_reason = "명백한_블런더"
                                         else:
+                                            # 위에 걸리지 않은 모든 희생은 T3로
                                             sac_tier = 3
                                             sac_tier_score = 60.0
-                                            sac_reason = "중립/선택형"
+                                            sac_reason = "선택형"
 
                                         # 거절형은 무조건 강등하지 않는다.
                                         # 실익이 거의 없는 경우에만 T3로 조정한다.
@@ -2729,9 +2773,11 @@ class TacticalAnalysisService:
         X_tr, X_v = X[:split], X[split:]
         y_tr, y_v = y[:split], y[split:]
 
-        scale_pw = float((len(y_tr) - y_tr.sum()) / max(y_tr.sum(), 1))
+        # 극심한 불균형 대응: scale_pos_weight 최소값 50.0 보장
+        scale_pw = max(float((len(y_tr) - y_tr.sum()) / max(y_tr.sum(), 1)), 50.0)
+        # 정규화 강화: 더 얕은 트리 + 느린 학습률로 과적합 방지
         model = xgb.XGBClassifier(
-            n_estimators=80, max_depth=4, learning_rate=0.1,
+            n_estimators=100, max_depth=3, learning_rate=0.05,
             scale_pos_weight=scale_pw, eval_metric="logloss",
             random_state=42, verbosity=0,
         )
