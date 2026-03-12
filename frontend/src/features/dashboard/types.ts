@@ -330,6 +330,15 @@ export interface XGBoostProfile {
   top_risk_factors: XGBoostRiskFactor[];
   feature_importances: { feature: string; importance: number }[];
   model_accuracy: number;
+  precision?: number;
+  recall?: number;
+  f1?: number;
+  baseline_accuracy?: number;
+  lift_over_baseline?: number;
+  positive_rate?: number;
+  validation_support?: { positive: number; negative: number };
+  is_meaningful?: boolean;
+  quality_note?: string;
   games_analyzed: number;
   description: string;
 }
