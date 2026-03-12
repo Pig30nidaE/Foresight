@@ -18,6 +18,15 @@ interface Props {
   isLoading?: boolean;
 }
 
+function safeNumber(value: number | null | undefined, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function safePercent(value: number | null | undefined): number {
+  const n = safeNumber(value);
+  return Math.min(100, Math.max(0, n));
+}
+
 // ─── 탭 설정 ────────────────────────────────────────────────
 const TABS = [
   { id: "all",      label: "전체",          icon: "🗂️" },
@@ -126,6 +135,7 @@ function XGBoostProfileSection({ profile }: { profile: XGBoostProfile }) {
   const risk      = profile.blunder_game_rate;
   const riskColor = risk >= 35 ? "text-red-700"     : risk >= 20 ? "text-amber-700"  : "text-emerald-700";
   const riskBg    = risk >= 35 ? "bg-red-600"       : risk >= 20 ? "bg-amber-600"    : "bg-emerald-600";
+  const meaningful = profile.is_meaningful ?? false;
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between">
@@ -140,6 +150,19 @@ function XGBoostProfileSection({ profile }: { profile: XGBoostProfile }) {
         <div className="w-full bg-chess-border/60 rounded-full h-2 overflow-hidden">
           <div className={`h-full rounded-full ${riskBg}`} style={{ width: `${Math.min(risk, 100)}%` }} />
         </div>
+        {profile.precision !== undefined && profile.recall !== undefined && profile.f1 !== undefined && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">정밀도 {profile.precision.toFixed(0)}%</span>
+            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">재현율 {profile.recall.toFixed(0)}%</span>
+            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">F1 {profile.f1.toFixed(0)}%</span>
+            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">Lift {profile.lift_over_baseline?.toFixed(1) ?? "0.0"}pp</span>
+          </div>
+        )}
+        {profile.quality_note && (
+          <p className={`text-xs leading-snug ${meaningful ? "text-emerald-700" : "text-amber-700"}`}>
+            {meaningful ? "모델 상태: 유의미" : "모델 상태: 주의"} · {profile.quality_note}
+          </p>
+        )}
         <p className="text-xs text-chess-muted leading-snug">{profile.description}</p>
       </div>
       <div className="space-y-1.5">
@@ -197,13 +220,14 @@ function ClusterCard({ cluster }: { cluster: ClusterInfo }) {
 
 // ─── 점수 바 ────────────────────────────────────────────────
 function ScoreBar({ score }: { score: number }) {
-  const color = score >= 65 ? "bg-emerald-600" : score >= 45 ? "bg-amber-600" : "bg-red-600";
+  const safeScore = safePercent(score);
+  const color = safeScore >= 65 ? "bg-emerald-600" : safeScore >= 45 ? "bg-amber-600" : "bg-red-600";
   return (
     <div className="flex items-center gap-2 min-w-0">
       <div className="flex-1 bg-chess-border/60 rounded-full h-1.5 overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${score}%` }} />
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${safeScore}%` }} />
       </div>
-      <span className={`text-xs font-bold w-8 text-right ${score >= 65 ? "text-emerald-700" : score >= 45 ? "text-amber-700" : "text-red-700"}`}>{score}</span>
+      <span className={`text-xs font-bold w-8 text-right ${safeScore >= 65 ? "text-emerald-700" : safeScore >= 45 ? "text-amber-700" : "text-red-700"}`}>{Math.round(safeScore)}</span>
     </div>
   );
 }
@@ -217,7 +241,8 @@ function PatternCard({ p, highlight, onClick, isLastOdd }: { p: TacticalPattern;
     highlight === "weakness" ? "border-red-600/40 bg-red-600/6 hover:border-red-600/55" :
     "border-chess-border bg-chess-bg/80 hover:border-chess-muted/60 hover:bg-chess-surface";
 
-  const hasMetric = p.key_metric_value != null;
+  const metricValue = Number.isFinite(p.key_metric_value ?? NaN) ? (p.key_metric_value as number) : null;
+  const hasMetric = metricValue != null;
   const hasInsight = !!p.insight;
   const hasGames = (p.top_games?.length ?? 0) > 0;
   const insightBg = highlight === "strength"
@@ -272,7 +297,7 @@ function PatternCard({ p, highlight, onClick, isLastOdd }: { p: TacticalPattern;
             highlight === "weakness" ? "text-red-700" :
             "text-chess-primary"
           }`}>
-            {p.key_metric_value!.toFixed(p.key_metric_unit === "cp" ? 1 : 0)}
+            {metricValue!.toFixed(p.key_metric_unit === "cp" ? 1 : 0)}
           </span>
           <span className="text-lg font-bold text-chess-muted leading-none pb-0.5">{p.key_metric_unit}</span>
           {p.key_metric_label && (
@@ -293,16 +318,31 @@ function PatternCard({ p, highlight, onClick, isLastOdd }: { p: TacticalPattern;
 
       {/* 우위 유지력 — 미니 스택 바 */}
       {p.chart_data?.type === "advantage_breakdown" && (
-        <div className="space-y-1.5">
-          <div className="w-full flex h-2 rounded-full overflow-hidden gap-px">
-            <div className="bg-emerald-600 h-full" style={{ width: `${p.chart_data.maintain_rate}%` }} />
-            <div className="bg-amber-600 h-full"   style={{ width: `${p.chart_data.total > 0 ? (p.chart_data.reversed_mid / p.chart_data.total) * 100 : 0}%` }} />
-            <div className="bg-red-600 h-full"     style={{ width: `${p.chart_data.total > 0 ? (p.chart_data.reversed_end / p.chart_data.total) * 100 : 0}%` }} />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-chess-muted">
+            <span>우위게임 요약</span>
+            <span>
+              탐색 {safeNumber(p.chart_data.scan_pool)}게임 · 조건 충족 {safeNumber(p.chart_data.total)}게임
+            </span>
           </div>
-          <div className="flex items-center gap-3 text-[10px] text-chess-muted">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-600/80 inline-block" />유지 {p.chart_data.maintained}</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-600/80 inline-block" />미들게임 역전 {p.chart_data.reversed_mid}{p.chart_data.mid_avg_move ? ` (avg ${p.chart_data.mid_avg_move}수)` : ""}</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-600/80 inline-block" />엔드게임 역전 {p.chart_data.reversed_end}{p.chart_data.end_avg_move ? ` (avg ${p.chart_data.end_avg_move}수)` : ""}</span>
+          <div className="w-full flex h-2 rounded-full overflow-hidden gap-px">
+            <div className="bg-emerald-600 h-full" style={{ width: `${safePercent(p.chart_data.maintain_rate)}%` }} />
+            <div className="bg-amber-600 h-full"   style={{ width: `${safePercent(p.chart_data.total > 0 ? (safeNumber(p.chart_data.reversed_mid) / p.chart_data.total) * 100 : 0)}%` }} />
+            <div className="bg-red-600 h-full"     style={{ width: `${safePercent(p.chart_data.total > 0 ? (safeNumber(p.chart_data.reversed_end) / p.chart_data.total) * 100 : 0)}%` }} />
+          </div>
+          <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+            <div className="rounded-md border border-emerald-700/25 bg-emerald-700/8 px-2 py-1">
+              <p className="text-emerald-700 font-semibold">유지 성공</p>
+              <p className="text-chess-primary font-bold">{safeNumber(p.chart_data.maintained ?? p.chart_data.converted)}</p>
+            </div>
+            <div className="rounded-md border border-amber-700/25 bg-amber-700/8 px-2 py-1">
+              <p className="text-amber-700 font-semibold">중반 역전</p>
+              <p className="text-chess-primary font-bold">{safeNumber(p.chart_data.reversed_mid ?? p.chart_data.shaky)}</p>
+            </div>
+            <div className="rounded-md border border-red-700/25 bg-red-700/8 px-2 py-1">
+              <p className="text-red-700 font-semibold">엔드게임 역전</p>
+              <p className="text-chess-primary font-bold">{safeNumber(p.chart_data.reversed_end ?? p.chart_data.blown)}</p>
+            </div>
           </div>
         </div>
       )}
@@ -388,6 +428,7 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
   const filteredPatterns = activeTab === "all"
     ? data.patterns
     : data.patterns.filter((p) => p.category === activeTab);
+  const aiInsights = (data as TacticalAnalysis & { ai_insights?: AiInsights | null }).ai_insights;
 
   // 탭에 패턴이 있는지 확인 (빈 탭 숨김)
   const tabCounts = Object.fromEntries(
@@ -403,7 +444,7 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
         <SummaryRow data={data} onSelect={setSelectedPattern} />
 
         {/* AI 코치 */}
-        <AiInsightsSection insights={(data as any).ai_insights} />
+        <AiInsightsSection insights={aiInsights} />
 
         {/* K-Means */}
         {data.cluster_analysis && (

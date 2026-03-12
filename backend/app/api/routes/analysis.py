@@ -16,7 +16,7 @@ async def get_performance_summary(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz", description="bullet | blitz | rapid | classical"),
-    max_games: int = Query(default=100, ge=10, le=500),
+    max_games: int = Query(default=5000, le=5000),
 ):
     """
     플레이어 퍼포먼스 요약 통계
@@ -39,7 +39,7 @@ async def get_opening_stats(
     username: str,
     time_class: str = Query(default="blitz"),
     top_n: int = Query(default=10, ge=1, le=30),
-    max_games: int = Query(default=200, ge=10, le=500),
+    max_games: int = Query(default=5000, le=5000),
 ):
     """
     오프닝별 통계 상위 N개
@@ -64,7 +64,7 @@ async def get_opponent_analysis(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=50, ge=10, le=200),
+    max_games: int = Query(default=5000, le=5000),
 ):
     """
     상대 플레이어 분석 (대회 준비용)

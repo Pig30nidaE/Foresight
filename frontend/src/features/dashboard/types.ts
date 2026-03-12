@@ -3,6 +3,26 @@
 // ============================================================
 
 // ────────────────────────────────────────────
+// 전적 조회
+// ────────────────────────────────────────────
+export interface GameSummaryItem {
+  game_id: string;
+  platform: "chess.com" | "lichess";
+  white: string;
+  black: string;
+  result: "win" | "loss" | "draw";
+  time_class: string;
+  opening_eco: string | null;
+  opening_name: string | null;
+  pgn: string | null;
+  played_at: string | null;
+  url: string | null;
+  rating_white: number | null;
+  rating_black: number | null;
+  cp_evals: (number | null)[] | null;
+}
+
+// ────────────────────────────────────────────
 // Stats (MVP 섹션 1, 2)
 // ────────────────────────────────────────────
 export interface FirstMoveEntry {
@@ -19,6 +39,8 @@ export interface PatternGameItem {
   url: string;
   result: "win" | "loss" | "draw";
   is_success?: boolean;          // 패턴별 성공 여부 (패턴마다 기준이 다름)
+  sac_tier?: 1 | 2 | 3 | 4;
+  advantage_outcome?: "smooth" | "shaky" | "blown";
   metric_value?: number | null;  // 패턴 핵심 수치 (잔여초, CP손실, 비율 등)
   metric_label?: string | null;  // 수치 레이블 (예: "최저 잔여시간")
   context?: string | null;       // 해당 게임에서 일어난 일 1줄 요약
@@ -27,6 +49,10 @@ export interface PatternGameItem {
   played_at?: string | null;
   white?: string | null;
   black?: string | null;
+  // 희생 패턴 전용 필드 (situation_id=3)
+  pgn?: string | null;
+  sacrifice_move_no?: number | null;
+  sacrifice_color?: "white" | "black" | null;
 }
 
 export interface OpeningTreeNode {
@@ -140,13 +166,134 @@ export interface TacticalPattern {
   chart_data?: {
     /** 우위 유지력 (situation_id=4) — 유지/역전 파트 분석 */
     type:          "advantage_breakdown";
+    scan_pool?:    number;
+    scan_cap?:     number;
     total:         number;
-    maintained:    number;
-    reversed_mid:  number;
-    reversed_end:  number;
+    maintained?:   number;
+    reversed_mid?: number;
+    reversed_end?: number;
+    // 확장 집계 필드 (백엔드 최신 포맷)
+    smooth?:       number;
+    shaky?:        number;
+    blown?:        number;
+    converted?:    number;
+    conv_rate?:    number;
+    smooth_rate?:  number;
+    neg_avg_move?: number | null;
     mid_avg_move:  number | null;
     end_avg_move:  number | null;
-    maintain_rate: number;
+    maintain_rate?: number;
+  } | {
+    /** 반대/같은방향 캐슬링 비교 (situation_id=7) */
+    type: "castling_comparison";
+    opposite_games: Array<{
+      url: string | null;
+      result: string;
+      is_success: boolean;
+      opening_name: string | null;
+      opening_eco: string | null;
+      played_at: string | null;
+      white: string;
+      black: string;
+    }>;
+    same_games: Array<{
+      url: string | null;
+      result: string;
+      is_success: boolean;
+      opening_name: string | null;
+      opening_eco: string | null;
+      played_at: string | null;
+      white: string;
+      black: string;
+    }>;
+  } | {
+    /** 희생 4등급 분포 (situation_id=3) */
+    type: "sacrifice_tiers";
+    total: number;
+    t1: number;
+    t2: number;
+    t3: number;
+    t4: number;
+    declined?: number;
+    unnecessary?: number;
+    avg_score: number;
+  } | {
+    /** 주력/생소 오프닝 비교 (situation_id=18) */
+    type: "opening_comparison";
+    main_games: Array<{
+      url: string | null;
+      result: string;
+      is_success: boolean;
+      opening_name: string | null;
+      opening_eco: string | null;
+      played_at: string | null;
+      white: string;
+      black: string;
+    }>;
+    unfamiliar_games: Array<{
+      url: string | null;
+      result: string;
+      is_success: boolean;
+      opening_name: string | null;
+      opening_eco: string | null;
+      played_at: string | null;
+      white: string;
+      black: string;
+    }>;
+    main_rate: number;
+    unfamiliar_rate: number;
+    diff: number;
+    main_count: number;
+    unfamiliar_count: number;
+  } | {
+    /** IQP 구조 비교 (situation_id=10) */
+    type: "iqp_comparison";
+    my_iqp_games: Array<{
+      url: string | null;
+      result: string;
+      is_success: boolean;
+      opening_name: string | null;
+      opening_eco: string | null;
+      played_at: string | null;
+      white: string;
+      black: string;
+      iqp_side: "my" | "opp" | "none";
+      quality_score: number;
+    }>;
+    opp_iqp_games: Array<{
+      url: string | null;
+      result: string;
+      is_success: boolean;
+      opening_name: string | null;
+      opening_eco: string | null;
+      played_at: string | null;
+      white: string;
+      black: string;
+      iqp_side: "my" | "opp" | "none";
+      quality_score: number;
+    }>;
+    none_iqp_games: Array<{
+      url: string | null;
+      result: string;
+      is_success: boolean;
+      opening_name: string | null;
+      opening_eco: string | null;
+      played_at: string | null;
+      white: string;
+      black: string;
+      iqp_side: "my" | "opp" | "none";
+      quality_score: number;
+    }>;
+    my_iqp_rate: number;
+    opp_iqp_rate: number;
+    none_iqp_rate: number;
+    my_iqp_count: number;
+    opp_iqp_count: number;
+    none_iqp_count: number;
+    my_vs_none_diff: number;
+    my_vs_opp_diff: number;
+    my_quality_avg: number;
+    opp_quality_avg: number;
   } | null;
 }
 
@@ -183,6 +330,15 @@ export interface XGBoostProfile {
   top_risk_factors: XGBoostRiskFactor[];
   feature_importances: { feature: string; importance: number }[];
   model_accuracy: number;
+  precision?: number;
+  recall?: number;
+  f1?: number;
+  baseline_accuracy?: number;
+  lift_over_baseline?: number;
+  positive_rate?: number;
+  validation_support?: { positive: number; negative: number };
+  is_meaningful?: boolean;
+  quality_note?: string;
   games_analyzed: number;
   description: string;
 }

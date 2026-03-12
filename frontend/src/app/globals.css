@@ -62,3 +62,12 @@ body {
   background-image: radial-gradient(circle, #A6A2A2 1px, transparent 1px);
   background-size: 28px 28px;
 }
+
+/* ── 섹션 로딩 슬라이드 바 (각 섹션 개별 진행률) ──────────── */
+@keyframes loading-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.animate-loading-slide {
+  animation: loading-slide 1.4s ease-in-out infinite;
+}

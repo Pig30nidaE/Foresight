@@ -35,11 +35,10 @@ export const getRecentGames = async (
 export const getPerformanceSummary = async (
   platform: Platform,
   username: string,
-  timeClass: TimeClass = "blitz",
-  maxGames = 100
+  timeClass: TimeClass = "blitz"
 ): Promise<PerformanceSummary> => {
   const { data } = await api.get(`/analysis/performance/${platform}/${username}`, {
-    params: { time_class: timeClass, max_games: maxGames },
+    params: { time_class: timeClass },
   });
   return data;
 };

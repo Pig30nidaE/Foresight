@@ -12,9 +12,8 @@ import OpeningMovesModal from "@/features/opening-tier/components/OpeningMovesMo
 const TIER_ORDER: Tier[] = ["S", "A", "B", "C", "D"];
 
 export default function OpeningTierPage() {
-  const [platform, setPlatform] = useState<"lichess" | "chess.com">("lichess");
   const [speed, setSpeed] = useState<TimeClass>("blitz");
-  const [rating, setRating] = useState(1600);
+  const [rating, setRating] = useState(1800);
   const [color, setColor] = useState<Color>("white");
   const [selectedOpening, setSelectedOpening] = useState<OpeningTierEntry | null>(null);
 
@@ -28,7 +27,7 @@ export default function OpeningTierPage() {
   // Ensure selected rating stays valid when speed changes
   useEffect(() => {
     if (brackets.length > 0 && !brackets.find((b) => b.lichess_rating === rating)) {
-      const defaultBracket = brackets.find((b) => b.lichess_rating === 1600) ?? brackets[4];
+      const defaultBracket = brackets.find((b) => b.lichess_rating === 1800) ?? brackets[2];
       if (defaultBracket) setRating(defaultBracket.lichess_rating);
     }
   }, [brackets, rating]);
@@ -73,8 +72,6 @@ export default function OpeningTierPage() {
 
         {/* Filter Bar */}
         <FilterBar
-          platform={platform}
-          onPlatformChange={setPlatform}
           speed={speed}
           onSpeedChange={(s) => setSpeed(s)}
           rating={rating}
@@ -84,15 +81,13 @@ export default function OpeningTierPage() {
           brackets={brackets}
         />
 
-        {/* Chess.com info note */}
-        {platform === "chess.com" && (
-          <div className="flex items-start gap-2 bg-amber-700/8 border border-amber-700/28 rounded-xl px-4 py-3 text-sm">
-            <span className="text-amber-700 shrink-0 mt-0.5">ℹ</span>
-            <p className="text-amber-800">
-              Chess.com 레이팅 수치는 대략적인 환산값입니다. 실제 데이터는 Lichess 기보를 기반으로 집계됩니다.
-            </p>
-          </div>
-        )}
+        {/* Lichess data notice */}
+        <div className="flex items-start gap-2 bg-chess-surface/60 border border-chess-border rounded-xl px-4 py-3 text-sm">
+          <span className="text-chess-muted shrink-0 mt-0.5">ℹ</span>
+          <p className="text-chess-muted">
+            오프닝 데이터는 LiChess의 데이터를 기반으로 환산 및 분석되었습니다.
+          </p>
+        </div>
 
         {/* Loading */}
         {showLoading && (
@@ -116,35 +111,45 @@ export default function OpeningTierPage() {
 
         {/* Tier Sections */}
         {data && !showLoading && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm text-chess-muted">
-              <p>
-                총{" "}
-                <span className="text-chess-primary font-medium">
-                  {data.total_openings}
-                </span>
-                개 오프닝 분석됨
+          data.total_openings === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-20 text-center">
+              <p className="text-chess-primary font-medium">데이터가 부족합니다</p>
+              <p className="text-chess-muted text-sm max-w-sm">
+                선택한 레이팅 구간 · 타임 컨트롤 조합에서<br></br>
+                통계적으로 유의미한 게임 수를 확보한 오프닝이 없습니다.
               </p>
-              {data.data_period && (
-                <p>
-                  <span className="text-chess-primary">
-                    {data.data_period.replace("-", "년 ")}월
-                  </span>{" "}
-                  기준
-                </p>
-              )}
             </div>
-            {TIER_ORDER.map((tier) => (
-              <TierSection
-                key={tier}
-                tier={tier}
-                entries={grouped[tier]}
-                color={color}
-                defaultOpen={tier === "S" || tier === "A"}
-                onOpeningClick={setSelectedOpening}
-              />
-            ))}
-          </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm text-chess-muted">
+                <p>
+                  총{" "}
+                  <span className="text-chess-primary font-medium">
+                    {data.total_openings}
+                  </span>
+                  개 오프닝 분석됨
+                </p>
+                {data.data_period && (
+                  <p>
+                    <span className="text-chess-primary">
+                      {data.data_period.replace("-", "년 ")}월
+                    </span>{" "}
+                    기준
+                  </p>
+                )}
+              </div>
+              {TIER_ORDER.map((tier) => (
+                <TierSection
+                  key={tier}
+                  tier={tier}
+                  entries={grouped[tier]}
+                  color={color}
+                  defaultOpen={tier === "S" || tier === "A"}
+                  onOpeningClick={setSelectedOpening}
+                />
+              ))}
+            </div>
+          )
         )}
       </div>
 

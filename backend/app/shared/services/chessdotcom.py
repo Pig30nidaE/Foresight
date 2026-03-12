@@ -2,9 +2,11 @@
 Chess.com Public API 연동 서비스
 Docs: https://www.chess.com/news/view/published-data-api
 """
+import asyncio
 import calendar
 import httpx
 import re
+import time
 from datetime import datetime, timezone
 from typing import List, Optional
 from app.core.config import settings
@@ -15,6 +17,8 @@ from app.shared.services import opening_db
 _RE_ECO         = re.compile(r'\[ECO "([^"]+)"\]')
 _RE_OPENING_HDR = re.compile(r'\[Opening "([^"]+)"\]')
 _RE_VARIATION_HDR = re.compile(r'\[Variation "([^"]+)"\]')
+# CP eval 추출: { [%eval 0.31] } 또는 { [%eval #3] }
+_RE_EVAL = re.compile(r'\[%eval\s+([+-]?(?:\d+\.?\d*|#[+-]?\d+))\]')
 # chess.com eco URL에서 오프닝 이름 추출용
 #  예) https://www.chess.com/openings/Caro-Kann-Defense-Advance-... → "Caro-Kann Defense: Advance"
 _RE_ECO_URL = re.compile(r'/openings/([^?#]+)$')
@@ -37,6 +41,30 @@ def _unix_to_iso(ts: object) -> str:
         return datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
     except (TypeError, ValueError, OSError):
         return ""
+
+
+def _parse_cp_evals(pgn: str) -> Optional[List[Optional[float]]]:
+    """PGN에서 %eval 어노테이션을 파싱해 수별 CP 평가 리스트 반환.
+    메이트(#N)는 백 유리 시 999.0, 흑 유리 시 -999.0으로 변환.
+    eval이 없으면 None 반환."""
+    if not pgn:
+        return None
+    matches = _RE_EVAL.findall(pgn)
+    if not matches:
+        return None
+    result: List[Optional[float]] = []
+    for m in matches:
+        if m.startswith("#"):
+            # #N = 백이 N수 안에 메이트, -#N = 흑이 메이트
+            result.append(999.0 if not m.startswith("#-") else -999.0)
+        elif m.startswith("-#"):
+            result.append(-999.0)
+        else:
+            try:
+                result.append(float(m))
+            except ValueError:
+                result.append(None)
+    return result if result else None
 
 
 def _opening_name_from_url(eco_url: str) -> str:
@@ -84,10 +112,18 @@ def _opening_name_from_url(eco_url: str) -> str:
 class ChessDotComService:
     BASE_URL = settings.CHESSDOTCOM_BASE_URL
     HEADERS = {"User-Agent": "Foresight Chess Analytics App (contact@foresight.dev)"}
+    _RECENT_GAMES_TTL_SEC = 45.0
+    _recent_games_cache: dict[tuple, tuple[float, List[GameSummary]]] = {}
+    _recent_games_locks: dict[tuple, asyncio.Lock] = {}
+
+    @staticmethod
+    def _client(timeout: int) -> httpx.AsyncClient:
+        # Ignore shell/system proxy env vars for public API calls to avoid local proxy misrouting.
+        return httpx.AsyncClient(timeout=timeout, follow_redirects=True, trust_env=False)
 
     async def get_player_profile(self, username: str) -> PlayerProfile:
         """플레이어 기본 프로필 조회"""
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with self._client(timeout=15) as client:
             profile_resp = await client.get(
                 f"{self.BASE_URL}/player/{username}", headers=self.HEADERS
             )
@@ -134,7 +170,7 @@ class ChessDotComService:
 
     async def _get_archives(self, username: str) -> List[str]:
         """아카이브 URL 목록 조회 (최신순)"""
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with self._client(timeout=15) as client:
             resp = await client.get(
                 f"{self.BASE_URL}/player/{username}/games/archives",
                 headers=self.HEADERS,
@@ -148,7 +184,7 @@ class ChessDotComService:
     ) -> List[GameSummary]:
         """특정 월의 게임 목록 조회"""
         url = f"{self.BASE_URL}/player/{username}/games/{year}/{month:02d}"
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+        async with self._client(timeout=20) as client:
             resp = await client.get(url, headers=self.HEADERS)
             resp.raise_for_status()
         games_data = resp.json().get("games", [])
@@ -164,39 +200,68 @@ class ChessDotComService:
     ) -> List[GameSummary]:
         """
         아카이브 API를 기반으로 게임 조회.
+        아카이브를 병렬(배치 8)로 fetching하여 속도 향상.
         time_class 를 지정하면 수집 단계에서 필터링하여 cap 을 의미 있게 만듦.
         since_ts/until_ts 가 주어지면 시간 범위로 필터링. (seconds)
         """
-        archives = await self._get_archives(username)
-        games: List[GameSummary] = []
-        HARD_CAP = 5000
-        # max_games 를 항상 존중하되 HARD_CAP 으로 상한 제한
-        # 이전 코드는 날짜 필터가 없으면 max_games 를 무시하고 HARD_CAP(5000)을 사용했지만
-        # 이로 인해 모든 엔드포인트가 무조건 5000게임을 가져와 응답이 25-30초 소요됨
-        effective_cap = min(max(max_games, 1), HARD_CAP)
+        cache_key = (username.lower(), int(max_games), since_ts, until_ts, time_class or "")
+        now = time.monotonic()
+        cached = self._recent_games_cache.get(cache_key)
+        if cached and (now - cached[0]) <= self._RECENT_GAMES_TTL_SEC:
+            return list(cached[1])
 
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+        lock = self._recent_games_locks.setdefault(cache_key, asyncio.Lock())
+        async with lock:
+            now = time.monotonic()
+            cached = self._recent_games_cache.get(cache_key)
+            if cached and (now - cached[0]) <= self._RECENT_GAMES_TTL_SEC:
+                return list(cached[1])
+
+            archives = await self._get_archives(username)  # 최신순
+            HARD_CAP = 5000
+            effective_cap = min(max(max_games, 1), HARD_CAP)
+
+            # ── 1. 관련 아카이브 URL 필터링 ──────────────────────────────────
+            # until_ts가 있으면 해당 월보다 최신 아카이브는 스킵
+            # since_ts가 있으면 해당 월보다 오래된 아카이브는 제외 (break)
+            relevant: List[str] = []
             for archive_url in archives:
-                if len(games) >= effective_cap:
-                    break
-
-                # since_ts 가 있으면 해당 월 이전 아카이브는 건너뜀
-                if since_ts is not None:
-                    m = re.search(r'/(\d{4})/(\d{2})$', archive_url)
-                    if m:
-                        yr, mo = int(m.group(1)), int(m.group(2))
+                m = re.search(r'/(\d{4})/(\d{2})$', archive_url)
+                if m:
+                    yr, mo = int(m.group(1)), int(m.group(2))
+                    # until_ts: 이 아카이브 시작(1일 0시)이 until_ts보다 나중이면 스킵
+                    if until_ts is not None:
+                        month_start = int(datetime(yr, mo, 1, 0, 0, 0).timestamp())
+                        if month_start > until_ts:
+                            continue
+                    # since_ts: 이 아카이브 끝(말일 23:59:59)이 since_ts보다 이전이면 중단
+                    if since_ts is not None:
                         last_day = calendar.monthrange(yr, mo)[1]
                         month_end = int(datetime(yr, mo, last_day, 23, 59, 59).timestamp())
                         if month_end < since_ts:
-                            break  # 이하 아카이브는 모두 더 오래됨
+                            break
+                relevant.append(archive_url)
 
-                try:
-                    resp = await client.get(archive_url, headers=self.HEADERS)
-                    resp.raise_for_status()
-                    monthly = resp.json().get("games", [])
-                    monthly_sorted = sorted(
-                        monthly, key=lambda g: g.get("end_time", 0), reverse=True
-                    )
+            # 날짜 필터 없으면 최대 36개월(3년)로 제한 — 전체 기간 요청 시 무한 루프 방지
+            if since_ts is None:
+                relevant = relevant[:36]
+
+            # ── 2. 최신 아카이브부터 순차 수집 (cap 도달 시 즉시 중단) ─────────
+            # 기존 구현은 relevant 전체를 모두 가져온 뒤 필터/정렬을 적용해
+            # max_games가 작아도 과도한 네트워크 I/O가 발생했습니다.
+            games: List[GameSummary] = []
+            async with self._client(timeout=20) as client:
+                for archive_url in relevant:
+                    if len(games) >= effective_cap:
+                        break
+                    try:
+                        resp = await client.get(archive_url, headers=self.HEADERS)
+                        resp.raise_for_status()
+                        monthly = resp.json().get("games", [])
+                    except Exception:
+                        continue
+
+                    monthly_sorted = sorted(monthly, key=lambda g: g.get("end_time", 0), reverse=True)
                     for raw in monthly_sorted:
                         if len(games) >= effective_cap:
                             break
@@ -205,14 +270,12 @@ class ChessDotComService:
                             continue
                         if until_ts is not None and end_time > until_ts:
                             continue
-                        # 수집 단계 타임클래스 필터 — 관계없는 타임클래스가 cap 을 낭비하지 않도록
                         if time_class and raw.get("time_class", "") != time_class:
                             continue
                         games.append(self._parse_game(raw, username, time_class))
-                except Exception:
-                    continue
 
-        return games
+            self._recent_games_cache[cache_key] = (time.monotonic(), list(games))
+            return games
 
     def _parse_game(self, raw: dict, username: str, time_class: Optional[str] = None) -> GameSummary:
         white = raw.get("white", {})
@@ -268,6 +331,9 @@ class ChessDotComService:
             pgn=pgn if pgn else None,
             played_at=_unix_to_iso(raw.get("end_time")),
             url=raw.get("url"),
+            rating_white=white.get("rating"),
+            rating_black=black.get("rating"),
+            cp_evals=_parse_cp_evals(pgn),
         )
 
     def _map_result(self, result_str: str) -> GameResult:
