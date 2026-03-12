@@ -27,6 +27,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import math
+
 import chess
 import httpx
 
@@ -47,32 +49,37 @@ MAX_DEPTH = 10
 MAX_NODES = 200
 MIN_CATALOG_RESULTS = 10     # 이보다 적으면 BFS 폴백
 
-# ── 레이팅 구간 (400pt 폭) ────────────────────────────────────────
-RATING_BRACKETS = [400, 1000, 1400, 1800, 2200]
+# ── 티어 점수 가중치 ───────────────────────────────────────────────
+SCORING_PRIOR = 600    # 베이지안 평활화 강도
+WIN_WEIGHT    = 0.5    # 승률 성분(상대적 퍼포먼스) 가중치
+POP_WEIGHT    = 0.5    # 인기도(로그 정규화 게임 수) 가중치
+PICK_RATE_THRESHOLD = 0.02  # 픽률 2% 이상이면 인기도 가산점 최대 적용
+MIN_TIER_DEPTH = 3     # 최소 수(half-move) — 이보다 얕은 범용 포지션 제외
+POP_DEPTH_TARGET = 5   # 이 depth 이상이면 인기도 패널티 없음
 
-_BRACKET_RANGES: Dict[int, Tuple[int, Optional[int]]] = {
-    400:  (0,    1000),
-    1000: (1000, 1400),
-    1400: (1400, 1800),
-    1800: (1800, 2200),
-    2200: (2200, None),
+# ── 레이팅 구간 (opening.md 매핑, 5개 구간) ──────────────────────────
+# 구간 키: Lichess API 조회에 사용할 대표 rating (낮은 값)
+# 표시 라벨은 Chess.com 기준 (유저에게 친숙한 수치)
+RATING_BRACKETS = [1000, 1400, 1800, 2200, 2500]
+
+# Chess.com 기준 표시 구간 (lo, hi=None → 상한 없음)
+_BRACKET_DISPLAY: Dict[int, Tuple[int, Optional[int]]] = {
+    1000: (600,  800),    # 입문자 (Novice)
+    1400: (1000, 1200),   # 초보자 (Beginner)
+    1800: (1400, 1600),   # 중급자 (Intermediate)
+    2200: (2000, 2200),   # 상급자 (Advanced)
+    2500: (2400, None),   # 마스터 (Master)
 }
 
-# Lichess Explorer API는 200pt 단위 구간 ID를 사용하므로
-# 400pt 구간을 만들기 위해 인접 두 개 ID를 합산합니다.
+# Lichess Explorer API 유효 rating bucket ID:
+# 400, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500
+# (2400 등은 무효 — 실제 존재하는 ID만 사용)
 _LICHESS_RATINGS_PARAMS: Dict[int, List[int]] = {
-    400:  [400],
-    1000: [1000, 1200],
-    1400: [1400, 1600],
-    1800: [1800, 2000],
-    2200: [2200, 2500],
-}
-
-CHESSCOM_OFFSET: Dict[str, int] = {
-    "bullet":    250,
-    "blitz":     200,
-    "rapid":     150,
-    "classical": 150,
+    1000: [1000, 1200],   # Lichess 1000–1200 → Chess.com 600–800
+    1400: [1400, 1600],   # Lichess 1400–1600 → Chess.com 1000–1200
+    1800: [1800, 2000],   # Lichess 1800–2000 → Chess.com 1400–1600
+    2200: [2200],         # Lichess 2200      → Chess.com 2000–2200 (2400은 유효하지 않은 ID)
+    2500: [2500],         # Lichess 2500+     → Chess.com 2400+
 }
 
 SPEED_MAP: Dict[str, str] = {
@@ -91,15 +98,26 @@ _cache: Dict[Tuple[int, str, str, str], Tuple[Dict[str, "_OpeningNode"], datetim
 
 
 def _compute_date_range() -> Tuple[str, str]:
-    """현재 시각 기준 DATA_WINDOW_MONTHS 전 ~ 현재 월 반환 (YYYY-MM)."""
+    """현재 시각 기준 DATA_WINDOW_MONTHS 전 ~ 지난 달 반환 (YYYY-MM).
+
+    until 은 지난 달로 설정합니다. Lichess Explorer 는 현재 진행 중인 월은
+    색인이 완료되지 않아 인증 없이 조회 시 401을 반환할 수 있습니다.
+    """
     now = datetime.utcnow()
-    month = now.month - DATA_WINDOW_MONTHS
-    year = now.year
-    while month <= 0:
-        month += 12
-        year -= 1
-    since = f"{year:04d}-{month:02d}"
-    until = now.strftime("%Y-%m")
+    # since: DATA_WINDOW_MONTHS 개월 전
+    since_month = now.month - DATA_WINDOW_MONTHS
+    since_year = now.year
+    while since_month <= 0:
+        since_month += 12
+        since_year -= 1
+    since = f"{since_year:04d}-{since_month:02d}"
+    # until: 지난 달 (현재 월 제외)
+    until_month = now.month - 1
+    until_year = now.year
+    if until_month <= 0:
+        until_month = 12
+        until_year -= 1
+    until = f"{until_year:04d}-{until_month:02d}"
     return since, until
 
 
@@ -127,17 +145,10 @@ class _OpeningNode:
     moves: Optional[List[str]] = None
 
 
-def _bracket_label(lo: int, hi: Optional[int]) -> str:
+def _display_label(bracket_key: int) -> str:
+    """Chess.com 기준 레이팅 표시 라벨 반환."""
+    lo, hi = _BRACKET_DISPLAY[bracket_key]
     return f"{lo}+" if hi is None else f"{lo}–{hi}"
-
-
-def _chesscom_label(lichess_key: int, offset: int) -> str:
-    lo, hi = _BRACKET_RANGES[lichess_key]
-    lo_cc = max(0, lo - offset)
-    if hi is None:
-        return f"{lo_cc}+"
-    hi_cc = max(0, hi - offset)
-    return f"{lo_cc}–{hi_cc}"
 
 
 class OpeningTierService:
@@ -153,18 +164,18 @@ class OpeningTierService:
         openings, since, until = await self._get_or_fetch(rating, speed)
         return self._assign_tiers(openings, color), f"{since} ~ {until}"
 
-    def get_bracket_labels(self, speed: str) -> List[RatingBracket]:
-        """레이팅 구간 목록 반환 (Lichess + Chess.com 라벨 포함)."""
-        offset = CHESSCOM_OFFSET.get(speed, 200)
+    def get_bracket_labels(self, speed: str) -> List[RatingBracket]:  # noqa: ARG002
+        """레이팅 구간 목록 반환 (Chess.com 기준 라벨)."""
         result = []
-        for lichess_rating in RATING_BRACKETS:
-            lo, hi = _BRACKET_RANGES[lichess_rating]
+        for bracket_key in RATING_BRACKETS:
+            lo, _ = _BRACKET_DISPLAY[bracket_key]
+            label = _display_label(bracket_key)
             result.append(
                 RatingBracket(
-                    lichess_rating=lichess_rating,
-                    chesscom_rating=max(0, lichess_rating - offset),
-                    label_lichess=_bracket_label(lo, hi),
-                    label_chesscom=_chesscom_label(lichess_rating, offset),
+                    lichess_rating=bracket_key,
+                    chesscom_rating=lo,
+                    label_lichess=label,
+                    label_chesscom=label,
                 )
             )
         return result
@@ -482,50 +493,32 @@ class OpeningTierService:
     async def _fetch_position(
         self, fen: str, rating: int, speed: str, since: str, until: str
     ) -> Optional[Dict[str, Any]]:
-        """400pt 구간의 경우 두 개의 200pt 브래킷을 순차 호출 후 게임 수를 합산합니다."""
+        """레이팅 구간에 해당하는 Lichess bucket ID들을 단일 요청으로 전송합니다.
+
+        Lichess Explorer API의 ratings 파라미터는 쉼표로 구분된 단일 문자열이어야 합니다.
+        예: ratings=1200,1400  (NO brackets, NO repeated params)
+        """
         lichess_ids = _LICHESS_RATINGS_PARAMS.get(rating, [rating])
-
-        if len(lichess_ids) == 1:
-            return await self._fetch_single(fen, lichess_ids[0], speed, since, until)
-
-        # 두 구간 순차 호출
-        all_data: List[Dict[str, Any]] = []
-        for lid in lichess_ids:
-            data = await self._fetch_single(fen, lid, speed, since, until)
-            if data is not None:
-                all_data.append(data)
-
-        if not all_data:
-            return None
-        if len(all_data) == 1:
-            return all_data[0]
-
-        # 게임 수 합산, opening/moves는 첫 번째 결과 기준
-        merged: Dict[str, Any] = dict(all_data[0])
-        merged["white"] = sum(d.get("white", 0) for d in all_data)
-        merged["draws"] = sum(d.get("draws", 0) for d in all_data)
-        merged["black"] = sum(d.get("black", 0) for d in all_data)
-        # BFS용 moves: 게임 수가 더 많은 구간 기준
-        total0 = all_data[0].get("white", 0) + all_data[0].get("draws", 0) + all_data[0].get("black", 0)
-        total1 = all_data[1].get("white", 0) + all_data[1].get("draws", 0) + all_data[1].get("black", 0)
-        if total1 > total0 and "moves" in all_data[1]:
-            merged["moves"] = all_data[1]["moves"]
-        return merged
+        ratings_str = ",".join(str(r) for r in lichess_ids)
+        return await self._fetch_single(fen, ratings_str, speed, since, until)
 
     async def _fetch_single(
-        self, fen: str, lichess_rating: int, speed: str, since: str, until: str
+        self, fen: str, ratings_str: str, speed: str, since: str, until: str
     ) -> Optional[Dict[str, Any]]:
         """Lichess Explorer API 단건 호출.
 
-        httpx params 방식으로 URL을 구성하여 ratings[], speeds[] 배열 파라미터가
-        올바르게 인코딩되도록 합니다.
+        Lichess lila-openingexplorer 소스 확인:
+          ratings: StringWithSeparator<CommaSeparator, RatingGroup>
+          speeds:  StringWithSeparator<CommaSeparator, Speed>
+        → 배열 파라미터(ratings[], speeds[]) 아닌 쉼표 구분 단일 문자열로 전달해야 합니다.
+        예: ratings=1200,1400&speeds=blitz
         """
         speed_val = SPEED_MAP.get(speed, speed)
-        # list-of-tuples 형식으로 배열 파라미터(ratings[], speeds[]) 정확히 전달
+        # 쉼표 구분 단일 파라미터 (NO [] brackets)
         params = [
             ("fen", fen),
-            ("ratings[]", lichess_rating),
-            ("speeds[]", speed_val),
+            ("ratings", ratings_str),
+            ("speeds", speed_val),
             ("moves", TOP_N_MOVES),
             ("topGames", 0),
             ("recentGames", 0),
@@ -533,6 +526,8 @@ class OpeningTierService:
             ("until", until),
         ]
         try:
+            # explorer.lichess.org/lichess 는 인증이 필요한 엔드포인트입니다.
+            # (Lichess 정책 변경으로 익명 요청도 401 반환)
             headers = {"Accept": "application/json"}
             if settings.LICHESS_API_TOKEN:
                 headers["Authorization"] = f"Bearer {settings.LICHESS_API_TOKEN}"
@@ -541,7 +536,7 @@ class OpeningTierService:
                 resp.raise_for_status()
                 return resp.json()
         except Exception as err:
-            logger.error("Lichess Explorer failed rating=%s speed=%s exc=%s", lichess_rating, speed_val, err)
+            logger.error("Lichess Explorer failed ratings=%s speed=%s exc=%s", ratings_str, speed_val, err)
             return None
 
     # ─────────────────────────────────────────────────
@@ -549,36 +544,41 @@ class OpeningTierService:
     # ─────────────────────────────────────────────────
 
     @staticmethod
-    def _merge_families(
+    def _remove_parent_entries(
         openings: Dict[str, "_OpeningNode"],
     ) -> Dict[str, "_OpeningNode"]:
-        """':' 기준으로 같은 오프닝 계열을 하나로 합산.
+        """moves 시퀀스가 다른 항목의 prefix인 부모 항목을 제거합니다.
 
-        예: 'Sicilian Defense', 'Sicilian Defense: Dragon Variation',
-           'Sicilian Defense: Najdorf Variation' → 'Sicilian Defense' 하나로 합산.
-        대표 항목 선정 기준: ':' 없는 기본 항목 우선, 그 다음 depth 오름차순.
+        체스 오프닝에서 포지션 A의 moves 가 포지션 B moves 의 앞부분이면,
+        A는 B를 포함하는 슈퍼셋이므로 게임 수가 이중 계산됩니다.
+
+        예시:
+          D06 'Queen's Gambit'  moves=[d4,d5,c4]       ← D20·D30의 prefix → 제거
+          D20 'QGA'             moves=[d4,d5,c4,dxc4]  ← 독립 유지
+          D30 'QGD'             moves=[d4,d5,c4,e6]    ← 독립 유지
+          (QGA ≠ QGD: 서로 다른 수순이므로 별개 항목으로 취급)
+
+          C60 'Ruy Lopez'       moves=[e4,e5,Nf3,Nc6,Bb5]        ← C65의 prefix → 제거
+          C65 'Berlin Defense'  moves=[..., Nf6]                  ← 독립 유지
         """
-        family_groups: Dict[str, List[_OpeningNode]] = {}
-        for node in openings.values():
-            family = node.name.split(":")[0].strip()
-            family_groups.setdefault(family, []).append(node)
+        move_seqs = {
+            eco: tuple(node.moves) if node.moves else ()
+            for eco, node in openings.items()
+        }
 
-        merged: Dict[str, _OpeningNode] = {}
-        for family_name, nodes in family_groups.items():
-            base = min(
-                nodes,
-                key=lambda n: (1 if ":" in n.name else 0, n.depth),
-            )
-            merged[base.eco] = _OpeningNode(
-                eco=base.eco,
-                name=family_name,
-                white_wins=sum(n.white_wins for n in nodes),
-                draws=sum(n.draws for n in nodes),
-                black_wins=sum(n.black_wins for n in nodes),
-                depth=base.depth,
-                moves=base.moves,
-            )
-        return merged
+        def is_prefix_of_another(eco: str, seq: tuple) -> bool:
+            if not seq:
+                return False
+            for other_eco, other_seq in move_seqs.items():
+                if other_eco != eco and len(other_seq) > len(seq) and other_seq[: len(seq)] == seq:
+                    return True
+            return False
+
+        return {
+            eco: node
+            for eco, node in openings.items()
+            if not is_prefix_of_another(eco, move_seqs[eco])
+        }
 
     def _assign_tiers(
         self, openings: Dict[str, _OpeningNode], color: str
@@ -586,17 +586,71 @@ class OpeningTierService:
         if not openings:
             return []
 
-        openings = self._merge_families(openings)
+        openings = self._remove_parent_entries(openings)
 
+        # 0단계: 너무 얕은(범용) 포지션 제거 — 1.e4처럼 모든 게임을 포함하는 항목 배제
+        openings = {
+            eco: node
+            for eco, node in openings.items()
+            if node.depth >= MIN_TIER_DEPTH
+        }
+        if not openings:
+            return []
+
+        # 1단계: 인기도 정규화용 전체 최댓값 + 전체 게임 합산
+        max_total = max(
+            (n.white_wins + n.draws + n.black_wins for n in openings.values()),
+            default=1,
+        )
+        max_total = max(max_total, 1)
+
+        # 1b: 전체 게임 수 합산 (픽률 계산용)
+        total_all_games = sum(
+            n.white_wins + n.draws + n.black_wins
+            for n in openings.values()
+        )
+        total_all_games = max(total_all_games, 1)
+
+        # 1c: 색깔 평균 승률 (픽률 가중 평균) — relative performance 기준점
+        total_all_wins = 0.0
+        for node in openings.values():
+            tot = node.white_wins + node.draws + node.black_wins
+            if tot == 0:
+                continue
+            if color == "white":
+                total_all_wins += node.white_wins + 0.5 * node.draws
+            else:
+                total_all_wins += node.black_wins + 0.5 * node.draws
+        avg_win_rate = total_all_wins / total_all_games
+
+        # 2단계: 복합 점수 계산
+        # score = WIN_WEIGHT × (오프닝 승률 - 색깔 평균 승률)
+        #       + POP_WEIGHT × log 인기도 × 픽률 보정
         scored: List[Tuple[str, float, _OpeningNode]] = []
         for eco, node in openings.items():
             total = node.white_wins + node.draws + node.black_wins
             if total == 0:
                 continue
             if color == "white":
-                score = (node.white_wins + 0.5 * node.draws) / total
+                win_component = node.white_wins + 0.5 * node.draws
             else:
-                score = (node.black_wins + 0.5 * node.draws) / total
+                win_component = node.black_wins + 0.5 * node.draws
+
+            # 베이지안 평활화된 승률: 게임 수 적을수록 50%로 수렴
+            smoothed_win = (win_component + SCORING_PRIOR * 0.5) / (total + SCORING_PRIOR)
+
+            # 상대적 퍼포먼스: 이 오프닝이 평균 대비 얼마나 더 이기는가
+            relative_perf = smoothed_win - avg_win_rate
+
+            # 로그 인기도 × 깊이 보정: 얕은 오프닝일수록 인기도 패널티
+            depth_factor = min(node.depth / POP_DEPTH_TARGET, 1.0)
+            pop_score = (math.log1p(total) / math.log1p(max_total)) * depth_factor
+
+            # 픽률 가중치: 전체의 2% 이상이면 최대, 미만이면 비례 감점
+            pick_rate = total / total_all_games
+            pick_bonus = 1.0 if pick_rate >= PICK_RATE_THRESHOLD else (pick_rate / PICK_RATE_THRESHOLD)
+
+            score = WIN_WEIGHT * relative_perf + POP_WEIGHT * pop_score * pick_bonus
             scored.append((eco, score, node))
 
         if not scored:
@@ -635,12 +689,12 @@ class OpeningTierService:
 
     @staticmethod
     def _z_to_tier(z: float) -> Tier:
-        if z >= 1.5:
+        if z >= 1.258:   # 상위 ~3.6% → 60개 기준 약 2개
             return Tier.S
-        if z >= 0.5:
+        if z >= 0.6:   # 상위 ~27%까지
             return Tier.A
-        if z >= -0.5:
+        if z >= -0.6:  # 중간 ~45%
             return Tier.B
-        if z >= -1.5:
+        if z >= -1.258:  # 하위권
             return Tier.C
         return Tier.D

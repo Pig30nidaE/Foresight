@@ -15,7 +15,7 @@ function AnalysisContent() {
 
   const { data: perf, isLoading } = useQuery({
     queryKey: ["performance", platform, submitted, timeClass],
-    queryFn: () => getPerformanceSummary(platform, submitted, timeClass, 200),
+    queryFn: () => getPerformanceSummary(platform, submitted, timeClass),
     enabled: !!submitted,
   });
 

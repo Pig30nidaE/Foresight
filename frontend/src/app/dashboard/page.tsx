@@ -17,6 +17,7 @@ import OpeningTreeTable from "@/features/dashboard/components/charts/OpeningTree
 import BestWorstCard from "@/features/dashboard/components/charts/BestWorstCard";
 import BlunderTimeline from "@/features/dashboard/components/charts/BlunderTimeline";
 import TacticalPatternsCard from "@/features/dashboard/components/charts/TacticalPatternsCard";
+import GameHistorySection from "@/features/dashboard/components/GameHistorySection";
 import SectionHeader from "@/shared/components/ui/SectionHeader";
 import {
   FirstMovesSkeleton,
@@ -26,17 +27,7 @@ import {
 } from "@/shared/components/ui/SkeletonCard";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
-
-type Period = "1w" | "1m" | "3m" | "6m" | "1y" | "all" | "custom";
-const PERIOD_OPTIONS: { label: string; value: Period; days?: number }[] = [
-  { label: "1주", value: "1w", days: 7 },
-  { label: "1개월", value: "1m", days: 30 },
-  { label: "3개월", value: "3m", days: 90 },
-  { label: "6개월", value: "6m", days: 180 },
-  { label: "1년", value: "1y", days: 365 },
-  { label: "전체", value: "all" },
-  { label: "직접 설정", value: "custom" },
-];
+const TACTICAL_GAME_PRESETS = [100, 300, 500, 1000] as const;
 
 function DashboardContent() {
   const params = useSearchParams();
@@ -49,24 +40,13 @@ function DashboardContent() {
   const [timeClass, setTimeClass] = useState<TimeClass>("blitz");
   const [submitted, setSubmitted] = useState(initUsername);
   const [submittedPlatform, setSubmittedPlatform] = useState<Platform>(initPlatform);
-  const [period, setPeriod] = useState<Period>("3m");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
-  const [pendingFrom, setPendingFrom] = useState("");
-  const [pendingTo, setPendingTo] = useState("");
+  const [tacticalMaxGames, setTacticalMaxGames] = useState<number>(300);
+  const [pendingTacticalMaxGames, setPendingTacticalMaxGames] = useState<number>(300);
   const [treeViewSide, setTreeViewSide] = useState<"white" | "black">("white");
+  const [activeTab, setActiveTab] = useState<"analysis" | "games">("analysis");
 
-  const sinceMs = useMemo(() => {
-    if (period === "all") return undefined;
-    if (period === "custom") return customFrom ? new Date(customFrom).getTime() : undefined;
-    const opt = PERIOD_OPTIONS.find(p => p.value === period);
-    return opt?.days ? Date.now() - opt.days * 86_400_000 : undefined;
-  }, [period, customFrom]);
-
-  const untilMs = useMemo(() => {
-    if (period === "custom" && customTo) return new Date(customTo).getTime();
-    return undefined;
-  }, [period, customTo]);
+  const sinceMs = undefined;
+  const untilMs = undefined;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +55,20 @@ function DashboardContent() {
     setSubmittedPlatform(platform);
     router.replace(`/dashboard?platform=${platform}&username=${username.trim()}`);
   };
+
+  // Navbar 등 외부에서 URL params 변경 시(같은 페이지 재탐색) submitted 동기화
+  useEffect(() => {
+    const urlUsername = params.get("username") || "";
+    if (urlUsername && urlUsername !== submitted) {
+      const urlPlatform = (params.get("platform") || "chess.com") as Platform;
+      setUsername(urlUsername);
+      setPlatform(urlPlatform);
+      setSubmitted(urlUsername);
+      setSubmittedPlatform(urlPlatform);
+    }
+  // params 객체 자체가 URL 변경마다 업데이트됨
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   const enabled = !!submitted;
 
@@ -91,43 +85,45 @@ function DashboardContent() {
     }
   }, [profile?.preferred_time_class]);
 
+  useEffect(() => {
+    setPendingTacticalMaxGames(tacticalMaxGames);
+  }, [tacticalMaxGames]);
+
   const { data: firstMoves, isLoading: loadingFirst, isSuccess: firstMovesLoaded } = useQuery({
-    queryKey: ["first-moves", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getFirstMoveStats(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
+    queryKey: ["first-moves", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
+    queryFn: () => getFirstMoveStats(submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames),
     enabled,
   });
   const { data: openingTreeWhite, isLoading: loadingTreeW } = useQuery({
-    queryKey: ["opening-tree-white", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs, "white"),
+    queryKey: ["opening-tree-white", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
+    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs, "white", tacticalMaxGames),
     enabled,
   });
   const { data: openingTreeBlack, isLoading: loadingTreeB } = useQuery({
-    queryKey: ["opening-tree-black", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs, "black"),
+    queryKey: ["opening-tree-black", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
+    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs, "black", tacticalMaxGames),
     enabled,
   });
   const { data: bestWorst, isLoading: loadingBW } = useQuery({
-    queryKey: ["best-worst", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getBestWorstOpenings(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
+    queryKey: ["best-worst", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
+    queryFn: () => getBestWorstOpenings(submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames),
     enabled,
   });
   const { data: timePressure, isLoading: loadingTP } = useQuery({
-    queryKey: ["time-pressure", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getTimePressure(submittedPlatform, submitted, timeClass, 100, sinceMs, untilMs),
+    queryKey: ["time-pressure", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
+    queryFn: () => getTimePressure(submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames),
     enabled,
     staleTime: 120_000,
   });
 
   // 전술 패턴 분석
   const { data: tacticalPatterns, isLoading: loadingTactical } = useQuery({
-    queryKey: ["tactical-patterns", submittedPlatform, submitted, timeClass, sinceMs, untilMs],
-    queryFn: () => getTacticalPatterns(submittedPlatform, submitted, timeClass, sinceMs, untilMs),
+    queryKey: ["tactical-patterns", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
+    queryFn: () => getTacticalPatterns(submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames),
     enabled,
     staleTime: 180_000,
     retry: 1,
   });
-
-  const isLoading = loadingFirst || loadingTreeW || loadingTreeB || loadingBW || loadingTP;
 
   const totalGames = useMemo(() => {
     // total_games: 백엔드가 첫수 필터 전 실제 집계한 전체 게임 수
@@ -212,47 +208,37 @@ function DashboardContent() {
       {/* ── 기간 탭 ── */}
       {submitted && (
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
-            {PERIOD_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setPeriod(opt.value)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  period === opt.value
-                    ? "bg-chess-accent text-white"
-                    : "bg-chess-surface text-chess-muted hover:text-chess-primary hover:bg-chess-border"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {period === "custom" && (
-            <div className="flex items-center gap-2 text-xs text-chess-muted">
-              <input
-                type="date"
-                value={pendingFrom}
-                onChange={(e) => setPendingFrom(e.target.value)}
-                className="bg-chess-surface border border-chess-border rounded-md px-2 py-1.5 text-chess-primary focus:outline-none focus:border-chess-accent"
-              />
-              <span>~</span>
-              <input
-                type="date"
-                value={pendingTo}
-                onChange={(e) => setPendingTo(e.target.value)}
-                className="bg-chess-surface border border-chess-border rounded-md px-2 py-1.5 text-chess-primary focus:outline-none focus:border-chess-accent"
-              />
-              <button
-                type="button"
-                onClick={() => { setCustomFrom(pendingFrom); setCustomTo(pendingTo); }}
-                disabled={!pendingFrom}
-                className="px-3 py-1.5 bg-chess-accent hover:bg-chess-accent/80 disabled:opacity-40 text-white rounded-md font-medium transition-colors"
-              >
-                적용
-              </button>
+          <div className="flex items-center gap-2 rounded-lg border border-chess-border px-2 py-1.5 bg-chess-surface/50">
+            <span className="text-xs font-medium text-chess-muted">게임 횟수</span>
+            <div className="flex rounded-md overflow-hidden border border-chess-border">
+              {TACTICAL_GAME_PRESETS.map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setPendingTacticalMaxGames(size)}
+                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                    pendingTacticalMaxGames === size
+                      ? "bg-chess-accent text-white"
+                      : "bg-chess-surface text-chess-muted hover:text-chess-primary"
+                  }`}
+                >
+                  최근 {size}판
+                </button>
+              ))}
             </div>
-          )}
+            <button
+              type="button"
+              onClick={() => setTacticalMaxGames(pendingTacticalMaxGames)}
+              disabled={pendingTacticalMaxGames === tacticalMaxGames}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                pendingTacticalMaxGames === tacticalMaxGames
+                  ? "bg-chess-border/60 text-chess-muted cursor-not-allowed"
+                  : "bg-chess-primary text-white hover:bg-chess-primary/85"
+              }`}
+            >
+              적용
+            </button>
+          </div>
         </div>
       )}
 
@@ -310,14 +296,29 @@ function DashboardContent() {
             </div>
           )}
 
-          {isLoading && (
-            <div className="text-center py-16 text-chess-muted animate-pulse">
-              데이터 불러오는 중...
-            </div>
-          )}
+          {/* ── 인페이지 탭 네비게이션 ── */}
+          <div className="flex gap-1 border-b border-chess-border">
+            {([
+              { value: "analysis", label: "🔍 분석" },
+              { value: "games",    label: "📋 전적검색" },
+            ] as const).map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                className={`px-5 py-2.5 text-sm font-medium transition-colors -mb-px border-b-2 ${
+                  activeTab === tab.value
+                    ? "border-chess-accent text-chess-accent"
+                    : "border-transparent text-chess-muted hover:text-chess-primary"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-          {!isLoading && (
-            <div className="space-y-6 animate-fade-in">
+          {/* ── 분석 탭 ── */}
+          {activeTab === "analysis" && (
+          <div className="space-y-6">
               {/* 5게임 미만 블러 오버레이 */}
               {insufficientData && (
                 <div className="flex items-center gap-3 bg-amber-700/8 border border-amber-700/35 rounded-2xl px-5 py-4">
@@ -325,8 +326,8 @@ function DashboardContent() {
                   <div>
                     <p className="font-semibold text-amber-700 text-sm">데이터 부족 — 분석 불가</p>
                     <p className="text-amber-700/70 text-xs mt-0.5">
-                      {timeClass.toUpperCase()} · {PERIOD_OPTIONS.find(p => p.value === period)?.label ?? period} 기간에서 {totalGames}게임 조회됨.
-                      최소 5게임이 필요합니다. 기간을 늘리거나 분류에 다른 타임클래스를 선택해 보세요.
+                      {timeClass.toUpperCase()} 기준 {totalGames}게임 조회됨.
+                      최소 5게임이 필요합니다. 다른 타임클래스를 선택하거나 전적을 더 쌓아 보세요.
                     </p>
                   </div>
                 </div>
@@ -335,7 +336,7 @@ function DashboardContent() {
               {/* ── Section 1 ── */}
               <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                <SectionHeader title="백 / 흑 첫 수 선호도 및 승률" desc="가장 많이 사용한 오프닝 계열과 결과 분포" />
+                <SectionHeader title="백 / 흑 첫 수 선호도 및 승률" desc="가장 많이 사용한 오프닝 계열과 결과 분포" isLoading={loadingFirst} />
                 {loadingFirst ? (
                   <FirstMovesSkeleton />
                 ) : (
@@ -350,7 +351,7 @@ function DashboardContent() {
               <section className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 <div className="lg:col-span-2 bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
                   {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                  <SectionHeader title="오프닝 트리 탐색기" desc="오프닝별 게임 수 및 승률 — 클릭하여 전개" />
+                  <SectionHeader title="오프닝 트리 탐색기" desc="오프닝별 게임 수 및 승률 — 클릭하여 전개" isLoading={loadingTreeW || loadingTreeB} />
                   {/* 백/흑 탭 */}
                   <div className="flex gap-1 mb-3">
                     {(["white", "black"] as const).map((s) => (
@@ -379,7 +380,7 @@ function DashboardContent() {
                 </div>
                 <div className="bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
                   {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                  <SectionHeader title="오프닝 퍼포먼스" desc="Best / Worst 오프닝 요약" />
+                  <SectionHeader title="오프닝 퍼포먼스" desc="Best / Worst 오프닝 요약" isLoading={loadingBW} />
                   {loadingBW ? (
                     <BestWorstSkeleton />
                   ) : bestWorst ? (
@@ -393,20 +394,33 @@ function DashboardContent() {
               {/* ── Section 3 – 시간 압박 블런더 비율 ── */}
               <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                <SectionHeader title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" />
+                <SectionHeader title="시간 압박 블런더 비율" desc="남은 시간에 따른 블런더 발생률 추이" isLoading={loadingTP} />
                 {loadingTP ? <TimelineSkeleton /> : <BlunderTimeline data={timePressure} />}
               </section>
 
               {/* ── Section 4 – 전술 패턴 분석 ── */}
               <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
                 {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                <SectionHeader title="전술 패턴 분석" desc="게임 패턴 기반 강점 · 약점 분석" />
+                <SectionHeader title="전술 패턴 분석" desc="게임 패턴 기반 강점 · 약점 분석" isLoading={loadingTactical} />
                 <TacticalPatternsCard
                   data={tacticalPatterns}
                   isLoading={loadingTactical}
                 />
               </section>
             </div>
+          )} {/* 분석 탭 끝 */}
+
+          {/* ── 전적검색 탭 ── */}
+          {activeTab === "games" && (
+            <section className="bg-chess-surface border border-chess-border rounded-2xl p-6">
+              <GameHistorySection
+                username={submitted}
+                platform={submittedPlatform}
+                timeClass={timeClass}
+                sinceMs={sinceMs}
+                untilMs={untilMs}
+              />
+            </section>
           )}
         </>
       )}
