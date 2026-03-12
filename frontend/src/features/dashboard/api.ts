@@ -25,8 +25,9 @@ export const getFirstMoveStats = async (
   timeClass: TimeClass = "blitz",
   sinceMs?: number,
   untilMs?: number,
+  maxGames = 300,
 ) => {
-  const params: Record<string, unknown> = { time_class: timeClass };
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
   const { data } = await api.get(`/stats/first-moves/${platform}/${username}`, { params });
@@ -43,8 +44,9 @@ export const getOpeningTree = async (
   sinceMs?: number,
   untilMs?: number,
   side?: "white" | "black",
+  maxGames = 300,
 ) => {
-  const params: Record<string, unknown> = { time_class: timeClass };
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
   if (side) params.side = side;
@@ -58,8 +60,9 @@ export const getBestWorstOpenings = async (
   timeClass: TimeClass = "blitz",
   sinceMs?: number,
   untilMs?: number,
+  maxGames = 300,
 ) => {
-  const params: Record<string, unknown> = { time_class: timeClass };
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
   const { data } = await api.get(`/stats/opening-best-worst/${platform}/${username}`, { params });
@@ -75,8 +78,9 @@ export const getTimePressure = async (
   timeClass: TimeClass = "blitz",
   sinceMs?: number,
   untilMs?: number,
+  maxGames = 300,
 ): Promise<TimePressureStats> => {
-  const params: Record<string, unknown> = { time_class: timeClass };
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
   const { data } = await api.get(`/stats/time-pressure/${platform}/${username}`, { params });
@@ -92,8 +96,9 @@ export const getTacticalPatterns = async (
   timeClass: TimeClass = "blitz",
   sinceMs?: number,
   untilMs?: number,
+  maxGames = 300,
 ): Promise<TacticalAnalysis> => {
-  const params: Record<string, unknown> = { time_class: timeClass };
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
   const { data } = await api.get(`/stats/tactical-patterns/${platform}/${username}`, { params });
@@ -106,8 +111,9 @@ export const getAiInsights = async (
   timeClass: TimeClass = "blitz",
   sinceMs?: number,
   untilMs?: number,
+  maxGames = 300,
 ): Promise<AiInsightsResponse> => {
-  const params: Record<string, unknown> = { time_class: timeClass };
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
   const { data } = await api.get(
