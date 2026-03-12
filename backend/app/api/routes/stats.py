@@ -28,7 +28,7 @@ async def get_first_move_stats(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=5000, le=5000),
+    max_games: int = Query(default=300, ge=50, le=5000),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
 ):
@@ -68,7 +68,7 @@ async def get_opening_tree(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=5000, le=5000),
+    max_games: int = Query(default=300, ge=50, le=5000),
     depth: int = Query(default=3, ge=1, le=5),
     side: Optional[str] = Query(default=None, description="white | black — 특정 색 게임만 필터"),
     since_ms: Optional[int] = Query(default=None),
@@ -104,7 +104,7 @@ async def get_best_worst_openings(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=5000, le=5000),
+    max_games: int = Query(default=300, ge=50, le=5000),
     min_games: int = Query(default=10),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
@@ -132,7 +132,7 @@ async def get_time_pressure(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=5000, le=5000),
+    max_games: int = Query(default=300, ge=50, le=5000),
     pressure_threshold: float = Query(default=30.0, description="시간 압박 기준 잔여 시간(초)"),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
@@ -165,7 +165,7 @@ async def get_tactical_patterns(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=5000, le=5000),
+    max_games: int = Query(default=300, ge=50, le=1000),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
 ):
@@ -185,9 +185,12 @@ async def get_tactical_patterns(
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
-            functools.partial(tactical_svc.analyze, games, username),
+            functools.partial(tactical_svc.analyze, games, username, len(games)),
         )
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.exception("[tactical-patterns] 분석 실패 user=%s time_class=%s", username, time_class)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -196,7 +199,7 @@ async def get_tactical_ai_insights(
     platform: Platform,
     username: str,
     time_class: str = Query(default="blitz"),
-    max_games: int = Query(default=5000, le=5000),
+    max_games: int = Query(default=300, ge=50, le=1000),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
 ):
@@ -216,7 +219,7 @@ async def get_tactical_ai_insights(
         loop = asyncio.get_event_loop()
         analysis = await loop.run_in_executor(
             None,
-            functools.partial(tactical_svc.analyze, games, username),
+            functools.partial(tactical_svc.analyze, games, username, len(games)),
         )
 
         from app.features.dashboard.services.ai_insights import generate_tactical_insights
@@ -228,5 +231,8 @@ async def get_tactical_ai_insights(
             "total_games": analysis.get("total_games", 0),
             "insights":    insights,
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.exception("[tactical-ai-insights] 분석 실패 user=%s time_class=%s", username, time_class)
         raise HTTPException(status_code=500, detail=str(e))

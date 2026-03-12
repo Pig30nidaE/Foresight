@@ -2,18 +2,43 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+
+// ─── 희생 칸 하이라이트 키프레임 ─────────────────────────────
+const SQ_KEYFRAMES = `
+@keyframes sq-glow {
+  0%,100% { box-shadow: inset 0 0 0 2px rgba(56,189,248,0.5); }
+  50%     { box-shadow: inset 0 0 0 3px #38bdf8, 0 0 10px 3px rgba(56,189,248,0.35); }
+}
+`;
+
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
 import type { Arrow } from "react-chessboard";
 import type { TacticalPattern, PatternGameItem } from "@/features/dashboard/types";
 
-// ─── Chess.com 분석 URL ─────────────────────────────────────
-function toAnalysisUrl(url: string): string {
+// ─── Chess.com 분석 URL (특정 수로 이동) ────────────────────
+function toAnalysisUrl(url: string, moveNo?: number, color?: "white" | "black"): string {
   if (!url) return url;
+  // sacrifice ply를 0-based로 계산한다.
+  // Chess.com `move` 파라미터는 내부적으로 0-based ply와 매칭되는 케이스가 많아
+  // 기존 +1 오프셋에서 한 수 밀리는 문제가 발생해 보정한다.
+  const sacPlyZeroBased =
+    moveNo !== undefined && color !== undefined
+      ? color === "white" ? (moveNo - 1) * 2 : (moveNo - 1) * 2 + 1
+      : undefined;
   const m = url.match(/^(https?:\/\/(?:www\.)?chess\.com)\/game\/(live|daily)\/(\w+)/);
-  if (m) return `${m[1]}/analysis/game/${m[2]}/${m[3]}/analysis`;
-  if (/lichess\.org\/[A-Za-z0-9]+/.test(url)) return url.replace(/(\?.*)?$/, "#analysis");
+  if (m) {
+    const base = `${m[1]}/analysis/game/${m[2]}/${m[3]}/analysis`;
+    return sacPlyZeroBased !== undefined ? `${base}?tab=analysis&move=${sacPlyZeroBased}` : base;
+  }
+  if (/lichess\.org\/[A-Za-z0-9]+/.test(url)) {
+    // lichess는 anchor ply를 1-based로 취급하므로 +1 보정
+    const lichessPly = sacPlyZeroBased !== undefined ? sacPlyZeroBased + 1 : undefined;
+    return lichessPly !== undefined
+      ? url.replace(/(\?.*)?$/, `#${lichessPly}`)
+      : url.replace(/(\?.*)?$/, "#analysis");
+  }
   return url;
 }
 
@@ -22,6 +47,7 @@ interface BoardStep {
   fen: string;
   label: string;
   isSacrifice: boolean;
+  sacSquare?: string;   // 희생 수의 목적지 칸 (하이라이트용)
   san?: string;
   arrows: Arrow[];
 }
@@ -59,7 +85,7 @@ function parseBoardSteps(
         isPreSac && sacIdx < history.length
           ? [{ startSquare: history[sacIdx].from, endSquare: history[sacIdx].to, color: "rgba(251,191,36,0.75)" }]
           : [];
-      steps.push({ fen: base.fen(), label, isSacrifice: isSac, san: i < history.length ? history[i].san : undefined, arrows });
+      steps.push({ fen: base.fen(), label, isSacrifice: isSac, sacSquare: isSac ? history[sacIdx].to : undefined, san: i < history.length ? history[i].san : undefined, arrows });
       if (i < endIdx && i < history.length) base.move(history[i]);
     }
     return steps;
@@ -162,7 +188,10 @@ function SacrificeBoardPanel({ game, onClose }: { game: PatternGameItem; onClose
     return () => clearTimeout(t);
   }, [animKey, steps, sacRelIdx]);
 
-  if (!hasSacData || !steps) {
+  // stepIdx가 steps 범위를 벗어나지 않도록 클램핑
+  const safeIdx = (steps && steps.length > 0) ? Math.min(stepIdx, steps.length - 1) : 0;
+
+  if (!hasSacData || !steps || steps.length === 0) {
     return (
       <div className="flex flex-col h-full gap-3">
         <div className="flex items-center justify-between">
@@ -179,11 +208,15 @@ function SacrificeBoardPanel({ game, onClose }: { game: PatternGameItem; onClose
     );
   }
 
-  const cur  = steps[stepIdx];
+  const cur = steps[safeIdx];
+  // sacrifice_color가 "white"면 백 플레이어 시점(하단=백), "black"이면 흑 플레이어 시점(하단=흑)
   const orientation: "white" | "black" = game.sacrifice_color === "white" ? "white" : "black";
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" style={{ position: "relative" }}>
+      {/* 희생 칸 glow CSS 주입 */}
+      <style>{SQ_KEYFRAMES}</style>
+
       {/* 게임 정보 헤더 */}
       <div className="flex items-start justify-between">
         <div className="min-w-0">
@@ -197,28 +230,36 @@ function SacrificeBoardPanel({ game, onClose }: { game: PatternGameItem; onClose
       </div>
 
       {/* 보드 — 고정 크기로 스크롤 없이 표시 */}
-      <div className="w-full max-w-[260px] mx-auto">
-        {/* 상단 선수명/색 표시 */}
+      <div className="w-full max-w-[260px] mx-auto" style={{ position: "relative" }}>
+
+        {/* 상단 = 보드 위쪽 = 상대방 */}
+        {/* orientation="white" → 흑(game.black)이 위 | orientation="black" → 백(game.white)이 위 */}
         <div className="flex items-center justify-between px-3 py-2 text-[11px] font-semibold">
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: orientation === "black" ? "#e2e8f0" : "#4a5568" }} />
-            {orientation === "black" ? game.black : game.white}
+            <span className="w-2.5 h-2.5 rounded-sm"
+              style={{ backgroundColor: orientation === "white" ? "#4a5568" : "#e2e8f0" }} />
+            {orientation === "white" ? game.black : game.white}
           </span>
-          <span className="text-chess-muted text-[10px]">{orientation === "black" ? "백" : "흑"}</span>
+          <span className="text-chess-muted text-[10px]">{orientation === "white" ? "흑" : "백"}</span>
         </div>
         
         <Chessboard options={{
           position: cur.fen, boardOrientation: orientation, allowDragging: false,
           arrows: cur.arrows, animationDurationInMs: 400, showAnimations: true,
-          boardStyle: { borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.45)", width: "100%", aspectRatio: "1" },
+          boardStyle: { borderRadius: 8, width: "100%", aspectRatio: "1" },
           darkSquareStyle: { backgroundColor: "#4a5568" }, lightSquareStyle: { backgroundColor: "#e2e8f0" },
+          squareStyles: cur.sacSquare
+            ? { [cur.sacSquare]: { animation: "sq-glow 1.4s ease-in-out infinite" } }
+            : {},
         }} />
         
-        {/* 하단 선수명/색 표시 */}
+        {/* 하단 = 보드 아래쪽 = 희생 플레이어(나) */}
+        {/* orientation="white" → 백(game.white)이 아래 | orientation="black" → 흑(game.black)이 아래 */}
         <div className="flex items-center justify-between px-3 py-2 text-[11px] font-semibold">
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: orientation === "white" ? "#e2e8f0" : "#4a5568" }} />
-            {orientation === "white" ? game.black : game.white}
+            <span className="w-2.5 h-2.5 rounded-sm"
+              style={{ backgroundColor: orientation === "white" ? "#e2e8f0" : "#4a5568" }} />
+            {orientation === "white" ? game.white : game.black}
           </span>
           <span className="text-chess-muted text-[10px]">{orientation === "white" ? "백" : "흑"}</span>
         </div>
@@ -262,13 +303,63 @@ function SacrificeBoardPanel({ game, onClose }: { game: PatternGameItem; onClose
         ))}
       </div>
 
-      <a href={toAnalysisUrl(game.url)} target="_blank" rel="noopener noreferrer"
+      <a
+        href={toAnalysisUrl(game.url, game.sacrifice_move_no ?? undefined, game.sacrifice_color as "white" | "black" | undefined)}
+        target="_blank" rel="noopener noreferrer"
         className="text-[10px] text-center text-chess-muted hover:text-chess-primary underline underline-offset-2">
-        Chess.com 전체 분석 →
+        Chess.com 분석 (해당 수) →
       </a>
     </div>
   );
 }
+
+// ─── 희생 등급 메타 ──────────────────────────────────────────
+const SAC_TIER_META: Record<1 | 2 | 3 | 4, {
+  label: string;
+  short: string;
+  dot: string;
+  border: string;
+  bg: string;
+  text: string;
+  desc: string;
+}> = {
+  1: {
+    label: "T1 유일강수",
+    short: "T1",
+    dot: "bg-emerald-500",
+    border: "border-emerald-600/35",
+    bg: "bg-emerald-600/8",
+    text: "text-emerald-700",
+    desc: "사실상 유일하게 유리할 수 있는 희생이며 평가가 크게 상승한 수",
+  },
+  2: {
+    label: "T2 전술상승",
+    short: "T2",
+    dot: "bg-lime-500",
+    border: "border-lime-600/35",
+    bg: "bg-lime-600/8",
+    text: "text-lime-700",
+    desc: "최선은 아닐 수 있지만 전술적 보상이 있고 평가가 근소하게 오른 수",
+  },
+  3: {
+    label: "T3 선택형",
+    short: "T3",
+    dot: "bg-amber-500",
+    border: "border-amber-600/35",
+    bg: "bg-amber-600/8",
+    text: "text-amber-700",
+    desc: "희생을 해도 되고 안 해도 되며 평가 차이가 크지 않은 수",
+  },
+  4: {
+    label: "T4 실패",
+    short: "T4",
+    dot: "bg-rose-500",
+    border: "border-rose-600/35",
+    bg: "bg-rose-600/8",
+    text: "text-rose-700",
+    desc: "희생이 성립하지 않거나 보상이 부족해 평가가 떨어지는 수",
+  },
+};
 
 // ─── 게임 선택 행 ────────────────────────────────────────────
 const RESULT_BADGE: Record<string, { label: string; cls: string }> = {
@@ -281,16 +372,17 @@ function SacGameRow({ game, rank, isSelected, onSelect }: {
   game: PatternGameItem; rank: number; isSelected: boolean; onSelect: () => void;
 }) {
   const badge = RESULT_BADGE[game.result] ?? RESULT_BADGE.draw;
-  const isOk  = game.is_success === true;
+  const tier = game.sac_tier ?? 4;
+  const tierMeta = SAC_TIER_META[tier];
   return (
     <button type="button" onClick={onSelect}
       className={`w-full text-left rounded-xl border transition-all duration-150 px-3 py-2.5
         ${isSelected
-          ? "border-amber-600/60 bg-amber-600/8 shadow-sm"
+          ? `${tierMeta.border} ${tierMeta.bg} shadow-sm`
           : "border-chess-border bg-chess-bg/80 hover:border-chess-muted hover:bg-chess-surface"}`}>
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-mono text-chess-muted w-4 shrink-0 text-right">#{rank}</span>
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOk ? "bg-emerald-500" : "bg-red-500"}`} />
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${tierMeta.dot}`} />
         <div className="flex-1 min-w-0">
           <p className="text-xs text-chess-primary font-medium truncate">{game.opening_name ?? "오프닝 정보 없음"}</p>
           <p className="text-[10px] text-chess-muted truncate">
@@ -299,7 +391,7 @@ function SacGameRow({ game, rank, isSelected, onSelect }: {
           </p>
         </div>
         <div className="flex flex-col items-end gap-0.5 shrink-0">
-          <span className={`text-[10px] font-bold ${isOk ? "text-emerald-700" : "text-red-600"}`}>{isOk ? "유효" : "무효"}</span>
+          <span className={`text-[10px] font-bold ${tierMeta.text}`}>{tierMeta.label}</span>
           <span className={`text-[9px] px-1 py-0.5 rounded-full border font-semibold ${badge.cls}`}>{badge.label}</span>
         </div>
         <span className={`text-[10px] shrink-0 ${isSelected ? "text-amber-500" : "text-chess-muted"}`}>{isSelected ? "▶" : "›"}</span>
@@ -310,11 +402,9 @@ function SacGameRow({ game, rank, isSelected, onSelect }: {
 }
 
 // ─── 메인 모달 ───────────────────────────────────────────────
-type TabId = "all" | "success" | "fail";
 interface Props { pattern: TacticalPattern | null; onClose: () => void; }
 
 export default function SacrificePatternModal({ pattern, onClose }: Props) {
-  const [tab,          setTab]          = useState<TabId>("all");
   const [selectedGame, setSelectedGame] = useState<PatternGameItem | null>(null);
 
   useEffect(() => {
@@ -325,23 +415,23 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
     return () => { document.body.style.overflow = ""; window.removeEventListener("keydown", onKey); };
   }, [onClose, pattern]);
 
-  useEffect(() => { setTab("all"); setSelectedGame(null); }, [pattern]);
+  useEffect(() => { setSelectedGame(null); }, [pattern]);
 
   if (!pattern) return null;
 
-  const allGames      = pattern.top_games ?? [];
-  const successInList = allGames.filter((g) => g.is_success === true).length;
-  const failInList    = allGames.filter((g) => g.is_success === false).length;
-  const filteredGames =
-    tab === "success" ? allGames.filter((g) => g.is_success === true)
-    : tab === "fail"  ? allGames.filter((g) => g.is_success === false)
-    : allGames;
+  const allGames = pattern.top_games ?? [];
+  const tierGroups = ([1, 2, 3, 4] as const).map((tier) => ({
+    tier,
+    meta: SAC_TIER_META[tier],
+    games: allGames.filter((g) => (g.sac_tier ?? 4) === tier),
+  }));
 
-  // 도넛: evidence_count(전체 희생 수) + key_metric_value(성공률 %) 기반
-  const totalSac     = pattern.evidence_count ?? allGames.length;
-  const rateVal      = pattern.key_metric_value ?? 0;
-  const successCount = Math.round(totalSac * rateVal / 100);
-  const failCount    = totalSac - successCount;
+  // 도넛은 백엔드 실제 집계(T1~T4)를 우선 사용한다.
+  // top_games는 샘플 목록이라 이를 분모로 쓰면 0%로 왜곡될 수 있다.
+  const sacChart = pattern.chart_data?.type === "sacrifice_tiers" ? pattern.chart_data : null;
+  const totalSac = sacChart?.total ?? pattern.evidence_count ?? allGames.length;
+  const successCount = sacChart ? (sacChart.t1 + sacChart.t2) : (tierGroups[0].games.length + tierGroups[1].games.length);
+  const failCount = sacChart ? (sacChart.t3 + sacChart.t4) : Math.max(totalSac - successCount, 0);
 
   const scoreColor = pattern.score >= 65 ? "text-emerald-700" : pattern.score >= 45 ? "text-amber-700" : "text-red-700";
   const scoreBg    = pattern.score >= 65 ? "bg-emerald-600"   : pattern.score >= 45 ? "bg-amber-600"   : "bg-red-600";
@@ -365,8 +455,23 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
                 <h2 className="text-base font-bold text-chess-primary">{pattern.label}</h2>
                 {pattern.is_strength ? <span className="text-xs text-emerald-700 font-bold">★ 강점</span> : <span className="text-xs text-red-700 font-bold">▼ 약점</span>}
                 <span className="text-[10px] px-2 py-0.5 rounded-full border border-blue-700/30 bg-blue-700/8 text-blue-700 font-semibold">🔬 Stockfish</span>
+                <div className="relative group">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-chess-muted/40 text-[10px] font-bold text-chess-muted cursor-help">!</span>
+                  <div className="pointer-events-none absolute left-0 top-6 z-20 hidden w-72 rounded-xl border border-chess-border bg-chess-surface/95 p-3 text-[10px] text-chess-muted shadow-xl group-hover:block">
+                    <p className="font-semibold text-chess-primary mb-2">희생 등급 설명</p>
+                    {([1, 2, 3, 4] as const).map((tier) => (
+                      <div key={tier} className="flex items-start gap-2 py-1">
+                        <span className={`mt-0.5 inline-block h-2 w-2 rounded-full ${SAC_TIER_META[tier].dot}`} />
+                        <div>
+                          <p className={`font-semibold ${SAC_TIER_META[tier].text}`}>{SAC_TIER_META[tier].label}</p>
+                          <p>{SAC_TIER_META[tier].desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-chess-muted mt-0.5">legal capture → material deficit → eval +1.5↑ → false adv filter</p>
+              <p className="text-xs text-chess-muted mt-0.5">legal capture → tactical validity → eval delta → T1~T4 tiering</p>
             </div>
           </div>
           <button onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary text-xl leading-none p-1">✕</button>
@@ -391,39 +496,42 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
                     <div className={`h-full rounded-full ${scoreBg}`} style={{ width: `${pattern.score}%` }} />
                   </div>
                   <p className="text-[10px] text-chess-muted">{pattern.games_analyzed}게임 분석</p>
+                  {sacChart && (
+                    <p className="text-[10px] text-chess-muted">
+                      거절형 {sacChart.declined ?? 0} · 대안우위형 {sacChart.unnecessary ?? 0}
+                    </p>
+                  )}
                   {pattern.insight && <p className="text-[10px] text-chess-muted border-l-2 border-chess-muted/30 pl-2 line-clamp-2">{pattern.insight}</p>}
                 </div>
               </div>
             </div>
 
-            {/* 탭 네비게이션 */}
-            <div className="flex border-b border-chess-border shrink-0 bg-chess-bg/30">
-              {([ ["all","전체",allGames.length], ["success","유효",successInList], ["fail","무효",failInList] ] as [TabId,string,number][]).map(([id, label, cnt]) => (
-                <button key={id} onClick={() => { setTab(id); setSelectedGame(null); }}
-                  className={`flex-1 py-2 text-xs font-medium transition-colors relative
-                    ${tab === id ? "text-chess-primary" : "text-chess-muted hover:text-chess-primary"}`}>
-                  {label}
-                  {cnt > 0 && (
-                    <span className={`ml-1 text-[9px] font-bold px-1 rounded-full ${
-                      id === "success" ? "text-emerald-700 bg-emerald-700/10"
-                      : id === "fail"  ? "text-red-600 bg-red-600/10"
-                      : "text-chess-muted bg-chess-border/40"}`}>{cnt}</span>
-                  )}
-                  {tab === id && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />}
-                </button>
-              ))}
-            </div>
-
-            {/* 게임 목록 */}
+            {/* 게임 목록: T1~T4 섹션 */}
             <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-              {filteredGames.length === 0
-                ? <p className="text-xs text-chess-muted text-center py-8">해당 탭에 게임 없음</p>
-                : filteredGames.map((g, i) => (
-                    <SacGameRow key={`${g.url}-${i}`} game={g} rank={i + 1}
-                      isSelected={selectedGame?.url === g.url}
-                      onSelect={() => setSelectedGame((prev) => prev?.url === g.url ? null : g)} />
-                  ))
-              }
+              {allGames.length === 0 ? <p className="text-xs text-chess-muted text-center py-8">표시할 희생 게임 없음</p> : (
+                tierGroups.map(({ tier, meta, games }) => (
+                  <section key={tier} className="space-y-1.5">
+                    <div className={`sticky top-0 z-10 flex items-center justify-between rounded-lg border px-2.5 py-1.5 backdrop-blur-sm ${meta.border} ${meta.bg}`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block h-2 w-2 rounded-full ${meta.dot}`} />
+                        <span className={`text-[11px] font-bold ${meta.text}`}>{meta.label}</span>
+                      </div>
+                      <span className="text-[10px] text-chess-muted">{games.length}개</span>
+                    </div>
+                    {games.length === 0 ? (
+                      <p className="px-2 py-2 text-[10px] text-chess-muted">해당 등급 대표게임 없음</p>
+                    ) : (
+                      games.map((g, i) => (
+                        <SacGameRow key={`${tier}-${g.url}-${i}`} game={g} rank={i + 1}
+                          isSelected={selectedGame?.url === g.url && selectedGame?.sacrifice_move_no === g.sacrifice_move_no}
+                          onSelect={() => setSelectedGame((prev) => (
+                            prev?.url === g.url && prev?.sacrifice_move_no === g.sacrifice_move_no ? null : g
+                          ))} />
+                      ))
+                    )}
+                  </section>
+                ))
+              )}
             </div>
 
             {/* 푸터 */}
@@ -436,7 +544,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
           {/* 오른쪽: 체스보드 패널 — 고정 너비, 스크롤 없음 */}
           {hasBoard && (
             <div className="w-[310px] shrink-0 p-3 bg-chess-bg/20 overflow-y-auto">
-              <SacrificeBoardPanel game={selectedGame!} onClose={() => setSelectedGame(null)} />
+                <SacrificeBoardPanel key={selectedGame!.url} game={selectedGame!} onClose={() => setSelectedGame(null)} />
             </div>
           )}
         </div>
