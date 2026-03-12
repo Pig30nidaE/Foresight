@@ -1,8 +1,8 @@
 import asyncio
 import re
-from app.services import opening_db
-from app.services.analysis import AnalysisService
-from app.services.chessdotcom import ChessDotComService
+from app.shared.services import opening_db
+from app.features.dashboard.services.analysis import AnalysisService
+from app.shared.services.chessdotcom import ChessDotComService
 
 
 def pgn_first_moves(pgn: str):

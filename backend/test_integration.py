@@ -8,8 +8,8 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app.services.chessdotcom import ChessDotComService
-from app.services.analysis import AnalysisService
+from app.shared.services.chessdotcom import ChessDotComService
+from app.features.dashboard.services.analysis import AnalysisService
 
 USERNAME = "any_hogs"
 
