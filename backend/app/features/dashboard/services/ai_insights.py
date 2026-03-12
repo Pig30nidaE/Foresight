@@ -102,10 +102,19 @@ def _build_prompt(analysis: Dict[str, Any], username: str) -> str:
     xgb = analysis.get("xgboost_profile")
     if xgb:
         factors = ", ".join(f["feature"] for f in xgb.get("top_risk_factors", []))
+        acc = xgb.get("model_accuracy", 0)
+        precision = xgb.get("precision", 0)
+        recall = xgb.get("recall", 0)
+        f1 = xgb.get("f1", 0)
+        lift = xgb.get("lift_over_baseline", 0)
+        quality_note = xgb.get("quality_note", "")
         xgb_block = (
             f"\nXGBoost 블런더 위험 요소: {factors} "
-            f"(예측 정확도: {xgb.get('model_accuracy', 0):.0f}%)"
+            f"(정확도: {acc:.0f}%, 정밀도: {precision:.0f}%, 재현율: {recall:.0f}%, F1: {f1:.0f}%, "
+            f"베이스라인 대비 개선: {lift:+.1f}pp)"
         )
+        if quality_note:
+            xgb_block += f"\n모델 신뢰도 코멘트: {quality_note}"
 
     return f"""체스 플레이어 "{username}"의 게임 분석 결과입니다 (총 {total}게임).
 
