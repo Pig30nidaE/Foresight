@@ -101,7 +101,8 @@ export const getTacticalPatterns = async (
   const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
   if (sinceMs) params.since_ms = sinceMs;
   if (untilMs) params.until_ms = untilMs;
-  const { data } = await api.get(`/stats/tactical-patterns/${platform}/${username}`, { params });
+  // 500게임 분석은 최대 2분(120초) 소요 가능
+  const { data } = await api.get(`/stats/tactical-patterns/${platform}/${username}`, { params, timeout: 120000 });
   return data as TacticalAnalysis;
 };
 

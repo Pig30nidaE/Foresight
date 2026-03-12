@@ -135,6 +135,7 @@ function XGBoostProfileSection({ profile }: { profile: XGBoostProfile }) {
   const risk      = profile.blunder_game_rate;
   const riskColor = risk >= 35 ? "text-red-700"     : risk >= 20 ? "text-amber-700"  : "text-emerald-700";
   const riskBg    = risk >= 35 ? "bg-red-600"       : risk >= 20 ? "bg-amber-600"    : "bg-emerald-600";
+  const meaningful = profile.is_meaningful ?? false;
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between">
@@ -149,6 +150,19 @@ function XGBoostProfileSection({ profile }: { profile: XGBoostProfile }) {
         <div className="w-full bg-chess-border/60 rounded-full h-2 overflow-hidden">
           <div className={`h-full rounded-full ${riskBg}`} style={{ width: `${Math.min(risk, 100)}%` }} />
         </div>
+        {profile.precision !== undefined && profile.recall !== undefined && profile.f1 !== undefined && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">정밀도 {profile.precision.toFixed(0)}%</span>
+            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">재현율 {profile.recall.toFixed(0)}%</span>
+            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">F1 {profile.f1.toFixed(0)}%</span>
+            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">Lift {profile.lift_over_baseline?.toFixed(1) ?? "0.0"}pp</span>
+          </div>
+        )}
+        {profile.quality_note && (
+          <p className={`text-xs leading-snug ${meaningful ? "text-emerald-700" : "text-amber-700"}`}>
+            {meaningful ? "모델 상태: 유의미" : "모델 상태: 주의"} · {profile.quality_note}
+          </p>
+        )}
         <p className="text-xs text-chess-muted leading-snug">{profile.description}</p>
       </div>
       <div className="space-y-1.5">
