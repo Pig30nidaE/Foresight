@@ -3,14 +3,11 @@
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from "recharts";
 import type { TimePressureStats } from "@/types";
 
@@ -36,6 +33,34 @@ interface Props {
   data?: TimePressureStats;
 }
 
+function pressureTone(pct: number) {
+  if (pct >= 40) {
+    return {
+      label: "고위험",
+      text: "text-rose-700",
+      badge: "bg-rose-100 text-rose-700 border-rose-200",
+      bar: "from-rose-500 to-rose-600",
+      dot: "bg-rose-500",
+    };
+  }
+  if (pct >= 20) {
+    return {
+      label: "주의",
+      text: "text-amber-700",
+      badge: "bg-amber-100 text-amber-700 border-amber-200",
+      bar: "from-amber-500 to-amber-600",
+      dot: "bg-amber-500",
+    };
+  }
+  return {
+    label: "안정",
+    text: "text-emerald-700",
+    badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    bar: "from-emerald-500 to-emerald-600",
+    dot: "bg-emerald-500",
+  };
+}
+
 export default function BlunderTimeline({ data }: Props) {
   const hasClock = data && data.games_with_clock > 0;
   const isMock = !hasClock;
@@ -56,10 +81,14 @@ export default function BlunderTimeline({ data }: Props) {
       }))
     : null;
 
+  const topRiskPhase = phaseData && phaseData.length > 0
+    ? [...phaseData].sort((a, b) => b.pressure_pct - a.pressure_pct)[0]
+    : null;
+
   const overall = hasClock ? (data.overall["mine"] ?? Object.values(data.overall)[0]) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {isMock && (
         <p className="text-xs text-amber-700/80 text-center">
           ⚠️ 클록 데이터 없음 — 예시 곡선
@@ -68,64 +97,89 @@ export default function BlunderTimeline({ data }: Props) {
 
       {/* 클록 데이터가 있을 때: 요약 배지 */}
       {hasClock && overall && (
-        <div className="flex gap-3 flex-wrap text-xs">
-          <div className="bg-chess-bg border border-chess-border rounded-lg px-3 py-2">
-            <span className="text-chess-muted">분석 게임</span>
-            <span className="ml-2 font-bold text-chess-primary">{data.games_with_clock}게임</span>
+        <div className="grid gap-3 text-xs sm:grid-cols-3">
+          <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
+            <p className="text-chess-muted">분석 게임</p>
+            <p className="mt-1 text-lg font-black text-chess-primary">{data.games_with_clock}게임</p>
           </div>
-          <div className="bg-chess-bg border border-chess-border rounded-lg px-3 py-2">
-            <span className="text-chess-muted">시간 압박 비율</span>
-            <span className={`ml-2 font-bold ${overall.pressure_ratio >= 0.3 ? "text-red-700" : overall.pressure_ratio >= 0.15 ? "text-amber-700" : "text-emerald-700"}`}>
+          <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
+            <p className="text-chess-muted">시간 압박 비율</p>
+            <p className={`mt-1 text-lg font-black ${overall.pressure_ratio >= 0.3 ? "text-rose-700" : overall.pressure_ratio >= 0.15 ? "text-amber-700" : "text-emerald-700"}`}>
               {Math.round(overall.pressure_ratio * 100)}%
-            </span>
+            </p>
           </div>
-          {overall.avg_time_spent != null && (
-            <div className="bg-chess-bg border border-chess-border rounded-lg px-3 py-2">
-              <span className="text-chess-muted">평균 사고 시간</span>
-              <span className="ml-2 font-bold text-chess-primary">{overall.avg_time_spent}초</span>
-            </div>
-          )}
+          <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
+            <p className="text-chess-muted">평균 사고 시간</p>
+            <p className="mt-1 text-lg font-black text-chess-primary">
+              {overall.avg_time_spent != null ? `${overall.avg_time_spent}초` : "-"}
+            </p>
+          </div>
         </div>
       )}
 
-      {/* 페이즈별 + 수 번호별 나란히 시스터 */}
-      <div className={phaseData && phaseData.length > 0 ? "grid grid-cols-2 gap-4" : ""}>
-        {/* 페이즈별 압박률 막대 */}
+      {/* 페이즈별 + 수 번호별 */}
+      <div className={phaseData && phaseData.length > 0 ? "grid gap-4 md:grid-cols-2" : ""}>
+        {/* 페이즈별 압박률 카드형 막대 */}
         {phaseData && phaseData.length > 0 && (
-          <div>
-            <p className="text-xs text-chess-muted mb-2">페이즈별 시간 압박 비율</p>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={phaseData} margin={{ left: -15, right: 4, top: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#C8CBC5" />
-                <XAxis dataKey="phase" tick={{ fill: "#5C5755", fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `${v}%`} tick={{ fill: "#5C5755", fontSize: 11 }} domain={[0, 100]} />
-                <Tooltip
-                  formatter={(v) => [`${v}%`, "시간압박"]}
-                  contentStyle={{ background: "#FBFBF2", border: "1px solid #C8CBC5", borderRadius: 8, fontSize: 12 }}
-                />
-                <Bar dataKey="pressure_pct" radius={[4, 4, 0, 0]}>
-                  {phaseData.map((entry, i) => (
-                    <Cell
-                      key={i}
-                      fill={entry.pressure_pct >= 40 ? "#ef4444" : entry.pressure_pct >= 20 ? "#f59e0b" : "#22c55e"}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="bg-gradient-to-br from-chess-bg/80 to-chess-bg/30 border border-chess-border rounded-2xl p-4">
+            <div className="flex items-end justify-between gap-3 mb-3">
+              <p className="text-xs tracking-wide text-chess-muted">PHASE PRESSURE MAP</p>
+              {topRiskPhase && (
+                <p className="text-[11px] text-chess-muted">
+                  최고 리스크: <span className="font-bold text-chess-primary">{topRiskPhase.phase}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {phaseData.map((entry) => {
+                const tone = pressureTone(entry.pressure_pct);
+                return (
+                  <div key={entry.phase} className="rounded-xl border border-chess-border/80 bg-chess-surface/70 px-3 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-sm text-chess-primary">{entry.phase}</p>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] px-2 py-1 rounded-full border ${tone.badge}`}>
+                          {tone.label}
+                        </span>
+                        <span className={`text-sm font-black tabular-nums ${tone.text}`}>
+                          {entry.pressure_pct}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 relative h-2.5 w-full rounded-full bg-chess-bg border border-chess-border/60 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full bg-gradient-to-r ${tone.bar}`}
+                        style={{ width: `${Math.max(entry.pressure_pct, 4)}%` }}
+                      />
+                      <span
+                        className={`absolute top-1/2 h-2.5 w-2.5 rounded-full border border-white/70 shadow -translate-y-1/2 ${tone.dot}`}
+                        style={{ left: `calc(${Math.max(entry.pressure_pct, 4)}% - 6px)` }}
+                      />
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-chess-muted">
+                      <span>표본 {entry.moves}수</span>
+                      <span>평균 사고 {entry.avg_time != null ? `${entry.avg_time}초` : "-"}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
         {/* 수 번호별 압박률 곡선 */}
-        <div>
-          <p className="text-xs text-chess-muted mb-2">
+        <div className="bg-chess-bg/30 border border-chess-border rounded-2xl p-4">
+          <p className="text-xs tracking-wide text-chess-muted mb-2">
             수 번호별 시간 압박 비율{isMock ? " (예시)" : ""}
           </p>
           <ResponsiveContainer width="100%" height={180}>
             <AreaChart data={moveData} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
               <defs>
                 <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.35} />
                   <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
               </defs>
@@ -151,10 +205,11 @@ export default function BlunderTimeline({ data }: Props) {
               <Area
                 type="monotone"
                 dataKey="pressure_pct"
-                stroke="#ef4444"
-                strokeWidth={2}
+                stroke="#ea580c"
+                strokeWidth={2.5}
                 fill="url(#pressureGrad)"
-                dot={false}
+                dot={{ r: 2, strokeWidth: 0, fill: "#ea580c" }}
+                activeDot={{ r: 4, fill: "#b91c1c", stroke: "#fff", strokeWidth: 1 }}
               />
             </AreaChart>
           </ResponsiveContainer>
