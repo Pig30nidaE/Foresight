@@ -260,6 +260,47 @@ def _win_rate(games: List[GameSummary], username: str) -> float:
     return round(w / len(games) * 100, 1)
 
 
+def _binary_classification_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+    """이진 분류 핵심 지표를 % 단위로 계산한다."""
+    if len(y_true) == 0:
+        return {
+            "accuracy": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "baseline_accuracy": 0.0,
+            "support_pos": 0,
+            "support_neg": 0,
+            "positive_rate": 0.0,
+        }
+
+    tp = int(np.sum((y_true == 1) & (y_pred == 1)))
+    tn = int(np.sum((y_true == 0) & (y_pred == 0)))
+    fp = int(np.sum((y_true == 0) & (y_pred == 1)))
+    fn = int(np.sum((y_true == 1) & (y_pred == 0)))
+
+    precision = (tp / (tp + fp)) if (tp + fp) > 0 else 0.0
+    recall = (tp / (tp + fn)) if (tp + fn) > 0 else 0.0
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+    accuracy = (tp + tn) / len(y_true)
+
+    support_pos = int(np.sum(y_true == 1))
+    support_neg = int(np.sum(y_true == 0))
+    positive_rate = support_pos / len(y_true)
+    baseline = max(positive_rate, 1.0 - positive_rate)
+
+    return {
+        "accuracy": round(accuracy * 100, 1),
+        "precision": round(precision * 100, 1),
+        "recall": round(recall * 100, 1),
+        "f1": round(f1 * 100, 1),
+        "baseline_accuracy": round(baseline * 100, 1),
+        "support_pos": support_pos,
+        "support_neg": support_neg,
+        "positive_rate": round(positive_rate * 100, 1),
+    }
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Stockfish 헬퍼
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1815,7 +1856,9 @@ class TacticalAnalysisService:
 
                                 if sf_m and sf_m.get("cp_after") is not None:
                                     eval_pre_sac = float(sf_m["cp_after"])  # 희생 전, 내 관점
-                                    cp_loss_played = float(sf_m.get("cp_loss", 999.0) or 999.0)
+                                    # NOTE: `or 999.0` 대신 None 검사 사용 — cp_loss=0.0 (최선수)이 999로 뒤바뀌는 버그 방지
+                                    _cp_loss_raw = sf_m.get("cp_loss")
+                                    cp_loss_played = float(_cp_loss_raw) if _cp_loss_raw is not None else 999.0
                                     has_better_alternative = cp_loss_played > 70
 
                                     # 상대방 응수(다음 턴) entry 검색
@@ -1863,15 +1906,22 @@ class TacticalAnalysisService:
                                         # T4: 해서는 안 되는 놓침/블런더
                                         severe_drop = sac_delta <= -120
                                         hard_blunder = cp_loss_played >= 120
-                                        is_best_like = cp_loss_played <= 8
-                                        is_brilliant_like = forced_mate or (is_best_like and sac_delta >= 0)
+                                        # cp_loss_played <= 20: 엔진 최선수와 거의 차이 없는 최선/탁월 희생
+                                        # (기존 <= 8은 너무 엄격 — 0.0 bug fix 이후에도 거의 안 잡힘)
+                                        is_best_like = cp_loss_played <= 20
+                                        # sac_delta >= -30: 엔진 분석 편차(노이즈) 허용
+                                        # (T2에서 P2/P3 평가 일관성 차이 때문에 약간 음수일 수 있음)
+                                        is_brilliant_like = forced_mate or (is_best_like and sac_delta >= -30)
 
                                         # 최선/탁월 후보는 최우선으로 보호한다.
                                         if is_brilliant_like and not has_better_alternative:
                                             sac_tier = 1
                                             sac_tier_score = 100.0
                                             sac_reason = "탁월/유일형"
-                                        elif sac_delta >= 10 and cp_loss_played <= 60:
+                                        # T2: cp_loss가 60 이하이고 포지션이 급락하지 않은 경우
+                                        # sac_delta >= 10 → -60: P2 평가가 이미 희생수의 결과를 반영하므로
+                                        # sub-optimal 희생은 항상 sac_delta < 0. 급락(-60cp 이상 하락)만 배제.
+                                        elif cp_loss_played <= 60 and sac_delta >= -60:
                                             sac_tier = 2
                                             sac_tier_score = 75.0
                                             sac_reason = "긍정상승형"
@@ -2691,7 +2741,20 @@ class TacticalAnalysisService:
         ranked = sorted(zip(FEAT, importances.tolist()), key=lambda x: x[1], reverse=True)
         proba = model.predict_proba(X)[:, 1]
         blunder_rate = float(np.mean(proba >= 0.5) * 100)
-        val_acc = float(np.mean(model.predict(X_v) == y_v) * 100) if len(X_v) > 0 else 0.0
+        y_v_pred = model.predict(X_v) if len(X_v) > 0 else np.array([], dtype=int)
+        metrics = _binary_classification_metrics(y_v, y_v_pred)
+
+        lift = round(metrics["accuracy"] - metrics["baseline_accuracy"], 1)
+        is_meaningful = (
+            metrics["support_pos"] >= 3
+            and metrics["support_neg"] >= 3
+            and lift >= 5.0
+            and metrics["f1"] >= 35.0
+        )
+        if is_meaningful:
+            quality_note = "검증 구간에서 베이스라인 대비 개선이 확인되어 해석 가능한 모델입니다."
+        else:
+            quality_note = "데이터 불균형 또는 표본 부족으로 모델 신뢰도가 낮을 수 있습니다."
 
         DESC = {
             "시간 압박":   "시간이 30초 이하로 떨어지면 블런더 확률 급증",
@@ -2711,7 +2774,22 @@ class TacticalAnalysisService:
             "feature_importances": [
                 {"feature": n, "importance": round(v * 100, 1)} for n, v in ranked
             ],
-            "model_accuracy": round(val_acc, 1),
+            "model_accuracy": metrics["accuracy"],
+            "precision": metrics["precision"],
+            "recall": metrics["recall"],
+            "f1": metrics["f1"],
+            "baseline_accuracy": metrics["baseline_accuracy"],
+            "lift_over_baseline": lift,
+            "positive_rate": metrics["positive_rate"],
+            "validation_support": {
+                "positive": metrics["support_pos"],
+                "negative": metrics["support_neg"],
+            },
+            "is_meaningful": is_meaningful,
+            "quality_note": quality_note,
             "games_analyzed": len(rows),
-            "description": f"XGBoost — 블런더 유발 게임 예측 (leakage-free, {len(blunder_ids)}개 레이블)",
+            "description": (
+                f"XGBoost — 블런더 유발 게임 예측 "
+                f"(leakage-free, {len(blunder_ids)}개 레이블, lift {lift:+.1f}pp)"
+            ),
         }
