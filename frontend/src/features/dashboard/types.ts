@@ -39,7 +39,7 @@ export interface PatternGameItem {
   url: string;
   result: "win" | "loss" | "draw";
   is_success?: boolean;          // 패턴별 성공 여부 (패턴마다 기준이 다름)
-  sac_tier?: 1 | 2 | 3 | 4;
+  sac_tier?: 1 | 2 | 3 | 4 | 5;
   advantage_outcome?: "smooth" | "shaky" | "blown";
   metric_value?: number | null;  // 패턴 핵심 수치 (잔여초, CP손실, 비율 등)
   metric_label?: string | null;  // 수치 레이블 (예: "최저 잔여시간")
@@ -207,13 +207,14 @@ export interface TacticalPattern {
       black: string;
     }>;
   } | {
-    /** 희생 4등급 분포 (situation_id=3) */
+    /** 희생 5등급 분포 (situation_id=3) */
     type: "sacrifice_tiers";
     total: number;
     t1: number;
     t2: number;
     t3: number;
     t4: number;
+    t5: number;
     declined?: number;
     unnecessary?: number;
     avg_score: number;
@@ -367,4 +368,15 @@ export interface TacticalAnalysis {
   weaknesses: TacticalPattern[];
   cluster_analysis: ClusterAnalysis | null;
   xgboost_profile: XGBoostProfile | null;
+}
+
+export interface TacticalProgressStatus {
+  job_id: string | null;
+  status: "idle" | "queued" | "running" | "completed" | "failed";
+  progress_percent: number;
+  stage: string;
+  message: string;
+  total_games: number;
+  analyzed_games: number;
+  error?: string | null;
 }

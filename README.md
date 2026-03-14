@@ -53,9 +53,30 @@ Foresight/
 ## 빠른 시작
 
 ```bash
-# 전체 실행
-docker-compose up --build
+# Docker 기반 전체 실행 (권장)
+make up
 
+# 로그 확인
+make logs
+
+# 종료
+make down
+```
+
+### Windows 환경
+
+```bash
+# Docker Desktop + Compose V2 기준
+docker compose up -d --build
+docker compose logs -f
+docker compose down
+```
+
+`make` 명령은 Git Bash, MSYS2, WSL 환경에서 사용할 수 있습니다.
+
+### 로컬 단독 실행 (Docker 미사용)
+
+```bash
 # 백엔드만 (개발)
 cd backend && uvicorn app.main:app --reload
 

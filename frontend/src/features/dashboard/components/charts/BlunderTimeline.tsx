@@ -1,8 +1,9 @@
 "use client";
 
 import {
-  AreaChart,
+  ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -70,6 +71,12 @@ export default function BlunderTimeline({ data }: Props) {
   const moveData = hasClock
     ? perMove.filter((_, i) => i % 2 === 0 || perMove.length <= 15) // 너무 많으면 격수 표시
     : MOCK_MOVE_DATA;
+  const maxAvgThinkTime = Math.max(
+    5,
+    ...moveData
+      .map((d) => (typeof d.avg_time_spent === "number" ? d.avg_time_spent : 0))
+      .filter((v) => Number.isFinite(v)),
+  );
 
   // ── 페이즈별 압박 비율 (실제) ─────────────────────────────
   const phaseData = hasClock
@@ -175,8 +182,8 @@ export default function BlunderTimeline({ data }: Props) {
           <p className="text-xs tracking-wide text-chess-muted mb-2">
             수 번호별 시간 압박 비율{isMock ? " (예시)" : ""}
           </p>
-          <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={moveData} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={245}>
+            <ComposedChart data={moveData} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
               <defs>
                 <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#f97316" stopOpacity={0.35} />
@@ -190,9 +197,17 @@ export default function BlunderTimeline({ data }: Props) {
                 tick={{ fill: "#5C5755", fontSize: 11 }}
               />
               <YAxis
+                yAxisId="pressure"
                 tickFormatter={(v) => `${v}%`}
                 tick={{ fill: "#5C5755", fontSize: 11 }}
                 domain={[0, 100]}
+              />
+              <YAxis
+                yAxisId="time"
+                orientation="right"
+                tickFormatter={(v) => `${v}s`}
+                tick={{ fill: "#64748b", fontSize: 11 }}
+                domain={[0, Math.ceil(maxAvgThinkTime * 1.25)]}
               />
               <Tooltip
                 formatter={(v, name) => [
@@ -203,6 +218,7 @@ export default function BlunderTimeline({ data }: Props) {
                 contentStyle={{ background: "#FBFBF2", border: "1px solid #C8CBC5", borderRadius: 8, fontSize: 12 }}
               />
               <Area
+                yAxisId="pressure"
                 type="monotone"
                 dataKey="pressure_pct"
                 stroke="#ea580c"
@@ -211,8 +227,26 @@ export default function BlunderTimeline({ data }: Props) {
                 dot={{ r: 2, strokeWidth: 0, fill: "#ea580c" }}
                 activeDot={{ r: 4, fill: "#b91c1c", stroke: "#fff", strokeWidth: 1 }}
               />
-            </AreaChart>
+              <Line
+                yAxisId="time"
+                type="monotone"
+                dataKey="avg_time_spent"
+                connectNulls
+                stroke="#2563eb"
+                strokeWidth={2}
+                dot={{ r: 2, strokeWidth: 0, fill: "#2563eb" }}
+                activeDot={{ r: 4, fill: "#1d4ed8", stroke: "#fff", strokeWidth: 1 }}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
+          <div className="mt-2 flex items-center gap-4 text-[11px] text-chess-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-orange-600" /> 시간 압박 비율(%)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-blue-600" /> 평균 사고 시간(초)
+            </span>
+          </div>
         </div>
       </div>
     </div>

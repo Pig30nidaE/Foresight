@@ -138,11 +138,18 @@ CACHE_DIR = (
 class _OpeningNode:
     eco: str
     name: str
+    opening_side: str
     white_wins: int
     draws: int
     black_wins: int
     depth: int
     moves: Optional[List[str]] = None
+
+
+def _infer_opening_side(moves: Optional[List[str]], depth: int) -> str:
+    """마지막 수를 둔 색으로 오프닝의 기준 색상을 추론합니다."""
+    ply = len(moves) if moves else max(depth, 0)
+    return "white" if ply % 2 == 1 else "black"
 
 
 def _display_label(bracket_key: int) -> str:
@@ -297,7 +304,22 @@ class OpeningTierService:
                 raw: Dict[str, Any] = json.load(f)
             if not raw:
                 return None
-            return {eco: _OpeningNode(**node) for eco, node in raw.items()}
+            normalized: Dict[str, _OpeningNode] = {}
+            for eco, node in raw.items():
+                side = node.get("opening_side")
+                if side not in {"white", "black"}:
+                    side = _infer_opening_side(node.get("moves"), int(node.get("depth", 0)))
+                normalized[eco] = _OpeningNode(
+                    eco=node.get("eco", eco),
+                    name=node.get("name", ""),
+                    opening_side=side,
+                    white_wins=int(node.get("white_wins", 0)),
+                    draws=int(node.get("draws", 0)),
+                    black_wins=int(node.get("black_wins", 0)),
+                    depth=int(node.get("depth", 0)),
+                    moves=node.get("moves"),
+                )
+            return normalized
         except Exception as exc:
             logger.warning("Disk cache load failed %s_%s_%s_%s: %s", rating, speed, since, until, exc)
             return None
@@ -373,6 +395,7 @@ class OpeningTierService:
                 _OpeningNode(
                     eco=eco,
                     name=name,
+                    opening_side=_infer_opening_side(entry["moves"], depth),
                     white_wins=white_wins,
                     draws=draws,
                     black_wins=black_wins,
@@ -451,6 +474,7 @@ class OpeningTierService:
                             openings[eco] = _OpeningNode(
                                 eco=eco,
                                 name=name,
+                                opening_side=_infer_opening_side(None, depth),
                                 white_wins=white_wins,
                                 draws=draws,
                                 black_wins=black_wins,
@@ -587,6 +611,15 @@ class OpeningTierService:
             return []
 
         openings = self._remove_parent_entries(openings)
+
+        # 요청 색상과 오프닝 기준 색상이 일치하는 항목만 유지
+        openings = {
+            eco: node
+            for eco, node in openings.items()
+            if node.opening_side == color
+        }
+        if not openings:
+            return []
 
         # 0단계: 너무 얕은(범용) 포지션 제거 — 1.e4처럼 모든 게임을 포함하는 항목 배제
         openings = {
