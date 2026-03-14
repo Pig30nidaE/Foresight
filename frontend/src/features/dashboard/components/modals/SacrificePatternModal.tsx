@@ -95,16 +95,21 @@ function parseBoardSteps(
 }
 
 // ─── 도넛 차트 ───────────────────────────────────────────────
-function SacDonutChart({ successCount, failCount }: { successCount: number; failCount: number }) {
-  const total = successCount + failCount;
-  const rate = total > 0 ? Math.round((successCount / total) * 100) : 0;
-  const color = rate >= 65 ? "#16a34a" : rate >= 45 ? "#d97706" : "#dc2626";
+function SacDonutChart({ counts }: { counts: { t1: number; t2: number; t3: number; t4: number; t5: number } }) {
+  const t1 = Number.isFinite(counts.t1) ? counts.t1 : 0;
+  const t2 = Number.isFinite(counts.t2) ? counts.t2 : 0;
+  const t3 = Number.isFinite(counts.t3) ? counts.t3 : 0;
+  const t4 = Number.isFinite(counts.t4) ? counts.t4 : 0;
+  const t5 = Number.isFinite(counts.t5) ? counts.t5 : 0;
+  const total = Math.max(t1 + t2 + t3 + t4 + t5, 0);
 
   const data = [
-    { name: "유효 희생", value: successCount },
-    { name: "무효 희생", value: Math.max(failCount, 0) },
+    { name: "T1", label: "유일강수", value: Math.max(t1, 0), color: "#10b981" },
+    { name: "T2", label: "상위추천", value: Math.max(t2, 0), color: "#84cc16" },
+    { name: "T3", label: "선택형", value: Math.max(t3, 0), color: "#f59e0b" },
+    { name: "T4", label: "큰하락", value: Math.max(t4, 0), color: "#fb7185" },
+    { name: "T5", label: "두면안됨", value: Math.max(t5, 0), color: "#334155" },
   ];
-  const COLORS = [color, "#374151"];
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -122,32 +127,39 @@ function SacDonutChart({ successCount, failCount }: { successCount: number; fail
               dataKey="value"
               strokeWidth={0}
             >
-              {data.map((_, i) => (
-                <Cell key={i} fill={COLORS[i]} />
+              {data.map((entry, i) => (
+                <Cell key={i} fill={entry.color} />
               ))}
             </Pie>
             <Tooltip
-              formatter={(val, name) => [`${val}건`, `${name}`]}
+              formatter={(val, name, item) => {
+                const n = typeof val === "number" ? val : Number(val) || 0;
+                const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+                const label = (item?.payload as { label?: string } | undefined)?.label ?? "";
+                return [`${n}건 (${pct}%)`, `${name} ${label}`];
+              }}
               contentStyle={{ backgroundColor: "#1a1a1a", border: "1px solid #333", borderRadius: 8, fontSize: 11 }}
             />
           </PieChart>
         </ResponsiveContainer>
         {/* 중앙 텍스트 */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-xl font-black" style={{ color }}>{rate}%</span>
-          <span className="text-[9px] text-chess-muted">정확도</span>
+          <span className="text-[11px] font-bold text-chess-primary">T1~T5</span>
+          <span className="text-[9px] text-chess-muted">비율</span>
+          <span className="text-[9px] text-chess-muted mt-0.5">총 {total}회</span>
         </div>
       </div>
       {/* 범례 */}
-      <div className="flex gap-3 text-xs">
-        <span className="flex items-center gap-1" style={{ color }}>
-          <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
-          유효 {successCount}
-        </span>
-        <span className="flex items-center gap-1 text-chess-muted">
-          <span className="w-2 h-2 rounded-full bg-gray-600 inline-block" />
-          무효 {failCount}
-        </span>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+        {data.map((entry) => {
+          const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
+          return (
+            <span key={entry.name} className="flex items-center gap-1 text-chess-muted">
+              <span className="w-2 h-2 rounded-full inline-block" style={{ background: entry.color }} />
+              {entry.name} {pct}%
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -314,7 +326,7 @@ function SacrificeBoardPanel({ game, onClose }: { game: PatternGameItem; onClose
 }
 
 // ─── 희생 등급 메타 ──────────────────────────────────────────
-const SAC_TIER_META: Record<1 | 2 | 3 | 4, {
+const SAC_TIER_META: Record<1 | 2 | 3 | 4 | 5, {
   label: string;
   short: string;
   dot: string;
@@ -351,13 +363,22 @@ const SAC_TIER_META: Record<1 | 2 | 3 | 4, {
     desc: "희생을 해도 되고 안 해도 되며 평가 차이가 크지 않은 수",
   },
   4: {
-    label: "T4 실패",
+    label: "T4 큰하락",
     short: "T4",
-    dot: "bg-rose-500",
+    dot: "bg-rose-400",
     border: "border-rose-600/35",
     bg: "bg-rose-600/8",
     text: "text-rose-700",
-    desc: "희생이 성립하지 않거나 보상이 부족해 평가가 떨어지는 수",
+    desc: "추천수 4순위 이하에서 ca가 cb 대비 크게 떨어지는 수",
+  },
+  5: {
+    label: "T5 두면안됨",
+    short: "T5",
+    dot: "bg-slate-700",
+    border: "border-slate-600/45",
+    bg: "bg-slate-700/10",
+    text: "text-slate-700",
+    desc: "ca 하락으로 유리한 국면 역전을 허용하거나 명백히 불리해지는 치명 악수",
   },
 };
 
@@ -372,7 +393,7 @@ function SacGameRow({ game, rank, isSelected, onSelect }: {
   game: PatternGameItem; rank: number; isSelected: boolean; onSelect: () => void;
 }) {
   const badge = RESULT_BADGE[game.result] ?? RESULT_BADGE.draw;
-  const tier = game.sac_tier ?? 4;
+  const tier = (game.sac_tier && game.sac_tier >= 1 && game.sac_tier <= 5 ? game.sac_tier : 5) as 1 | 2 | 3 | 4 | 5;
   const tierMeta = SAC_TIER_META[tier];
   return (
     <button type="button" onClick={onSelect}
@@ -420,18 +441,31 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
   if (!pattern) return null;
 
   const allGames = pattern.top_games ?? [];
-  const tierGroups = ([1, 2, 3, 4] as const).map((tier) => ({
+  const tierGroups = ([1, 2, 3, 4, 5] as const).map((tier) => ({
     tier,
     meta: SAC_TIER_META[tier],
-    games: allGames.filter((g) => (g.sac_tier ?? 4) === tier),
+    games: allGames.filter((g) => (g.sac_tier ?? 5) === tier),
   }));
 
-  // 도넛은 백엔드 실제 집계(T1~T4)를 우선 사용한다.
+  // 도넛은 백엔드 실제 집계(T1~T5)를 우선 사용한다.
   // top_games는 샘플 목록이라 이를 분모로 쓰면 0%로 왜곡될 수 있다.
   const sacChart = pattern.chart_data?.type === "sacrifice_tiers" ? pattern.chart_data : null;
-  const totalSac = sacChart?.total ?? pattern.evidence_count ?? allGames.length;
-  const successCount = sacChart ? (sacChart.t1 + sacChart.t2) : (tierGroups[0].games.length + tierGroups[1].games.length);
-  const failCount = sacChart ? (sacChart.t3 + sacChart.t4) : Math.max(totalSac - successCount, 0);
+  const toNum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
+  const t1 = toNum(sacChart?.t1);
+  const t2 = toNum(sacChart?.t2);
+  const t3 = toNum(sacChart?.t3);
+  const t4 = toNum(sacChart?.t4);
+  const t5 = toNum(sacChart?.t5);
+
+  const donutCounts = sacChart
+    ? { t1, t2, t3, t4, t5 }
+    : {
+        t1: tierGroups[0].games.length,
+        t2: tierGroups[1].games.length,
+        t3: tierGroups[2].games.length,
+        t4: tierGroups[3].games.length,
+        t5: tierGroups[4].games.length,
+      };
 
   const scoreColor = pattern.score >= 65 ? "text-emerald-700" : pattern.score >= 45 ? "text-amber-700" : "text-red-700";
   const scoreBg    = pattern.score >= 65 ? "bg-emerald-600"   : pattern.score >= 45 ? "bg-amber-600"   : "bg-red-600";
@@ -459,7 +493,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
                   <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-chess-muted/40 text-[10px] font-bold text-chess-muted cursor-help">!</span>
                   <div className="pointer-events-none absolute left-0 top-6 z-20 hidden w-72 rounded-xl border border-chess-border bg-chess-surface/95 p-3 text-[10px] text-chess-muted shadow-xl group-hover:block">
                     <p className="font-semibold text-chess-primary mb-2">희생 등급 설명</p>
-                    {([1, 2, 3, 4] as const).map((tier) => (
+                    {([1, 2, 3, 4, 5] as const).map((tier) => (
                       <div key={tier} className="flex items-start gap-2 py-1">
                         <span className={`mt-0.5 inline-block h-2 w-2 rounded-full ${SAC_TIER_META[tier].dot}`} />
                         <div>
@@ -471,7 +505,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-chess-muted mt-0.5">legal capture → tactical validity → eval delta → T1~T4 tiering</p>
+              <p className="text-xs text-chess-muted mt-0.5">legal capture → tactical validity → eval delta/rank → T1~T5 tiering</p>
             </div>
           </div>
           <button onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary text-xl leading-none p-1">✕</button>
@@ -486,7 +520,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
             {/* 도넛 + 점수 */}
             <div className="px-4 py-3 border-b border-chess-border bg-chess-bg/40 shrink-0">
               <div className="flex items-center gap-4">
-                <SacDonutChart successCount={successCount} failCount={failCount} />
+                <SacDonutChart counts={donutCounts} />
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-[11px] text-chess-muted truncate">{pattern.detail}</span>
@@ -506,7 +540,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
               </div>
             </div>
 
-            {/* 게임 목록: T1~T4 섹션 */}
+            {/* 게임 목록: T1~T5 섹션 */}
             <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
               {allGames.length === 0 ? <p className="text-xs text-chess-muted text-center py-8">표시할 희생 게임 없음</p> : (
                 tierGroups.map(({ tier, meta, games }) => (
