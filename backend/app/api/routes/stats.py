@@ -5,6 +5,7 @@ MVP 섹션 1, 2, 3 대응
 import asyncio
 import functools
 import logging
+import time
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.models.schemas import Platform
@@ -22,6 +23,9 @@ chessdotcom_svc = ChessDotComService()
 lichess_svc = LichessService()
 analysis_svc = AnalysisService()
 tactical_svc = TacticalAnalysisService()
+TACTICAL_REQUEST_VERSION = "v2026-03-14-1"
+TACTICAL_STALE_SEC = 300
+TACTICAL_ANALYZE_TIMEOUT_SEC = 420
 
 
 def _tactical_request_key(
@@ -33,6 +37,7 @@ def _tactical_request_key(
     until_ms: Optional[int],
 ) -> str:
     return ":".join([
+        TACTICAL_REQUEST_VERSION,
         str(platform),
         username.lower(),
         time_class,
@@ -64,6 +69,20 @@ async def get_tactical_pattern_progress(
             "job_id": None,
             "error": None,
         }
+
+    # 오래 업데이트되지 않은 running/queued job은 실패로 전환해 무한 로딩을 막는다.
+    if job.status in {"queued", "running"} and (time.time() - job.updated_at) > TACTICAL_STALE_SEC:
+        logger.warning(
+            "[tactical-patterns] stale progress auto-fail request_key=%s job_id=%s status=%s progress=%s",
+            request_key,
+            job.job_id,
+            job.status,
+            job.progress_percent,
+        )
+        tactical_job_store.fail_job(job.job_id, "stale tactical job")
+        refreshed = tactical_job_store.get_job(job.job_id)
+        if refreshed is not None:
+            job = refreshed
 
     payload = job.to_dict()
     if payload.get("result") is not None:
@@ -225,34 +244,52 @@ async def get_tactical_patterns(
     existing_job = tactical_job_store.get_latest_for_request(request_key)
     if existing_job:
         if existing_job.status in {"queued", "running"}:
-            logger.warning(
-                "[tactical-patterns] duplicate request joined request_key=%s job_id=%s status=%s progress=%s",
-                request_key,
-                existing_job.job_id,
-                existing_job.status,
-                existing_job.progress_percent,
-            )
-            while True:
-                await asyncio.sleep(0.5)
-                latest = tactical_job_store.get_job(existing_job.job_id)
-                if latest is None:
-                    break
-                if latest.status == "completed" and latest.result is not None:
-                    logger.info(
-                        "[tactical-patterns] joined request resolved request_key=%s job_id=%s",
-                        request_key,
-                        latest.job_id,
-                    )
-                    return latest.result
-                if latest.status == "failed":
-                    raise HTTPException(status_code=500, detail=latest.error or "전술 분석 실패")
-        if existing_job.status == "completed" and existing_job.result is not None:
-            logger.info(
-                "[tactical-patterns] recent completed result reused request_key=%s job_id=%s",
-                request_key,
-                existing_job.job_id,
-            )
-            return existing_job.result
+            now = time.time()
+            if (now - existing_job.updated_at) > TACTICAL_STALE_SEC:
+                logger.warning(
+                    "[tactical-patterns] stale job reset request_key=%s job_id=%s status=%s updated_at=%s",
+                    request_key,
+                    existing_job.job_id,
+                    existing_job.status,
+                    existing_job.updated_at,
+                )
+                tactical_job_store.fail_job(existing_job.job_id, "stale tactical job reset")
+            else:
+                logger.warning(
+                    "[tactical-patterns] duplicate request joined request_key=%s job_id=%s status=%s progress=%s",
+                    request_key,
+                    existing_job.job_id,
+                    existing_job.status,
+                    existing_job.progress_percent,
+                )
+                joined_at = time.time()
+                while True:
+                    await asyncio.sleep(0.5)
+                    latest = tactical_job_store.get_job(existing_job.job_id)
+                    if latest is None:
+                        break
+                    if latest.status == "completed" and latest.result is not None:
+                        logger.info(
+                            "[tactical-patterns] joined request resolved request_key=%s job_id=%s",
+                            request_key,
+                            latest.job_id,
+                        )
+                        return latest.result
+                    if latest.status == "failed":
+                        raise HTTPException(status_code=500, detail=latest.error or "전술 분석 실패")
+                    # 오래 정체된 running/queued job은 무한 대기를 끊고 재시작한다.
+                    if (time.time() - latest.updated_at) > TACTICAL_STALE_SEC or (time.time() - joined_at) > (TACTICAL_STALE_SEC + 30):
+                        logger.warning(
+                            "[tactical-patterns] joined wait timeout request_key=%s job_id=%s status=%s progress=%s",
+                            request_key,
+                            latest.job_id,
+                            latest.status,
+                            latest.progress_percent,
+                        )
+                        tactical_job_store.fail_job(latest.job_id, "joined request timeout; restarting")
+                        break
+        # completed job은 무기한 재사용하지 않는다.
+        # 분석 캐시는 TacticalAnalysisService 내부 TTL/게임ID 기반 캐시에 맡긴다.
 
     job = tactical_job_store.create_job(
         request_key=request_key,
@@ -307,23 +344,26 @@ async def get_tactical_patterns(
         )
 
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            functools.partial(
-                tactical_svc.analyze,
-                games,
-                username,
-                len(games),
-                lambda percent, stage, message, analyzed_games, total_games: tactical_job_store.update_job(
-                    job.job_id,
-                    status="running",
-                    progress_percent=percent,
-                    stage=stage,
-                    message=message,
-                    analyzed_games=analyzed_games,
-                    total_games=total_games,
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                functools.partial(
+                    tactical_svc.analyze,
+                    games,
+                    username,
+                    len(games),
+                    lambda percent, stage, message, analyzed_games, total_games: tactical_job_store.update_job(
+                        job.job_id,
+                        status="running",
+                        progress_percent=percent,
+                        stage=stage,
+                        message=message,
+                        analyzed_games=analyzed_games,
+                        total_games=total_games,
+                    ),
                 ),
             ),
+            timeout=TACTICAL_ANALYZE_TIMEOUT_SEC,
         )
         tactical_job_store.complete_job(job.job_id, result, total_games=len(games))
         logger.info(
@@ -335,6 +375,15 @@ async def get_tactical_patterns(
         return result
     except HTTPException:
         raise
+    except asyncio.TimeoutError:
+        tactical_job_store.fail_job(job.job_id, "전술 분석 시간 초과")
+        logger.error(
+            "[tactical-patterns] timeout request_key=%s job_id=%s timeout_sec=%s",
+            request_key,
+            job.job_id,
+            TACTICAL_ANALYZE_TIMEOUT_SEC,
+        )
+        raise HTTPException(status_code=504, detail="전술 분석 시간이 초과되었습니다. max_games를 낮춰 다시 시도해주세요.")
     except Exception as e:
         tactical_job_store.fail_job(job.job_id, str(e))
         logger.exception("[tactical-patterns] 분석 실패 user=%s time_class=%s", username, time_class)
