@@ -76,3 +76,25 @@ def test_advantage_breakdown_keeps_compatibility_keys_and_counts():
     # 핵심 KPI도 동일한 값을 가리켜야 한다.
     assert p.key_metric_value == pytest.approx(66.7, abs=0.1)
     assert p.score == 66
+
+
+def test_advantage_min_required_relaxed_for_large_game_pool():
+    svc = TacticalAnalysisService()
+
+    games = [
+        _mk_game("a1", GameResult.win),
+        _mk_game("a2", GameResult.win),
+        _mk_game("a3", GameResult.loss),
+    ]
+    sf_cache = {
+        "a1": _adv_moves(120, None),
+        "a2": _adv_moves(110, 18),
+        "a3": _adv_moves(105, 25),
+    }
+
+    # 300게임 풀(전수 분석)에서는 최소 우위게임 기준을 3으로 완화해 패턴이 생성되어야 한다.
+    p = svc._p_advantage_throw(games * 100, "tester", sf_cache)
+    assert p is not None
+    assert p.games_analyzed >= 3
+
+
