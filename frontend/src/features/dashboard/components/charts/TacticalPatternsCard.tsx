@@ -130,58 +130,162 @@ function AiInsightsSection({ insights, isLoading }: { insights?: AiInsights | nu
   );
 }
 
-// ─── XGBoost 블런더 리스크 ──────────────────────────────────
+// ─── XGBoost 블런더 위험 분석 (체스 애호가 친화 재설계) ──────
 function XGBoostProfileSection({ profile }: { profile: XGBoostProfile }) {
-  const risk      = profile.blunder_game_rate;
-  const riskColor = risk >= 35 ? "text-red-700"     : risk >= 20 ? "text-amber-700"  : "text-emerald-700";
-  const riskBg    = risk >= 35 ? "bg-red-600"       : risk >= 20 ? "bg-amber-600"    : "bg-emerald-600";
+  const [expanded, setExpanded] = useState(false);
+
+  const risk       = safeNumber(profile.blunder_game_rate);
   const meaningful = profile.is_meaningful ?? false;
+  const games      = profile.games_analyzed;
+  const lift       = Number.isFinite(profile.lift_over_baseline ?? NaN)
+    ? (profile.lift_over_baseline as number)
+    : null;
+
+  // ── 위험 수준 레이블 ────────────────────────────────────────
+  const riskLevel =
+    risk >= 35
+      ? { label: "높음",  icon: "⚠️", color: "text-red-700",     bg: "bg-red-600/10 border-red-600/30",         bar: "bg-red-600"     }
+      : risk >= 20
+      ? { label: "주의",  icon: "🔶", color: "text-amber-700",   bg: "bg-amber-600/10 border-amber-600/30",     bar: "bg-amber-600"   }
+      :   { label: "양호", icon: "✅", color: "text-emerald-700", bg: "bg-emerald-700/10 border-emerald-700/30", bar: "bg-emerald-600" };
+
+  // ── 예측 신뢰도 문구 합성 ───────────────────────────────────
+  const confidence: { label: string; detail: string; color: string } =
+    meaningful && lift !== null && lift >= 5
+      ? { label: "신뢰도 높음",  detail: `${games}게임 분석 · 기준 대비 +${lift.toFixed(1)}pp 개선`,  color: "text-emerald-700" }
+      : meaningful
+      ? { label: "신뢰도 보통",  detail: `${games}게임 분석 · 유의미한 패턴 감지됨`,                  color: "text-amber-700"   }
+      : games >= 40
+      ? { label: "참고 수준",    detail: "데이터가 더 쌓이면 정확도가 높아집니다",                    color: "text-amber-700"   }
+      : { label: "분석 초기",    detail: "더 많은 게임 후 다시 확인하세요",                            color: "text-chess-muted" };
+
+  // ── 주요 위험 요인 (설명 있는 첫 번째 항목 우선) ────────────
+  const topFactor =
+    profile.top_risk_factors.find((f) => !!f.description) ??
+    profile.top_risk_factors[0] ??
+    null;
+
+  // ── 기술 지표 존재 여부 ─────────────────────────────────────
+  const hasTechMetrics =
+    Number.isFinite(profile.precision ?? NaN) &&
+    Number.isFinite(profile.recall   ?? NaN) &&
+    Number.isFinite(profile.f1       ?? NaN);
+
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-chess-muted uppercase tracking-wider font-bold">🔴 블런더 리스크 분석</p>
-        <span className="text-xs text-chess-muted">{profile.model_accuracy.toFixed(0)}% 정확도 · {profile.games_analyzed}게임</span>
-      </div>
-      <div className="rounded-xl border border-chess-border bg-chess-bg/80 p-3.5 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-chess-muted">블런더 게임 예측 비율</span>
-          <span className={`text-sm font-bold ${riskColor}`}>{risk.toFixed(0)}%</span>
+      <p className="text-xs text-chess-muted uppercase tracking-wider font-bold">⚡ 블런더 위험 분석</p>
+
+      {/* ── 기본 요약 카드 (항상 노출) ─────────────────────────── */}
+      <div className={`rounded-xl border p-4 space-y-3 ${riskLevel.bg}`}>
+
+        {/* 위험 수준 + 신뢰도 */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-0.5">
+            <p className="text-[10px] text-chess-muted uppercase tracking-wide font-semibold">블런더 위험 수준</p>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base leading-none">{riskLevel.icon}</span>
+              <span className={`text-xl font-black leading-none ${riskLevel.color}`}>{riskLevel.label}</span>
+              <span className={`text-sm font-semibold opacity-70 ${riskLevel.color}`}>({risk.toFixed(0)}%)</span>
+            </div>
+          </div>
+          <div className="text-right space-y-0.5 shrink-0 max-w-[150px]">
+            <p className={`text-xs font-semibold ${confidence.color}`}>{confidence.label}</p>
+            <p className="text-[10px] text-chess-muted leading-snug">{confidence.detail}</p>
+          </div>
         </div>
+
+        {/* 위험도 진행 바 */}
         <div className="w-full bg-chess-border/60 rounded-full h-2 overflow-hidden">
-          <div className={`h-full rounded-full ${riskBg}`} style={{ width: `${Math.min(risk, 100)}%` }} />
+          <div className={`h-full rounded-full ${riskLevel.bar}`} style={{ width: `${Math.min(risk, 100)}%` }} />
         </div>
-        {profile.precision !== undefined && profile.recall !== undefined && profile.f1 !== undefined && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">정밀도 {profile.precision.toFixed(0)}%</span>
-            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">재현율 {profile.recall.toFixed(0)}%</span>
-            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">F1 {profile.f1.toFixed(0)}%</span>
-            <span className="rounded-md border border-chess-border px-2 py-1 text-chess-muted">Lift {profile.lift_over_baseline?.toFixed(1) ?? "0.0"}pp</span>
+
+        {/* 주요 위험 요인 */}
+        {topFactor && (
+          <div className="rounded-lg border border-chess-border/50 bg-chess-bg/60 px-3 py-2.5 space-y-0.5">
+            <p className="text-[10px] text-chess-muted uppercase tracking-wide font-semibold">주요 위험 요인</p>
+            <p className="text-xs font-semibold text-chess-primary">{topFactor.feature}</p>
+            {topFactor.description && (
+              <p className="text-xs text-chess-muted leading-snug">{topFactor.description}</p>
+            )}
           </div>
         )}
-        {profile.quality_note && (
-          <p className={`text-xs leading-snug ${meaningful ? "text-emerald-700" : "text-amber-700"}`}>
-            {meaningful ? "모델 상태: 유의미" : "모델 상태: 주의"} · {profile.quality_note}
-          </p>
-        )}
-        <p className="text-xs text-chess-muted leading-snug">{profile.description}</p>
       </div>
-      <div className="space-y-1.5">
-        {profile.top_risk_factors.map((f, i) => (
-          <div key={f.feature} className="rounded-xl border border-chess-border bg-chess-bg/70 p-2.5 space-y-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-chess-muted w-4">#{i + 1}</span>
-                <span className="text-xs font-semibold text-chess-primary">{f.feature}</span>
+
+      {/* ── 상세 분석 접기/펼치기 ─────────────────────────────── */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between text-xs text-chess-muted hover:text-chess-primary transition-colors py-1 px-0.5"
+      >
+        <span>상세 분석 보기</span>
+        <span>{expanded ? "▲ 접기" : "▼ 펼치기"}</span>
+      </button>
+
+      {expanded && (
+        <div className="space-y-3 border-t border-chess-border/40 pt-3">
+
+          {/* 모델 성능 지표 (기술 지표 — 각 1줄 설명 포함) */}
+          {hasTechMetrics && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-chess-muted uppercase tracking-wide font-semibold">모델 성능 지표</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md border border-chess-border bg-chess-bg/80 px-2.5 py-2 space-y-0.5">
+                  <p className="text-xs font-semibold text-chess-primary">정밀도 {safeNumber(profile.precision).toFixed(0)}%</p>
+                  <p className="text-[10px] text-chess-muted leading-snug">블런더 예측이 실제로 맞은 비율</p>
+                </div>
+                <div className="rounded-md border border-chess-border bg-chess-bg/80 px-2.5 py-2 space-y-0.5">
+                  <p className="text-xs font-semibold text-chess-primary">재현율 {safeNumber(profile.recall).toFixed(0)}%</p>
+                  <p className="text-[10px] text-chess-muted leading-snug">실제 블런더 게임을 찾아낸 비율</p>
+                </div>
+                <div className="rounded-md border border-chess-border bg-chess-bg/80 px-2.5 py-2 space-y-0.5">
+                  <p className="text-xs font-semibold text-chess-primary">종합 점수 {safeNumber(profile.f1).toFixed(0)}%</p>
+                  <p className="text-[10px] text-chess-muted leading-snug">정밀도·재현율의 균형 점수 (F1)</p>
+                </div>
+                <div className="rounded-md border border-chess-border bg-chess-bg/80 px-2.5 py-2 space-y-0.5">
+                  <p className={`text-xs font-semibold ${lift !== null && lift >= 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                    기준 대비 {lift !== null ? `${lift >= 0 ? "+" : ""}${lift.toFixed(1)}pp` : "—"}
+                  </p>
+                  <p className="text-[10px] text-chess-muted leading-snug">단순 확률보다 얼마나 더 정확한지</p>
+                </div>
               </div>
-              <span className={`text-xs font-bold text-amber-700`}>{f.importance.toFixed(0)}%</span>
+              {profile.quality_note && (
+                <p className={`text-[10px] leading-snug px-1 ${meaningful ? "text-emerald-700" : "text-amber-700"}`}>
+                  {profile.quality_note}
+                </p>
+              )}
             </div>
-            <div className="w-full bg-chess-border/60 rounded-full h-1 overflow-hidden">
-              <div className="h-full rounded-full bg-amber-600" style={{ width: `${Math.min(f.importance * 3, 100)}%` }} />
+          )}
+
+          {/* 위험 요인 전체 목록 */}
+          {profile.top_risk_factors.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-chess-muted uppercase tracking-wide font-semibold">위험 요인 영향도</p>
+              {profile.top_risk_factors.map((f, i) => (
+                <div key={f.feature} className="rounded-xl border border-chess-border bg-chess-bg/70 p-2.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-chess-muted w-4">#{i + 1}</span>
+                      <span className="text-xs font-semibold text-chess-primary">{f.feature}</span>
+                    </div>
+                    <span className="text-xs font-bold text-amber-700">{safeNumber(f.importance).toFixed(0)}%</span>
+                  </div>
+                  <div className="w-full bg-chess-border/60 rounded-full h-1 overflow-hidden">
+                    <div className="h-full rounded-full bg-amber-600" style={{ width: `${Math.min(safeNumber(f.importance) * 3, 100)}%` }} />
+                  </div>
+                  {f.description && <p className="text-xs text-chess-muted leading-snug">{f.description}</p>}
+                </div>
+              ))}
             </div>
-            {f.description && <p className="text-xs text-chess-muted leading-snug">{f.description}</p>}
-          </div>
-        ))}
-      </div>
+          )}
+
+          {/* 분석 기반 */}
+          <p className="text-[10px] text-chess-muted text-right">
+            {games}게임 분석
+            {profile.validation_support
+              ? ` · 검증 표본 +${safeNumber(profile.validation_support.positive)} / -${safeNumber(profile.validation_support.negative)}`
+              : ""}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

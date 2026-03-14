@@ -9,10 +9,11 @@ interface Props {
   title: string;
   desc?: string;
   isLoading?: boolean;
+  progressPercent?: number;
 }
 
-export default function SectionHeader({ title, desc, isLoading = false }: Props) {
-  const pct = useLoadingProgress(isLoading);
+export default function SectionHeader({ title, desc, isLoading = false, progressPercent }: Props) {
+  const pct = useLoadingProgress(isLoading, progressPercent);
   const showBar = pct > 0;
 
   return (

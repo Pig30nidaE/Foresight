@@ -13,6 +13,7 @@ from app.shared.services.lichess import LichessService
 from app.features.dashboard.services.analysis import AnalysisService
 from app.shared.services.pgn_parser import parse_games_bulk
 from app.features.dashboard.services.tactical_analysis import TacticalAnalysisService
+from app.features.dashboard.services.tactical_jobs import tactical_job_store
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,53 @@ chessdotcom_svc = ChessDotComService()
 lichess_svc = LichessService()
 analysis_svc = AnalysisService()
 tactical_svc = TacticalAnalysisService()
+
+
+def _tactical_request_key(
+    platform: Platform,
+    username: str,
+    time_class: str,
+    max_games: int,
+    since_ms: Optional[int],
+    until_ms: Optional[int],
+) -> str:
+    return ":".join([
+        str(platform),
+        username.lower(),
+        time_class,
+        str(max_games),
+        str(since_ms or ""),
+        str(until_ms or ""),
+    ])
+
+
+@router.get("/tactical-patterns/{platform}/{username}/progress")
+async def get_tactical_pattern_progress(
+    platform: Platform,
+    username: str,
+    time_class: str = Query(default="blitz"),
+    max_games: int = Query(default=300, ge=50, le=1000),
+    since_ms: Optional[int] = Query(default=None),
+    until_ms: Optional[int] = Query(default=None),
+):
+    request_key = _tactical_request_key(platform, username, time_class, max_games, since_ms, until_ms)
+    job = tactical_job_store.get_latest_for_request(request_key)
+    if not job:
+        return {
+            "status": "idle",
+            "progress_percent": 0,
+            "stage": "idle",
+            "message": "분석 대기 중",
+            "total_games": 0,
+            "analyzed_games": 0,
+            "job_id": None,
+            "error": None,
+        }
+
+    payload = job.to_dict()
+    if payload.get("result") is not None:
+        payload.pop("result", None)
+    return payload
 
 
 @router.get("/first-moves/{platform}/{username}")
@@ -173,7 +221,67 @@ async def get_tactical_patterns(
     ML 전술 패턴 분석 — MVP.md 기반
     시간 압박, 즉각 반응, 핀/포크/백랭크 등 다양한 전술적 패턴을 분석합니다.
     """
+    request_key = _tactical_request_key(platform, username, time_class, max_games, since_ms, until_ms)
+    existing_job = tactical_job_store.get_latest_for_request(request_key)
+    if existing_job:
+        if existing_job.status in {"queued", "running"}:
+            logger.warning(
+                "[tactical-patterns] duplicate request joined request_key=%s job_id=%s status=%s progress=%s",
+                request_key,
+                existing_job.job_id,
+                existing_job.status,
+                existing_job.progress_percent,
+            )
+            while True:
+                await asyncio.sleep(0.5)
+                latest = tactical_job_store.get_job(existing_job.job_id)
+                if latest is None:
+                    break
+                if latest.status == "completed" and latest.result is not None:
+                    logger.info(
+                        "[tactical-patterns] joined request resolved request_key=%s job_id=%s",
+                        request_key,
+                        latest.job_id,
+                    )
+                    return latest.result
+                if latest.status == "failed":
+                    raise HTTPException(status_code=500, detail=latest.error or "전술 분석 실패")
+        if existing_job.status == "completed" and existing_job.result is not None:
+            logger.info(
+                "[tactical-patterns] recent completed result reused request_key=%s job_id=%s",
+                request_key,
+                existing_job.job_id,
+            )
+            return existing_job.result
+
+    job = tactical_job_store.create_job(
+        request_key=request_key,
+        username=username,
+        platform=str(platform),
+        time_class=time_class,
+        max_games=max_games,
+    )
+
     try:
+        logger.info(
+            "[tactical-patterns] start request_key=%s job_id=%s platform=%s username=%s time_class=%s max_games=%d",
+            request_key,
+            job.job_id,
+            platform,
+            username,
+            time_class,
+            max_games,
+        )
+        tactical_job_store.update_job(
+            job.job_id,
+            status="running",
+            progress_percent=5,
+            stage="fetching",
+            message="최근 게임을 수집 중",
+            total_games=max_games,
+            analyzed_games=0,
+        )
+
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
             until_ts = until_ms // 1000 if until_ms else None
@@ -182,14 +290,53 @@ async def get_tactical_patterns(
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         games = [g for g in games if g.time_class == time_class]
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None,
-            functools.partial(tactical_svc.analyze, games, username, len(games)),
+        logger.info(
+            "[tactical-patterns] fetched request_key=%s job_id=%s games=%d",
+            request_key,
+            job.job_id,
+            len(games),
         )
+        tactical_job_store.update_job(
+            job.job_id,
+            status="running",
+            progress_percent=25,
+            stage="fetched",
+            message="게임 수집 완료, 전술 분석 시작",
+            total_games=len(games),
+            analyzed_games=min(len(games), max_games),
+        )
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            functools.partial(
+                tactical_svc.analyze,
+                games,
+                username,
+                len(games),
+                lambda percent, stage, message, analyzed_games, total_games: tactical_job_store.update_job(
+                    job.job_id,
+                    status="running",
+                    progress_percent=percent,
+                    stage=stage,
+                    message=message,
+                    analyzed_games=analyzed_games,
+                    total_games=total_games,
+                ),
+            ),
+        )
+        tactical_job_store.complete_job(job.job_id, result, total_games=len(games))
+        logger.info(
+            "[tactical-patterns] completed request_key=%s job_id=%s total_games=%d",
+            request_key,
+            job.job_id,
+            len(games),
+        )
+        return result
     except HTTPException:
         raise
     except Exception as e:
+        tactical_job_store.fail_job(job.job_id, str(e))
         logger.exception("[tactical-patterns] 분석 실패 user=%s time_class=%s", username, time_class)
         raise HTTPException(status_code=500, detail=str(e))
 
