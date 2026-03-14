@@ -12,6 +12,7 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
+      STOCKFISH_PATH: "/usr/games/stockfish"
     env_file:
       - .env
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

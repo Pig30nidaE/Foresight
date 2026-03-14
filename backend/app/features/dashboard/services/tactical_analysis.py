@@ -57,7 +57,7 @@ from copy import deepcopy
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Callable, List, Optional, Dict, Any, Tuple
 
 import numpy as np
 import pandas as pd
@@ -84,6 +84,11 @@ BOARD_BUDGET_GAMES = 80  # 120→80: 보드 루프 게임 수 축소
 SF_ADV_BUDGET_GAMES = 80  # board_games와 동일하게 맞춤
 SF_ADV_BUDGET_MOVES = 50  # 희생 수가 중반 이후에도 발생하므로 40→50수로 확대
 SF_ADV_DEPTH = 6          # 속도 우선 (cp_before/after 값만 필요하므로 충분)
+SF_SAC_REFINE_DEPTH = 18   # 희생 후보 수 전용 2차 정밀 분석 depth
+SF_SAC_REFINE_PAD_MOVES = 2  # 희생 수 직후 응수까지 포함하기 위한 여유 수
+SF_SAC_REFINE_MAX_ATTEMPTS = 12  # 희생 2차 정밀 분석 최대 후보 수
+SF_SAC_REFINE_MAX_GAMES = 8      # 희생 2차 정밀 분석 최대 게임 수
+TACTICAL_ANALYSIS_VERSION = "v2026-03-14-2"
 BLUNDER_CP = 150   # centipawn 손실 ≥150 → 블런더 (하위 호환 유지)
 SF_PARALLEL_WORKERS = 4  # 병렬 Stockfish 인스턴스 수 (CPU 코어 수 초과 권장 안 함)
 SF_CACHE_TTL_SEC = 60 * 60 * 6
@@ -397,22 +402,25 @@ class StockfishHelper:
                     (move_side == chess.WHITE and white_name == uname)
                     or (move_side == chess.BLACK and black_name == uname)
                 )
-                cp_loss = 0.0
-                cp_loss_known = False
-                is_blunder = False
-                if prev_cp is not None and is_my_move:
-                    cp_loss = prev_cp - cp_now
-                    cp_loss_known = True
-                    is_blunder = cp_loss >= BLUNDER_CP
-
                 pv_rank = len(pv_infos) + 1
                 pv_best_cp = _score_to_cp(best_info.get("score"))
                 pv_second_cp = _score_to_cp(pv_infos[1].get("score")) if len(pv_infos) > 1 else None
+                pv_played_cp: Optional[float] = None
                 for idx, pv in enumerate(pv_infos, start=1):
                     pv_line = pv.get("pv")
                     if pv_line and len(pv_line) > 0 and pv_line[0] == node.move:
                         pv_rank = idx
+                        pv_played_cp = _score_to_cp(pv.get("score"))
                         break
+
+                # cp_loss는 "직전 상태 변화"가 아니라 "해당 수 vs 엔진 최선수" 차이로 계산한다.
+                cp_loss = 0.0
+                cp_loss_known = False
+                is_blunder = False
+                if is_my_move and pv_best_cp is not None and pv_played_cp is not None:
+                    cp_loss = max(0.0, pv_best_cp - pv_played_cp)
+                    cp_loss_known = True
+                    is_blunder = cp_loss >= BLUNDER_CP
 
                 unique_gap_cp = None
                 if pv_best_cp is not None and pv_second_cp is not None:
@@ -459,7 +467,8 @@ class StockfishHelper:
         if not games_with_pgn:
             return {}
 
-        now = time.monotonic()
+        started_at = time.monotonic()
+        now = started_at
         uname = username.lower()
         combined: Dict[str, List[Dict]] = {}
         misses: List = []
@@ -472,7 +481,22 @@ class StockfishHelper:
                 else:
                     misses.append(g)
 
+        logger.info(
+            "[stockfish.eval_batch] user=%s total=%d cache_hit=%d miss=%d depth=%d max_moves=%d",
+            username,
+            len(games_with_pgn),
+            len(combined),
+            len(misses),
+            depth,
+            max_moves,
+        )
+
         if not misses:
+            logger.info(
+                "[stockfish.eval_batch] cache-only complete user=%s elapsed=%.2fs",
+                username,
+                time.monotonic() - started_at,
+            )
             return combined
 
         n_workers = min(SF_PARALLEL_WORKERS, len(misses))
@@ -497,6 +521,11 @@ class StockfishHelper:
             return chunk_result
 
         non_empty = [c for c in chunks if c]
+        logger.info(
+            "[stockfish.eval_batch] spawning workers=%d user=%s",
+            len(non_empty),
+            username,
+        )
         with ThreadPoolExecutor(max_workers=len(non_empty)) as executor:
             for partial in executor.map(_eval_chunk, non_empty):
                 combined.update(partial)
@@ -514,6 +543,13 @@ class StockfishHelper:
             ]
             for k in expired_keys:
                 self._eval_cache.pop(k, None)
+
+        logger.info(
+            "[stockfish.eval_batch] complete user=%s analyzed=%d elapsed=%.2fs",
+            username,
+            len(combined),
+            time.monotonic() - started_at,
+        )
 
         return combined
 
@@ -546,6 +582,7 @@ class TacticalAnalysisService:
     def __init__(self):
         self._analysis_cache: Dict[Tuple[str, Tuple[str, ...], int], Tuple[float, Dict[str, Any]]] = {}
         self._analysis_cache_lock = threading.Lock()
+        self._analysis_inflight: Dict[Tuple[str, Tuple[str, ...], int], threading.Event] = {}
 
     def _engine_plan(self, n_games: int) -> Tuple[int, int]:
         """게임 수 기반 동적 엔진 계획. 전수 분석을 유지하면서 응답 시간을 제한."""
@@ -559,7 +596,7 @@ class TacticalAnalysisService:
 
     def _analysis_cache_key(self, games: List[GameSummary], username: str, max_board_games: int) -> Tuple[str, Tuple[str, ...], int]:
         game_ids = tuple(g.game_id for g in games)
-        return (username.lower(), game_ids, max_board_games)
+        return (f"{username.lower()}:" + TACTICAL_ANALYSIS_VERSION, game_ids, max_board_games)
 
     def _classify_castling_direction(self, game: GameSummary, username: str) -> Optional[str]:
         """캐슬링 방향 분류: opposite | same | None(양측 캐슬링 미완료/파싱 실패)."""
@@ -669,231 +706,318 @@ class TacticalAnalysisService:
         games: List[GameSummary],
         username: str,
         max_board_games: int = BOARD_BUDGET_GAMES,
+        progress_callback: Optional[Callable[[int, str, str, Optional[int], Optional[int]], None]] = None,
     ) -> Dict[str, Any]:
+        def _report(
+            percent: int,
+            stage: str,
+            message: str,
+            analyzed_games: Optional[int] = None,
+            total_games: Optional[int] = None,
+        ) -> None:
+            if progress_callback is not None:
+                progress_callback(percent, stage, message, analyzed_games, total_games)
+
         if not games:
+            _report(100, "completed", "분석할 게임이 없습니다.", 0, 0)
             return {"total_games": 0, "patterns": [], "strengths": [],
                     "weaknesses": [], "cluster_analysis": None, "xgboost_profile": None}
 
         if max_board_games <= 0:
             max_board_games = len(games)
 
+        _report(25, "preparing", "전술 분석 준비 중", 0, len(games))
+
         cache_key = self._analysis_cache_key(games, username, max_board_games)
+        analysis_started_at = time.monotonic()
         now = time.monotonic()
+        owner = False
+        wait_event: Optional[threading.Event] = None
         with self._analysis_cache_lock:
             cached = self._analysis_cache.get(cache_key)
             if cached and (now - cached[0]) <= ANALYSIS_CACHE_TTL_SEC:
+                logger.info(
+                    "[tactical.analyze] cache hit user=%s games=%d max_board=%d",
+                    username,
+                    len(games),
+                    max_board_games,
+                )
+                _report(100, "completed", "캐시된 전술 분석을 불러왔습니다.", len(games), len(games))
                 return deepcopy(cached[1])
+            wait_event = self._analysis_inflight.get(cache_key)
+            if wait_event is None:
+                wait_event = threading.Event()
+                self._analysis_inflight[cache_key] = wait_event
+                owner = True
 
-        board_games = games[:max_board_games]
+        if not owner and wait_event is not None:
+            logger.warning(
+                "[tactical.analyze] duplicate request joined user=%s games=%d max_board=%d",
+                username,
+                len(games),
+                max_board_games,
+            )
+            _report(30, "dedupe", "동일 조건의 기존 분석 작업에 합류합니다.", 0, len(games))
+            wait_event.wait()
+            with self._analysis_cache_lock:
+                cached = self._analysis_cache.get(cache_key)
+                if cached and (time.monotonic() - cached[0]) <= ANALYSIS_CACHE_TTL_SEC:
+                    _report(100, "completed", "기존 분석 결과를 재사용했습니다.", len(games), len(games))
+                    return deepcopy(cached[1])
+                wait_event = threading.Event()
+                self._analysis_inflight[cache_key] = wait_event
+                owner = True
 
-        sf_cache: Dict[str, List[Dict]] = {}
-        adv_sf_cache: Dict[str, List[Dict]] = {}
-        if _sf.available:
-            depth, max_moves = self._engine_plan(len(games))
-            sf_cache = _sf.eval_batch(games, username, max_moves=max_moves, depth=depth)
-            adv_sf_cache = sf_cache
+        logger.info(
+            "[tactical.analyze] start user=%s games=%d board_games=%d",
+            username,
+            len(games),
+            max_board_games,
+        )
 
-        patterns: List[PatternResult] = []
-
-        # ── §2 시간 관리 & 심리 (상황 4) ────────────────
         try:
-            p = self._p_advantage_throw(games, username, adv_sf_cache)   # 상황 4 → 우위 유지
-            if p:
-                patterns.append(p)
-        except Exception:
-            logger.exception("[analyze] _p_advantage_throw 실패")
+            board_games = games[:max_board_games]
 
-        # ── §1 전술 모티프 (상황 1, 3) + §4 방어 능력(상황 13) ───
-        try:
-            patterns.extend(self._p_tactical_motifs(board_games, username, sf_cache))
-        except Exception:
-            logger.exception("[analyze] _p_tactical_motifs 실패")
-
-        # ── §3 오프닝/엔드게임 + §5 복잡성 (상황 7, 10, 11, 14–17) ─
-        try:
-            patterns.extend(self._p_positional(board_games, username, adv_sf_cache))
-        except Exception:
-            logger.exception("[analyze] _p_positional 실패")
-        try:
-            full_castle_pattern = self._p_opposite_castling_all_games(games, username)
-            if full_castle_pattern:
-                replaced = False
-                for i, pattern in enumerate(patterns):
-                    if pattern.situation_id == 7:
-                        patterns[i] = full_castle_pattern
-                        replaced = True
-                        break
-                if not replaced:
-                    patterns.append(full_castle_pattern)
-        except Exception:
-            logger.exception("[analyze] _p_opposite_castling_all_games 실패")
-
-        # ── §6 오프닝 친숙도 (상황 18) ──────────────────────────
-        try:
-            p = self._p_opening_familiarity(games, username)         # 상황 18
-            if p:
-                patterns.append(p)
-        except Exception:
-            logger.exception("[analyze] _p_opening_familiarity 실패")
-
-        # ── §5,6 복잡성·전환 + 보너스 ──────────────────────────
-        try:
-            patterns.extend(self._p_complexity(board_games, username, sf_cache, games))
-        except Exception:
-            logger.exception("[analyze] _p_complexity 실패")
-
-        # 요청된 패턴은 응답에서 완전히 제외
-        patterns = [p for p in patterns if p.label not in REMOVED_PATTERN_LABELS]
-
-        # ── 누락 패턴을 데이터 부족 stub 으로 채우기 ─────────────
-        # 항상 12개 패턴이 나타나도록 고정. 데이터가 부족한 패턴은
-        # insufficient_data=True 로 표시되어 프론트에서 블러 처리됨.
-        _PATTERN_REGISTRY = [
-            dict(label="우위 유지력",           icon="📈",  description="오프닝(5~20수) 연속 +0.75폰↑ 우위게임에서 Smooth/Shaky/Blown 3단계 전환율 분석", category="time",     situation_id=4),
-            dict(label="기물 희생 정확도",       icon="💥",  description="희생 수 자체의 Stockfish 정확도 기반 유효성 분석",                  category="position", situation_id=3),
-            dict(label="반대 방향 캐슬링 난전",  icon="🏹",  description="서로 반대쪽으로 캐슬링한 폰 스톰 상황 승률 분석",                   category="position", situation_id=7),
-            dict(label="IQP 구조 이해",         icon="♟️",  description="고립 퀸 폰(IQP) 구조일 때의 공수 밸런스 승률 분석",                 category="position", situation_id=10),
-            dict(label="비숍 쌍 활용",           icon="🔷",  description="비숍 쌍을 20수까지 유지한 게임의 승률 분석",                       category="position", situation_id=11),
-            dict(label="주력 오프닝 우세도",     icon="📚",  description="자주 플레이한 오프닝(3회+)과 생소한 오프닝의 승률 차이 분석",        category="position", situation_id=18),
-        ]
-        found_labels = {p.label for p in patterns}
-        for stub in _PATTERN_REGISTRY:
-            if stub["label"] not in found_labels:
-                patterns.append(PatternResult(
-                    label=stub["label"],
-                    icon=stub["icon"],
-                    description=stub["description"],
-                    category=stub["category"],
-                    situation_id=stub["situation_id"],
-                    score=0,
-                    is_strength=False,
-                    games_analyzed=0,
-                    detail="분석에 필요한 게임 수가 부족합니다.",
-                    insight="이 패턴은 더 많은 게임 데이터가 필요합니다. 게임을 더 플레이하면 분석이 활성화됩니다.",
-                    insufficient_data=True,
-                ))
-
-        # ── 예시 게임 첨부 ────────────────────────────────────────
-        # representative_games = List[(GameSummary, relevance_score)] 관련도 높은 순으로 정렬
-        games_with_url = [g for g in games if g.url]
-
-        # 패턴 레이블 → 예시 게임 선택 이유 설명
-        _HINT_MAP: Dict[str, Tuple[str, str]] = {
-            # label: (강점일 때 hint, 약점일 때 hint)
-            "우위 유지력":            ("오프닝 종료 후 우위를 끝까지 유지하며 이긴 게임",
-                                        "오프닝 종료 후 우위를 역전당한 게임 (역전 수 표시)"),
-            "기물 희생 정확도":       ("가장 큰 기물(퀸·룩)을 희생하고 성공한 게임",
-                                        "가장 큰 기물(퀸·룩)을 희생했다가 실패한 게임"),
-            "반대 방향 캐슬링 난전":  ("가장 긴 난전이 펼쳐진 반대 캐슬링 게임",
-                                        "가장 긴 난전이었지만 패배한 반대 캐슬링 게임"),
-            "IQP 구조 이해":          ("IQP 구조에서 공격력으로 이긴 게임",
-                                        "IQP 구조에서 처리 미흡으로 진 게임"),
-            "비숍 쌍 활용":           ("비숍 쌍을 끝까지 유지하며 이긴 게임",
-                                        "비숍 쌍을 유지했음에도 진 게임"),
-            "주력 오프닝 우세도":      ("주력 오프닝에서 결정적으로 이긴 게임",
-                                        "주력 오프닝임에도 실수로 패한 게임"),
-        }
-
-        def _eg_dict(g) -> dict:
-            return {
-                "url":          g.url,
-                "result":       g.result.value,
-                "opening_eco":  g.opening_eco,
-                "opening_name": g.opening_name,
-                "played_at":    g.played_at,
-            }
-
-        def _pick_best(scored: List[Tuple[Any, float]], prefer_result: str) -> Optional[dict]:
-            """관련도 내림차순 정렬, URL 있는 것 중 prefer_result 우선 선택."""
-            with_url = [(g, s) for g, s, *_ in scored if g.url]
-            if not with_url:
-                return None
-            # 관련도 높은 순
-            with_url.sort(key=lambda x: x[1], reverse=True)
-            # prefer_result 먼저
-            preferred = [(g, s) for g, s in with_url if g.result.value == prefer_result]
-            pick = (preferred or with_url)[0][0]
-            return _eg_dict(pick)
-
-        for pattern in patterns:
-            # 데이터 부족 stub은 예시 게임/힌트 불필요
-            if pattern.insufficient_data:
-                continue
-            rep: List[Tuple[Any, float]] = pattern.representative_games or []
-            prefer = "win" if pattern.is_strength else "loss"
-            if rep:
-                pattern.example_game = _pick_best(rep, prefer)
+            sf_cache: Dict[str, List[Dict]] = {}
+            adv_sf_cache: Dict[str, List[Dict]] = {}
+            if _sf.available:
+                _report(35, "engine", "엔진 기반 수 품질을 분석 중", 0, len(games))
+                depth, max_moves = self._engine_plan(len(games))
+                logger.info(
+                    "[tactical.analyze] engine phase user=%s depth=%d max_moves=%d games=%d",
+                    username,
+                    depth,
+                    max_moves,
+                    len(games),
+                )
+                sf_cache = _sf.eval_batch(games, username, max_moves=max_moves, depth=depth)
+                adv_sf_cache = sf_cache
+                _report(45, "engine", "엔진 분석 완료", len(sf_cache), len(games))
             else:
-                # 패턴 전용 풀 없는 경우(이동 레벨 집계) → 전역 폴백
-                fallback_pool: List[Tuple[Any, float]] = [
-                    (g, 1.0) for g in games_with_url
-                    if g.result.value == prefer
-                ]
-                if not fallback_pool:
-                    fallback_pool = [(g, 1.0) for g in games_with_url]
-                pattern.example_game = _pick_best(fallback_pool, prefer)
-                # top_games 모달용으로도 폴백 풀 저장 (최대 20개)
-                # prefer_result 순으로 정렬: 원하는 결과 먼저, 나머지 뒤
-                preferred_fb = [(g, s) for g, s in fallback_pool if g.result.value == prefer]
-                others_fb    = [(g, s) for g, s in fallback_pool if g.result.value != prefer]
-                pattern.representative_games = (preferred_fb + others_fb)[:20]
-            # 힌트 설정
-            hints = _HINT_MAP.get(pattern.label)
-            if hints:
-                pattern.example_hint = hints[0] if pattern.is_strength else hints[1]
+                _report(40, "engine", "엔진 없이 패턴 분석을 진행 중", 0, len(games))
 
-        strengths = sorted(
-            [p for p in patterns if p.is_strength and not p.insufficient_data], key=lambda x: x.score, reverse=True
-        )[:3]
-        weaknesses = sorted(
-            [p for p in patterns if not p.is_strength and not p.insufficient_data], key=lambda x: x.score
-        )[:3]
+            patterns: List[PatternResult] = []
 
-        cluster = None
-        try:
-            if len(games) >= 30:
-                cluster = self._kmeans(games, username)
-        except Exception:
-            logger.exception("[analyze] _kmeans 실패")
+            # ── §2 시간 관리 & 심리 (상황 4) ────────────────
+            try:
+                p = self._p_advantage_throw(games, username, adv_sf_cache)   # 상황 4 → 우위 유지
+                if p:
+                    patterns.append(p)
+            except Exception:
+                logger.exception("[analyze] _p_advantage_throw 실패")
+            _report(56, "advantage", "우위 유지 패턴 분석 중", len(adv_sf_cache) or len(games), len(games))
 
-        # Blunder 게임 집합 계산 (XGBoost 레이블용, data-leakage 방지)
-        # Stockfish 기반 검출 우선, 부족시 더 엄격한 폴백 (≤10 moves 손실)
-        blunder_game_ids: set = {
-            gid for gid, moves in sf_cache.items()
-            if sum(1 for m in moves if m.get("is_blunder") and m["is_my_move"]) >= 2
-        }
-        if len(blunder_game_ids) < 5:
-            blunder_game_ids |= {
-                g.game_id for g in games
-                if g.result.value == "loss" and _estimate_total_moves(g.pgn or "") <= 10
-            }
-        xgb_profile = None
-        try:
-            if len(games) >= 40:
-                xgb_profile = self._xgboost_profile(games, username, blunder_game_ids)
-        except Exception:
-            logger.exception("[analyze] _xgboost_profile 실패")
+            # ── §1 전술 모티프 (상황 1, 3) + §4 방어 능력(상황 13) ───
+            try:
+                patterns.extend(self._p_tactical_motifs(board_games, username, sf_cache))
+            except Exception:
+                logger.exception("[analyze] _p_tactical_motifs 실패")
+            _report(66, "motifs", "전술 모티프 분석 중", len(board_games), len(games))
 
-        result = {
-            "total_games": len(games),
-            "patterns": [_to_dict(p) for p in patterns],
-            "strengths": [_to_dict(p) for p in strengths],
-            "weaknesses": [_to_dict(p) for p in weaknesses],
-            "cluster_analysis": cluster,
-            "xgboost_profile": xgb_profile,
-        }
+            # ── §3 오프닝/엔드게임 + §5 복잡성 (상황 7, 10, 11, 14–17) ─
+            try:
+                patterns.extend(self._p_positional(board_games, username, adv_sf_cache))
+            except Exception:
+                logger.exception("[analyze] _p_positional 실패")
+            _report(76, "positional", "포지션 패턴 분석 중", len(board_games), len(games))
+            try:
+                full_castle_pattern = self._p_opposite_castling_all_games(games, username)
+                if full_castle_pattern:
+                    replaced = False
+                    for i, pattern in enumerate(patterns):
+                        if pattern.situation_id == 7:
+                            patterns[i] = full_castle_pattern
+                            replaced = True
+                            break
+                    if not replaced:
+                        patterns.append(full_castle_pattern)
+            except Exception:
+                logger.exception("[analyze] _p_opposite_castling_all_games 실패")
+            _report(84, "castling", "캐슬링 전개 패턴 분석 중", len(games), len(games))
 
-        now = time.monotonic()
-        with self._analysis_cache_lock:
-            self._analysis_cache[cache_key] = (now, deepcopy(result))
-            expired_keys = [
-                k for k, (ts, _) in self._analysis_cache.items()
-                if (now - ts) > ANALYSIS_CACHE_TTL_SEC
+            # ── §6 오프닝 친숙도 (상황 18) ──────────────────────────
+            try:
+                p = self._p_opening_familiarity(games, username)         # 상황 18
+                if p:
+                    patterns.append(p)
+            except Exception:
+                logger.exception("[analyze] _p_opening_familiarity 실패")
+            _report(89, "opening", "오프닝 친숙도 분석 중", len(games), len(games))
+
+            # ── §5,6 복잡성·전환 + 보너스 ──────────────────────────
+            try:
+                patterns.extend(self._p_complexity(board_games, username, sf_cache, games))
+            except Exception:
+                logger.exception("[analyze] _p_complexity 실패")
+            _report(93, "complexity", "복합 패턴을 정리 중", len(board_games), len(games))
+
+            # 요청된 패턴은 응답에서 완전히 제외
+            patterns = [p for p in patterns if p.label not in REMOVED_PATTERN_LABELS]
+
+            # ── 누락 패턴을 데이터 부족 stub 으로 채우기 ─────────────
+            # 항상 12개 패턴이 나타나도록 고정. 데이터가 부족한 패턴은
+            # insufficient_data=True 로 표시되어 프론트에서 블러 처리됨.
+            _PATTERN_REGISTRY = [
+                dict(label="우위 유지력",           icon="📈",  description="오프닝(5~20수) 연속 +0.75폰↑ 우위게임에서 Smooth/Shaky/Blown 3단계 전환율 분석", category="time",     situation_id=4),
+                dict(label="기물 희생 정확도",       icon="💥",  description="희생 수 자체의 Stockfish 정확도 기반 유효성 분석",                  category="position", situation_id=3),
+                dict(label="반대 방향 캐슬링 난전",  icon="🏹",  description="서로 반대쪽으로 캐슬링한 폰 스톰 상황 승률 분석",                   category="position", situation_id=7),
+                dict(label="IQP 구조 이해",         icon="♟️",  description="고립 퀸 폰(IQP) 구조일 때의 공수 밸런스 승률 분석",                 category="position", situation_id=10),
+                dict(label="비숍 쌍 활용",           icon="🔷",  description="비숍 쌍을 20수까지 유지한 게임의 승률 분석",                       category="position", situation_id=11),
+                dict(label="주력 오프닝 우세도",     icon="📚",  description="자주 플레이한 오프닝(3회+)과 생소한 오프닝의 승률 차이 분석",        category="position", situation_id=18),
             ]
-            for k in expired_keys:
-                self._analysis_cache.pop(k, None)
+            found_labels = {p.label for p in patterns}
+            for stub in _PATTERN_REGISTRY:
+                if stub["label"] not in found_labels:
+                    patterns.append(PatternResult(
+                        label=stub["label"],
+                        icon=stub["icon"],
+                        description=stub["description"],
+                        category=stub["category"],
+                        situation_id=stub["situation_id"],
+                        score=0,
+                        is_strength=False,
+                        games_analyzed=0,
+                        detail="분석에 필요한 게임 수가 부족합니다.",
+                        insight="이 패턴은 더 많은 게임 데이터가 필요합니다. 게임을 더 플레이하면 분석이 활성화됩니다.",
+                        insufficient_data=True,
+                    ))
 
-        return result
+            # ── 예시 게임 첨부 ────────────────────────────────────────
+            # representative_games = List[(GameSummary, relevance_score)] 관련도 높은 순으로 정렬
+            games_with_url = [g for g in games if g.url]
+
+            # 패턴 레이블 → 예시 게임 선택 이유 설명
+            _HINT_MAP: Dict[str, Tuple[str, str]] = {
+                # label: (강점일 때 hint, 약점일 때 hint)
+                "우위 유지력":            ("오프닝 종료 후 우위를 끝까지 유지하며 이긴 게임",
+                                            "오프닝 종료 후 우위를 역전당한 게임 (역전 수 표시)"),
+                "기물 희생 정확도":       ("가장 큰 기물(퀸·룩)을 희생하고 성공한 게임",
+                                            "가장 큰 기물(퀸·룩)을 희생했다가 실패한 게임"),
+                "반대 방향 캐슬링 난전":  ("가장 긴 난전이 펼쳐진 반대 캐슬링 게임",
+                                            "가장 긴 난전이었지만 패배한 반대 캐슬링 게임"),
+                "IQP 구조 이해":          ("IQP 구조에서 공격력으로 이긴 게임",
+                                            "IQP 구조에서 처리 미흡으로 진 게임"),
+                "비숍 쌍 활용":           ("비숍 쌍을 끝까지 유지하며 이긴 게임",
+                                            "비숍 쌍을 유지했음에도 진 게임"),
+                "주력 오프닝 우세도":      ("주력 오프닝에서 결정적으로 이긴 게임",
+                                            "주력 오프닝임에도 실수로 패한 게임"),
+            }
+
+            def _eg_dict(g) -> dict:
+                return {
+                    "url":          g.url,
+                    "result":       g.result.value,
+                    "opening_eco":  g.opening_eco,
+                    "opening_name": g.opening_name,
+                    "played_at":    g.played_at,
+                }
+
+            def _pick_best(scored: List[Tuple[Any, float]], prefer_result: str) -> Optional[dict]:
+                """관련도 내림차순 정렬, URL 있는 것 중 prefer_result 우선 선택."""
+                with_url = [(g, s) for g, s, *_ in scored if g.url]
+                if not with_url:
+                    return None
+                # 관련도 높은 순
+                with_url.sort(key=lambda x: x[1], reverse=True)
+                # prefer_result 먼저
+                preferred = [(g, s) for g, s in with_url if g.result.value == prefer_result]
+                pick = (preferred or with_url)[0][0]
+                return _eg_dict(pick)
+
+            for pattern in patterns:
+                # 데이터 부족 stub은 예시 게임/힌트 불필요
+                if pattern.insufficient_data:
+                    continue
+                rep: List[Tuple[Any, float]] = pattern.representative_games or []
+                prefer = "win" if pattern.is_strength else "loss"
+                if rep:
+                    pattern.example_game = _pick_best(rep, prefer)
+                else:
+                    # 패턴 전용 풀 없는 경우(이동 레벨 집계) → 전역 폴백
+                    fallback_pool: List[Tuple[Any, float]] = [
+                        (g, 1.0) for g in games_with_url
+                        if g.result.value == prefer
+                    ]
+                    if not fallback_pool:
+                        fallback_pool = [(g, 1.0) for g in games_with_url]
+                    pattern.example_game = _pick_best(fallback_pool, prefer)
+                    # top_games 모달용으로도 폴백 풀 저장 (최대 20개)
+                    # prefer_result 순으로 정렬: 원하는 결과 먼저, 나머지 뒤
+                    preferred_fb = [(g, s) for g, s in fallback_pool if g.result.value == prefer]
+                    others_fb    = [(g, s) for g, s in fallback_pool if g.result.value != prefer]
+                    pattern.representative_games = (preferred_fb + others_fb)[:20]
+                # 힌트 설정
+                hints = _HINT_MAP.get(pattern.label)
+                if hints:
+                    pattern.example_hint = hints[0] if pattern.is_strength else hints[1]
+
+            strengths = sorted(
+                [p for p in patterns if p.is_strength and not p.insufficient_data], key=lambda x: x.score, reverse=True
+            )[:3]
+            weaknesses = sorted(
+                [p for p in patterns if not p.is_strength and not p.insufficient_data], key=lambda x: x.score
+            )[:3]
+
+            cluster = None
+            try:
+                if len(games) >= 30:
+                    cluster = self._kmeans(games, username)
+            except Exception:
+                logger.exception("[analyze] _kmeans 실패")
+            _report(96, "clustering", "스타일 군집을 정리 중", len(games), len(games))
+
+            # Blunder 게임 집합 계산 (XGBoost 레이블용, data-leakage 방지)
+            # Stockfish 기반 검출 우선, 부족시 더 엄격한 폴백 (≤10 moves 손실)
+            blunder_game_ids: set = {
+                gid for gid, moves in sf_cache.items()
+                if sum(1 for m in moves if m.get("is_blunder") and m["is_my_move"]) >= 2
+            }
+            if len(blunder_game_ids) < 5:
+                blunder_game_ids |= {
+                    g.game_id for g in games
+                    if g.result.value == "loss" and _estimate_total_moves(g.pgn or "") <= 10
+                }
+            xgb_profile = None
+            try:
+                if len(games) >= 40:
+                    xgb_profile = self._xgboost_profile(games, username, blunder_game_ids)
+            except Exception:
+                logger.exception("[analyze] _xgboost_profile 실패")
+            _report(98, "xgboost", "블런더 리스크 모델을 정리 중", len(games), len(games))
+
+            result = {
+                "total_games": len(games),
+                "patterns": [_to_dict(p) for p in patterns],
+                "strengths": [_to_dict(p) for p in strengths],
+                "weaknesses": [_to_dict(p) for p in weaknesses],
+                "cluster_analysis": cluster,
+                "xgboost_profile": xgb_profile,
+            }
+
+            now = time.monotonic()
+            with self._analysis_cache_lock:
+                self._analysis_cache[cache_key] = (now, deepcopy(result))
+                expired_keys = [
+                    k for k, (ts, _) in self._analysis_cache.items()
+                    if (now - ts) > ANALYSIS_CACHE_TTL_SEC
+                ]
+                for k in expired_keys:
+                    self._analysis_cache.pop(k, None)
+
+            logger.info(
+                "[tactical.analyze] complete user=%s games=%d elapsed=%.2fs patterns=%d",
+                username,
+                len(games),
+                time.monotonic() - analysis_started_at,
+                len(result["patterns"]),
+            )
+            _report(100, "completed", "전술 분석 완료", len(games), len(games))
+            return result
+        finally:
+            with self._analysis_cache_lock:
+                inflight_event = self._analysis_inflight.pop(cache_key, None)
+                if inflight_event is not None:
+                    inflight_event.set()
 
     # ────────────────────────────────────────────────────────
     # 상황 19. Insta-move — 3s 이내 즉각 응수 비율 vs 실수율
@@ -2215,6 +2339,143 @@ class TacticalAnalysisService:
                 }))
             else:
                 no_bp_g.append(g)
+
+        # 희생 후보 수만 2차 고심도 재분석하여(폭포수 전용) 최종 등급 입력값을 갱신한다.
+        if sac_attempts and _sf.available:
+            refine_started_at = time.monotonic()
+            ranked_attempts = sorted(
+                sac_attempts,
+                key=lambda a: (
+                    -float(a.get("sac_val", 0.0) or 0.0),
+                    int(a.get("sacrifice_move_no", 0) or 0),
+                ),
+            )
+            selected_attempts = ranked_attempts[:SF_SAC_REFINE_MAX_ATTEMPTS]
+            candidate_by_game: Dict[str, set[Tuple[int, str]]] = {}
+            max_target_move_no = 0
+            for a in selected_attempts:
+                g = a.get("game")
+                if not g or not getattr(g, "pgn", None):
+                    continue
+                gid = str(getattr(g, "game_id", ""))
+                mv_no = int(a.get("sacrifice_move_no") or 0)
+                mv_clr = str(a.get("sacrifice_color") or "").lower()
+                if not gid or mv_no <= 0 or mv_clr not in ("white", "black"):
+                    continue
+                candidate_by_game.setdefault(gid, set()).add((mv_no, mv_clr))
+                if mv_no > max_target_move_no:
+                    max_target_move_no = mv_no
+
+            if candidate_by_game:
+                refine_games = [
+                    g for g in games
+                    if g.pgn and g.game_id in candidate_by_game
+                ][:SF_SAC_REFINE_MAX_GAMES]
+                refine_max_moves = max(
+                    SF_BUDGET_MOVES,
+                    max_target_move_no + SF_SAC_REFINE_PAD_MOVES,
+                )
+                logger.info(
+                    "[sacrifice.refine] user=%s total_attempts=%d selected_attempts=%d selected_games=%d depth=%d max_moves=%d",
+                    username,
+                    len(sac_attempts),
+                    len(selected_attempts),
+                    len(refine_games),
+                    SF_SAC_REFINE_DEPTH,
+                    refine_max_moves,
+                )
+                if len(sac_attempts) > len(selected_attempts):
+                    logger.warning(
+                        "[sacrifice.refine] capped attempts user=%s kept=%d skipped=%d",
+                        username,
+                        len(selected_attempts),
+                        len(sac_attempts) - len(selected_attempts),
+                    )
+                try:
+                    refined_cache = _sf.eval_batch(
+                        refine_games,
+                        username,
+                        max_moves=refine_max_moves,
+                        depth=SF_SAC_REFINE_DEPTH,
+                    )
+                except Exception:
+                    refined_cache = {}
+                    logger.exception("[sacrifice.refine] refine batch failed user=%s", username)
+
+                def _lookup_sf_move(sf_rows: List[Dict], move_no: int, color: str) -> Optional[Dict]:
+                    target_move = str(move_no)
+                    target_color = color.lower()
+                    for row in sf_rows:
+                        if (
+                            str(row.get("move_no", "")).strip() == target_move
+                            and str(row.get("color", "")).strip().lower() == target_color
+                        ):
+                            return row
+                    return None
+
+                refined_attempt_keys = {
+                    (
+                        getattr(a.get("game"), "game_id", None),
+                        int(a.get("sacrifice_move_no") or 0),
+                        str(a.get("sacrifice_color") or "").lower(),
+                    )
+                    for a in selected_attempts
+                }
+
+                for a in sac_attempts:
+                    g = a.get("game")
+                    if not g:
+                        continue
+                    gid = g.game_id
+                    mv_no = int(a.get("sacrifice_move_no") or 0)
+                    mv_clr = str(a.get("sacrifice_color") or "").lower()
+                    if not gid or mv_no <= 0 or mv_clr not in ("white", "black"):
+                        continue
+                    if (gid, mv_no, mv_clr) not in refined_attempt_keys:
+                        continue
+
+                    sf_rows = refined_cache.get(gid, [])
+                    if not sf_rows:
+                        continue
+
+                    sf_m_refined = _lookup_sf_move(sf_rows, mv_no, mv_clr)
+                    if sf_m_refined is None:
+                        continue
+
+                    cp_after_raw = sf_m_refined.get("cp_after")
+                    if cp_after_raw is not None:
+                        a["cb"] = float(cp_after_raw)
+
+                    cp_loss_raw = sf_m_refined.get("cp_loss")
+                    cp_loss_known = bool(sf_m_refined.get("cp_loss_known", False)) and cp_loss_raw is not None
+                    a["cp_loss_known"] = bool(cp_loss_known)
+                    a["cp_loss"] = float(cp_loss_raw) if cp_loss_known else 999.0
+                    a["is_engine_blunder"] = bool(sf_m_refined.get("is_blunder", False))
+                    a["pv_rank"] = int(sf_m_refined.get("pv_rank", 99) or 99)
+                    a["pv_unique_best"] = bool(sf_m_refined.get("pv_unique_best", False))
+
+                    # 희생 직후(상대 응수) eval 갱신
+                    if mv_clr == "white":
+                        post_move_no = mv_no
+                        post_color = "black"
+                    else:
+                        post_move_no = mv_no + 1
+                        post_color = "white"
+
+                    sf_post_refined = _lookup_sf_move(sf_rows, post_move_no, post_color)
+                    if sf_post_refined is not None and sf_post_refined.get("cp_after") is not None:
+                        eval_post_sac = -float(sf_post_refined.get("cp_after"))
+                        a["ca"] = eval_post_sac
+                        a["has_eval_pair"] = True
+                        a["sac_delta"] = float(a.get("ca", 0.0)) - float(a.get("cb", 0.0))
+                        a["forced_mate"] = bool(eval_post_sac >= 1900.0)
+
+                logger.info(
+                    "[sacrifice.refine] complete user=%s elapsed=%.2fs refined_games=%d",
+                    username,
+                    time.monotonic() - refine_started_at,
+                    len(refined_cache),
+                )
 
         # 희생 시도별 규칙(T1~T5)을 그대로 집계한다.
         if sac_attempts:
