@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routes import player, games, analysis, stats, engine, opening_tier, community
+from app.api.routes import player, games, analysis, stats, engine, opening_tier, community, game_analysis
 from app.shared.services import opening_db
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,7 @@ app.add_middleware(
 app.include_router(player.router, prefix="/api/v1/player", tags=["Player"])
 app.include_router(games.router, prefix="/api/v1/games", tags=["Games"])
 app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["Analysis"])
+app.include_router(game_analysis.router, prefix="/api/v1/game-analysis", tags=["Game Analysis"])
 app.include_router(stats.router, prefix="/api/v1/stats", tags=["Stats"])
 app.include_router(engine.router, prefix="/api/v1/engine", tags=["Engine"])
 app.include_router(opening_tier.router, prefix="/api/v1/opening-tier", tags=["Opening Tier"])
