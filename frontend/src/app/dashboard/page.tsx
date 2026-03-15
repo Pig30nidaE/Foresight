@@ -2,33 +2,13 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import {
-  getPlayerProfile,
-  getFirstMoveStats,
-  getOpeningTree,
-  getBestWorstOpenings,
-  getTimePressure,
-  getTacticalPatterns,
-  getTacticalProgress,
-} from "@/lib/api";
+import { getPlayerProfile } from "@/lib/api";
 import type { Platform, TimeClass } from "@/types";
-import { Suspense, useState, useEffect, useMemo } from "react";
-import FirstMoveBar from "@/features/dashboard/components/charts/FirstMoveBar";
-import OpeningTreeTable from "@/features/dashboard/components/charts/OpeningTreeTable";
-import BestWorstCard from "@/features/dashboard/components/charts/BestWorstCard";
-import BlunderTimeline from "@/features/dashboard/components/charts/BlunderTimeline";
-import TacticalPatternsCard from "@/features/dashboard/components/charts/TacticalPatternsCard";
+import { Suspense, useState, useEffect } from "react";
 import GameHistorySection from "@/features/dashboard/components/GameHistorySection";
-import SectionHeader from "@/shared/components/ui/SectionHeader";
-import {
-  FirstMovesSkeleton,
-  OpeningTreeSkeleton,
-  BestWorstSkeleton,
-  TimelineSkeleton,
-} from "@/shared/components/ui/SkeletonCard";
+import AnalysisSection from "@/features/dashboard/components/AnalysisSection";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
-const TACTICAL_GAME_PRESETS = [50, 100, 200, 300, 500] as const;
 
 function DashboardContent() {
   const params = useSearchParams();
@@ -41,10 +21,7 @@ function DashboardContent() {
   const [timeClass, setTimeClass] = useState<TimeClass>("blitz");
   const [submitted, setSubmitted] = useState(initUsername);
   const [submittedPlatform, setSubmittedPlatform] = useState<Platform>(initPlatform);
-  const [tacticalMaxGames, setTacticalMaxGames] = useState<number>(300);
-  const [pendingTacticalMaxGames, setPendingTacticalMaxGames] = useState<number>(300);
-  const [treeViewSide, setTreeViewSide] = useState<"white" | "black">("white");
-  const [activeTab, setActiveTab] = useState<"analysis" | "games">("analysis");
+  const [activeTab, setActiveTab] = useState<"games" | "analysis">("games");
 
   const sinceMs = undefined;
   const untilMs = undefined;
@@ -85,90 +62,6 @@ function DashboardContent() {
       setTimeClass(profile.preferred_time_class as TimeClass);
     }
   }, [profile?.preferred_time_class]);
-
-  useEffect(() => {
-    setPendingTacticalMaxGames(tacticalMaxGames);
-  }, [tacticalMaxGames]);
-
-  const { data: firstMoves, isLoading: loadingFirst, isSuccess: firstMovesLoaded } = useQuery({
-    queryKey: ["first-moves", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
-    queryFn: () => getFirstMoveStats(submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames),
-    enabled,
-  });
-  const { data: openingTreeWhite, isLoading: loadingTreeW, isSuccess: treeWLoaded } = useQuery({
-    queryKey: ["opening-tree-white", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
-    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs, "white", tacticalMaxGames),
-    enabled,
-  });
-  const { data: openingTreeBlack, isLoading: loadingTreeB, isSuccess: treeBLoaded } = useQuery({
-    queryKey: ["opening-tree-black", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
-    queryFn: () => getOpeningTree(submittedPlatform, submitted, timeClass, sinceMs, untilMs, "black", tacticalMaxGames),
-    enabled,
-  });
-  const { data: bestWorst, isLoading: loadingBW, isSuccess: bwLoaded } = useQuery({
-    queryKey: ["best-worst", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
-    queryFn: () => getBestWorstOpenings(submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames),
-    enabled,
-  });
-  const { data: timePressure, isLoading: loadingTP, isSuccess: timePressureLoaded } = useQuery({
-    queryKey: ["time-pressure", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
-    queryFn: () => getTimePressure(submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames),
-    enabled,
-    staleTime: 120_000,
-  });
-
-  // 전술 패턴 분석
-  const { data: tacticalPatterns, isLoading: loadingTactical, isSuccess: tacticalLoaded } = useQuery({
-    queryKey: ["tactical-patterns", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
-    queryFn: () => getTacticalPatterns(submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames),
-    enabled,
-    staleTime: 180_000,
-    retry: false,
-  });
-
-  const { data: tacticalProgress } = useQuery({
-    queryKey: ["tactical-progress", submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames],
-    queryFn: () => getTacticalProgress(submittedPlatform, submitted, timeClass, sinceMs, untilMs, tacticalMaxGames),
-    enabled,
-    staleTime: 0,
-    retry: 0,
-    refetchInterval: loadingTactical ? 1000 : false,
-  });
-
-  const totalGames = useMemo(() => {
-    // total_games: 백엔드가 첫수 필터 전 실제 집계한 전체 게임 수
-    // (firstMoves.white/black 합산은 첫수 5판 미만 오프닝을 제외해 0이 될 수 있음)
-    return firstMoves?.total_games ?? 0;
-  }, [firstMoves]);
-
-  // isSuccess: 데이터가 실제 돌아온 경우만 판단 (에러 또는 로딩 중에는 오판 안 함)
-  const insufficientData = firstMovesLoaded && submitted !== "" && totalGames < 5;
-
-  const section1Progress = loadingFirst ? 0 : firstMovesLoaded ? 100 : 0;
-
-  const section2LoadedCount = Number(treeWLoaded) + Number(treeBLoaded) + Number(bwLoaded);
-  const section2Progress = Math.round((section2LoadedCount / 3) * 100);
-
-  const section3Progress = loadingTP ? 0 : timePressureLoaded ? 100 : 0;
-
-  const tacticalRealtimeProgress = loadingTactical
-    ? Math.max(0, Math.min(99, tacticalProgress?.progress_percent ?? 5))
-    : 0;
-  const section4Progress = tacticalLoaded
-    ? 100
-    : tacticalRealtimeProgress;
-
-  const tacticalProgressTotal = tacticalProgress?.total_games && tacticalProgress.total_games > 0
-    ? tacticalProgress.total_games
-    : tacticalMaxGames;
-  const tacticalProgressAnalyzed = tacticalProgress?.analyzed_games && tacticalProgress.analyzed_games > 0
-    ? tacticalProgress.analyzed_games
-    : 0;
-  const tacticalProgressMessage = tacticalProgress?.status === "running"
-    ? tacticalProgress.message
-    : tacticalProgress?.status === "failed"
-      ? `분석 실패: ${tacticalProgress.error ?? "알 수 없는 오류"}`
-      : "게임 패턴 기반 강점 · 약점 분석";
 
   const tcGameCount = (tc: TimeClass): number | undefined => {
     if (!profile) return undefined;
@@ -244,37 +137,7 @@ function DashboardContent() {
       {/* ── 기간 탭 ── */}
       {submitted && (
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-chess-border px-2 py-1.5 bg-chess-surface/50">
-            <span className="text-xs font-medium text-chess-muted">게임 횟수</span>
-            <div className="flex rounded-md overflow-hidden border border-chess-border">
-              {TACTICAL_GAME_PRESETS.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => setPendingTacticalMaxGames(size)}
-                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${
-                    pendingTacticalMaxGames === size
-                      ? "bg-chess-accent text-white"
-                      : "bg-chess-surface text-chess-muted hover:text-chess-primary"
-                  }`}
-                >
-                  최근 {size}판
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setTacticalMaxGames(pendingTacticalMaxGames)}
-              disabled={pendingTacticalMaxGames === tacticalMaxGames}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
-                pendingTacticalMaxGames === tacticalMaxGames
-                  ? "bg-chess-border/60 text-chess-muted cursor-not-allowed"
-                  : "bg-chess-primary text-white hover:bg-chess-primary/85"
-              }`}
-            >
-              적용
-            </button>
-          </div>
+          {/* 게임 횟수 선택은 분석 탭으로 이동 */}
         </div>
       )}
 
@@ -335,8 +198,8 @@ function DashboardContent() {
           {/* ── 인페이지 탭 네비게이션 ── */}
           <div className="flex gap-1 border-b border-chess-border">
             {([
-              { value: "analysis", label: "🔍 분석" },
-              { value: "games",    label: "📋 전적검색" },
+              { value: "games",     label: "📋 전적검색" },
+              { value: "analysis",  label: "🔍 분석" },
             ] as const).map((tab) => (
               <button
                 key={tab.value}
@@ -352,125 +215,6 @@ function DashboardContent() {
             ))}
           </div>
 
-          {/* ── 분석 탭 ── */}
-          {activeTab === "analysis" && (
-          <div className="space-y-6">
-              {/* 5게임 미만 블러 오버레이 */}
-              {insufficientData && (
-                <div className="flex items-center gap-3 bg-amber-700/8 border border-amber-700/35 rounded-2xl px-5 py-4">
-                  <span className="text-2xl leading-none select-none">⚠️</span>
-                  <div>
-                    <p className="font-semibold text-amber-700 text-sm">데이터 부족 — 분석 불가</p>
-                    <p className="text-amber-700/70 text-xs mt-0.5">
-                      {timeClass.toUpperCase()} 기준 {totalGames}게임 조회됨.
-                      최소 5게임이 필요합니다. 다른 타임클래스를 선택하거나 전적을 더 쌓아 보세요.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Section 1 ── */}
-              <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                <SectionHeader
-                  title="백 / 흑 첫 수 선호도 및 승률"
-                  desc="가장 많이 사용한 오프닝 계열과 결과 분포"
-                  isLoading={loadingFirst}
-                  progressPercent={section1Progress}
-                />
-                {loadingFirst ? (
-                  <FirstMovesSkeleton />
-                ) : (
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
-                    <FirstMoveBar data={firstMoves?.white ?? []} side="white" />
-                    <FirstMoveBar data={firstMoves?.black ?? []} side="black" />
-                  </div>
-                )}
-              </section>
-
-              {/* ── Section 2 ── */}
-              <section className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                <div className="lg:col-span-2 bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
-                  {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                  <SectionHeader
-                    title="오프닝 트리 탐색기"
-                    desc="오프닝별 게임 수 및 승률 — 클릭하여 전개"
-                    isLoading={loadingTreeW || loadingTreeB || loadingBW}
-                    progressPercent={section2Progress}
-                  />
-                  {/* 백/흑 탭 */}
-                  <div className="flex gap-1 mb-3">
-                    {(["white", "black"] as const).map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setTreeViewSide(s)}
-                        className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
-                          treeViewSide === s
-                            ? s === "white"
-                              ? "bg-chess-bg text-chess-primary"
-                              : "bg-chess-primary text-white"
-                            : "bg-chess-border/50 text-chess-muted hover:text-chess-primary"
-                        }`}
-                      >
-                        {s === "white" ? "⬜ 백" : "⬛ 흑"}
-                      </button>
-                    ))}
-                  </div>
-                  {loadingTreeW || loadingTreeB ? (
-                    <OpeningTreeSkeleton />
-                  ) : (
-                    <OpeningTreeTable
-                      data={treeViewSide === "white" ? (openingTreeWhite ?? []) : (openingTreeBlack ?? [])}
-                    />
-                  )}
-                </div>
-                <div className="bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
-                  {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                  <SectionHeader
-                    title="오프닝 퍼포먼스"
-                    desc="Best / Worst 오프닝 요약"
-                    isLoading={loadingBW}
-                    progressPercent={section2Progress}
-                  />
-                  {loadingBW ? (
-                    <BestWorstSkeleton />
-                  ) : bestWorst ? (
-                    <BestWorstCard data={bestWorst} />
-                  ) : (
-                    <p className="text-chess-muted text-sm">데이터 없음</p>
-                  )}
-                </div>
-              </section>
-
-              {/* ── Section 3 – 시간 압박 블런더 비율 ── */}
-              <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                <SectionHeader
-                  title="시간 압박 블런더 비율"
-                  desc="남은 시간에 따른 블런더 발생률 추이"
-                  isLoading={loadingTP}
-                  progressPercent={section3Progress}
-                />
-                {loadingTP ? <TimelineSkeleton /> : <BlunderTimeline data={timePressure} />}
-              </section>
-
-              {/* ── Section 4 – 전술 패턴 분석 ── */}
-              <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
-                <SectionHeader
-                  title="전술 패턴 분석"
-                  desc={`${tacticalProgressMessage} (${tacticalProgressAnalyzed}/${tacticalProgressTotal}판)`}
-                  isLoading={loadingTactical}
-                  progressPercent={section4Progress}
-                />
-                <TacticalPatternsCard
-                  data={tacticalPatterns}
-                  isLoading={loadingTactical}
-                />
-              </section>
-            </div>
-          )} {/* 분석 탭 끝 */}
-
           {/* ── 전적검색 탭 ── */}
           {activeTab === "games" && (
             <section className="bg-chess-surface border border-chess-border rounded-2xl p-6">
@@ -482,6 +226,17 @@ function DashboardContent() {
                 untilMs={untilMs}
               />
             </section>
+          )}
+
+          {/* ── 상대분석 탭 ── */}
+          {activeTab === "analysis" && (
+            <AnalysisSection
+              username={submitted}
+              platform={submittedPlatform}
+              timeClass={timeClass}
+              sinceMs={sinceMs}
+              untilMs={untilMs}
+            />
           )}
         </>
       )}
