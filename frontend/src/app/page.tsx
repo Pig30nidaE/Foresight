@@ -37,7 +37,7 @@ export default function Home() {
             오프닝 티어표
           </h3>
           <p className="text-chess-muted text-sm mt-1">
-            레이팅 구간별 오프닝 S/A/B/C/D 승률 랭킹
+            레이팅 구간별 오프닝 티어
           </p>
         </Link>
         <Link
@@ -46,10 +46,10 @@ export default function Home() {
         >
           <div className="text-2xl mb-3">🎯</div>
           <h3 className="font-semibold text-chess-primary group-hover:text-chess-accent transition-colors">
-            상대 분석
+            전적 검색
           </h3>
           <p className="text-chess-muted text-sm mt-1">
-            대회 상대의 패턴 · 오프닝 · 약점 리포트
+            유저 전적 검색 및 분석
           </p>
         </Link>
       </div>

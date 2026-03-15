@@ -13,9 +13,11 @@ services:
       PYTHONUNBUFFERED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
       STOCKFISH_PATH: "/usr/games/stockfish"
+      WATCHFILES_FORCE_POLLING: "true"
+      PYTHONPATH: "/app"
     env_file:
       - .env
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -35,14 +37,18 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+      - /app/.next/cache
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "1000"
+      FAST_REFRESH: "true"
+      NODE_ENV: "development"
+      WATCHPACK_WATCHER_DELAY: "300"
     env_file:
       - .env
     depends_on:
       backend:
         condition: service_healthy
-    command: npm run dev -- --hostname 0.0.0.0 --port 3000
+    command: npm run dev -- --hostname 0.0.0.0 --port 3000 --turbopack
