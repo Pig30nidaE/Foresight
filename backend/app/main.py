@@ -8,6 +8,11 @@ from app.core.config import settings
 from app.api.routes import player, games, analysis, stats, engine, opening_tier, community, game_analysis
 from app.shared.services import opening_db
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,  # 기본 로깅 레벨을 INFO로 설정
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
