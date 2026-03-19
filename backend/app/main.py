@@ -50,7 +50,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Foresight API",
-    description="체스 대회 참가자를 위한 AI 기반 대국 분석 서비스 API",
+    description="체스 유저를 위한 분석 플랫폼",
     version="0.1.0",
     lifespan=lifespan,
 )

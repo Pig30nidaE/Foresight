@@ -19,8 +19,8 @@ export const ko = {
   "settings.depthHint": "깊이가 높을수록 더 정확하지만, 분석 시간이 길어질 수 있습니다. (최대 2~5분 소요)",
 
   // Main Home
-  "home.desc1": "체스 대회 참가자를 위한 AI 기반 대국 분석 플랫폼.",
-  "home.desc2": "오프닝 분석 · 상대 준비 · 약점 파악",
+  "home.desc1": "체스 유저를 위한 분석 플랫폼",
+  "home.desc2": "오프닝 티어, 전적 검색 및 분석",
   "home.openingTiers": "오프닝 티어표",
   "home.openingTiersDesc": "레이팅 구간별 오프닝 티어",
   "home.search": "전적 검색",
