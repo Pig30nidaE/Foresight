@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Foresight ♟️ | Chess Analytics for Competitors",
-  description: "체스 대회 참가자를 위한 AI 기반 대국 분석 플랫폼",
+  description: "체스 유저를 위한 분석 플랫폼",
 };
 
 export default function RootLayout({
