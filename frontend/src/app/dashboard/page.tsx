@@ -56,6 +56,9 @@ function DashboardContent() {
     queryKey: ["profile", submittedPlatform, submitted],
     queryFn: () => getPlayerProfile(submittedPlatform, submitted),
     enabled,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   // 프로필이 로드되면 플레이어가 가장 많이 플레이한 타임클래스로 자동 전환
@@ -217,21 +220,23 @@ function DashboardContent() {
             ))}
           </div>
 
-          {/* ── 전적검색 탭 ── */}
-          {activeTab === "games" && (
-            <section className="bg-chess-surface border border-chess-border rounded-2xl p-6">
-              <GameHistorySection
-                username={submitted}
-                platform={submittedPlatform}
-                timeClass={timeClass}
-                sinceMs={sinceMs}
-                untilMs={untilMs}
-              />
-            </section>
-          )}
+          {/* 두 탭을 동시에 마운트해 탭 전환 시 React Query 캐시가 즉시 표시되도록 함 */}
+          <section
+            className={`bg-chess-surface border border-chess-border rounded-2xl p-6 ${
+              activeTab !== "games" ? "hidden" : ""
+            }`}
+            aria-hidden={activeTab !== "games"}
+          >
+            <GameHistorySection
+              username={submitted}
+              platform={submittedPlatform}
+              timeClass={timeClass}
+              sinceMs={sinceMs}
+              untilMs={untilMs}
+            />
+          </section>
 
-          {/* ── 상대분석 탭 ── */}
-          {activeTab === "analysis" && (
+          <div className={activeTab !== "analysis" ? "hidden" : ""} aria-hidden={activeTab !== "analysis"}>
             <AnalysisSection
               username={submitted}
               platform={submittedPlatform}
@@ -239,7 +244,7 @@ function DashboardContent() {
               sinceMs={sinceMs}
               untilMs={untilMs}
             />
-          )}
+          </div>
         </>
       )}
     </div>

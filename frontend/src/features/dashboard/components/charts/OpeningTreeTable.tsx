@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { OpeningTreeNode } from "@/types";
 import OpeningGameListModal from "@/features/dashboard/components/modals/OpeningGameListModal";
+import { useTranslation } from "@/shared/lib/i18n";
 
 interface Props {
   data: OpeningTreeNode[];
@@ -31,6 +32,7 @@ const winColor = (r: number) =>
 
 // 원형 그래프 (Pie Chart) 컴포넌트 - 개선된 디자인
 function OpeningPieChart({ data }: { data: OpeningTreeNode[] }) {
+  const { t } = useTranslation();
   const totalGames = data.reduce((sum, node) => sum + node.games, 0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
@@ -148,7 +150,7 @@ function OpeningPieChart({ data }: { data: OpeningTreeNode[] }) {
 
           {/* 중앙 정보 */}
           <text x="120" y="110" textAnchor="middle" className="fill-chess-muted text-xs font-medium" opacity="0.8">
-            총 게임
+            {t("chart.totalGames")}
           </text>
           <text x="120" y="135" textAnchor="middle" className="fill-chess-accent text-xl font-bold">
             {totalGames}
@@ -177,19 +179,19 @@ function OpeningPieChart({ data }: { data: OpeningTreeNode[] }) {
             </div>
             <div className="text-xs text-chess-muted space-y-0.5">
               <div className="flex justify-between gap-3">
-                <span>비율:</span>
+                <span>{t("chart.ratio")}</span>
                 <span className="text-chess-primary font-semibold">
                   {segments[hoveredIndex].percentage.toFixed(1)}%
                 </span>
               </div>
               <div className="flex justify-between gap-3">
-                <span>게임:</span>
+                <span>{t("chart.games")}</span>
                 <span className="text-chess-primary font-semibold">
-                  {segments[hoveredIndex].node.games}게임
+                  {t("chart.gamesCount").replace("{n}", String(segments[hoveredIndex].node.games))}
                 </span>
               </div>
               <div className="flex justify-between gap-3">
-                <span>승률:</span>
+                <span>{t("chart.winRate")}</span>
                 <span className={`font-semibold ${
                   segments[hoveredIndex].node.win_rate >= 55 ? 'text-emerald-400' :
                   segments[hoveredIndex].node.win_rate >= 45 ? 'text-amber-400' : 'text-red-400'
@@ -227,7 +229,7 @@ function OpeningPieChart({ data }: { data: OpeningTreeNode[] }) {
               <span className={`font-semibold ${hoveredIndex === i ? 'text-chess-primary' : 'text-chess-muted/80'}`}>
                 {seg.percentage.toFixed(1)}%
               </span>
-              <span className="text-chess-muted/50 text-xs">({seg.node.games}게임)</span>
+              <span className="text-chess-muted/50 text-xs">({t("chart.gamesCount").replace("{n}", String(seg.node.games))})</span>
             </div>
           </div>
         ))}
@@ -246,6 +248,7 @@ function OpeningDetailModal({
   onClose: () => void;
   side: "white" | "black";
 }) {
+  const { t } = useTranslation();
   // 각 부모 오프닝별 바리에이션(자식) 접기/펼치기 상태
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
 
@@ -314,11 +317,11 @@ function OpeningDetailModal({
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-chess-border">
           <div>
             <h2 className="text-xl font-bold text-chess-primary">
-              {side === "white" ? "백" : "흑"} 오프닝 상세 분석
+              {side === "white" ? t("chart.whiteOpeningAnalysis") : t("chart.blackOpeningAnalysis")}
             </h2>
             <p className="text-sm text-chess-muted mt-1">
-              총 <span className="text-chess-accent font-semibold">{data.length}</span>개 오프닝 계열 ·
-              <span className="text-chess-primary font-semibold">{totalGames}</span>게임
+              {t("chart.totalOpeningsLines").replace("{n}", String(data.length))}
+              <span className="text-chess-primary font-semibold mx-1">{totalGames}</span>{t("chart.totalGames")}
             </p>
           </div>
 
@@ -334,7 +337,7 @@ function OpeningDetailModal({
         <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
           <div className="w-[320px] flex-shrink-0 p-6 border-b lg:border-b-0 lg:border-r border-chess-border/50 bg-chess-surface/30">
             <h3 className="text-sm font-semibold text-chess-primary mb-4 text-center">
-              오프닝별 게임 비율
+              {t("chart.gameRatioByOpening")}
             </h3>
             <OpeningPieChart data={data} />
           </div>
@@ -342,9 +345,12 @@ function OpeningDetailModal({
           <div className="flex-1 flex flex-col min-w-0">
             <div className="px-6 py-3 border-b border-chess-border/50 bg-chess-surface/20 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-chess-primary">
-                전체 오프닝 목록 
+                {t("chart.allOpeningsList")} 
                 <span className="text-chess-muted font-normal ml-1">
-                  ({data.length}개 계열 · {expandedParents.size > 0 ? `${allOpenings.length - data.length}/${totalVariations}개 바리에이션 표시` : `${totalVariations}개 바리에이션 접힘`})
+                  {expandedParents.size > 0 
+                    ? t("chart.linesVariationsInfo").replace("{lines}", String(data.length)).replace("{showing}", String(allOpenings.length - data.length)).replace("{total}", String(totalVariations))
+                    : t("chart.linesVariationsHidden").replace("{lines}", String(data.length)).replace("{total}", String(totalVariations))
+                  }
                 </span>
               </h3>
               <div className="flex gap-2">
@@ -353,14 +359,14 @@ function OpeningDetailModal({
                   className="px-2 py-1 text-xs bg-chess-surface hover:bg-chess-border/50 
                              text-chess-muted hover:text-chess-primary rounded transition-colors"
                 >
-                  모두 펼치기
+                  {t("chart.expandAll")}
                 </button>
                 <button
                   onClick={collapseAll}
                   className="px-2 py-1 text-xs bg-chess-surface hover:bg-chess-border/50 
                              text-chess-muted hover:text-chess-primary rounded transition-colors"
                 >
-                  모두 접기
+                  {t("chart.collapseAll")}
                 </button>
               </div>
             </div>
@@ -397,19 +403,19 @@ function OpeningDetailModal({
                         </span>
                         {hasChildren && (
                           <span className="text-xs text-chess-muted bg-chess-surface px-1.5 py-0.5 rounded">
-                            {childCount}개 바리에이션
+                            {t("chart.nVariations").replace("{n}", String(childCount))}
                           </span>
                         )}
                       </div>
 
                       <div className="flex items-center gap-3 text-xs shrink-0 ml-2">
-                        <span className="text-chess-muted">{parentNode.games}게임</span>
+                        <span className="text-chess-muted">{t("chart.gamesCount").replace("{n}", String(parentNode.games))}</span>
                         <div className="hidden sm:flex gap-1">
-                          <span className="text-emerald-600">{parentNode.wins}승</span>
+                          <span className="text-emerald-600">{parentNode.wins}{t("chart.win")}</span>
                           <span className="text-chess-muted/50">/</span>
-                          <span className="text-chess-muted">{parentNode.draws}무</span>
+                          <span className="text-chess-muted">{parentNode.draws}{t("chart.draw")}</span>
                           <span className="text-chess-muted/50">/</span>
-                          <span className="text-red-600">{parentNode.losses}패</span>
+                          <span className="text-red-600">{parentNode.losses}{t("chart.loss")}</span>
                         </div>
                         <span className={`font-bold w-10 text-right ${winRateColor}`}>
                           {parentNode.win_rate}%
@@ -445,7 +451,7 @@ function OpeningDetailModal({
                               </div>
 
                               <div className="flex items-center gap-3 text-xs shrink-0 ml-2">
-                                <span className="text-chess-muted/70">{child.games}게임</span>
+                                <span className="text-chess-muted/70">{t("chart.gamesCount").replace("{n}", String(child.games))}</span>
                                 <span className={`font-medium w-8 text-right ${childWinRateColor}`}>
                                   {child.win_rate}%
                                 </span>
@@ -464,7 +470,7 @@ function OpeningDetailModal({
 
         <div className="px-6 py-3 border-t border-chess-border bg-chess-surface/20 text-center">
           <p className="text-xs text-chess-muted">
-            클릭하여 오프닝 트리에서 해당 오프닝 상세 보기
+            {t("chart.clickToViewDetail")}
           </p>
         </div>
       </div>
@@ -475,12 +481,13 @@ function OpeningDetailModal({
 }
 
 export default function OpeningTreeTable({ data }: Props) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showDetail, setShowDetail] = useState(false);
   const [selectedNode, setSelectedNode] = useState<OpeningTreeNode | null>(null);
 
   if (!data.length) {
-    return <p className="text-chess-muted text-sm py-3">오프닝 데이터가 없습니다.</p>;
+    return <p className="text-chess-muted text-sm py-3">{t("chart.noOpeningData")}</p>;
   }
 
   const toggle = (prefix: string) => {
@@ -498,7 +505,7 @@ export default function OpeningTreeTable({ data }: Props) {
       {/* 상단 헤더: +상세보기 버튼 */}
       <div className="flex items-center justify-between mb-2 pb-2 border-b border-chess-border/30">
         <span className="text-xs text-chess-muted">
-          총 {data.length}개 오프닝 계열
+          {t("chart.totalOpenings").replace("{n}", String(data.length))}
         </span>
         <button
           onClick={() => setShowDetail(true)}
@@ -509,7 +516,7 @@ export default function OpeningTreeTable({ data }: Props) {
                      rounded-lg transition-all duration-200"
         >
           <span className="text-sm">+</span>
-          <span>상세보기</span>
+          <span>{t("chart.viewDetails")}</span>
         </button>
       </div>
 
@@ -554,13 +561,13 @@ export default function OpeningTreeTable({ data }: Props) {
 
           {/* Stats */}
           <div className="flex items-center gap-3 text-xs shrink-0 ml-2">
-            <span className="text-chess-muted">{node.games}게임</span>
+            <span className="text-chess-muted">{t("chart.gamesCount").replace("{n}", String(node.games))}</span>
             <div className="flex gap-1">
-              <span className="text-emerald-700">{node.wins}승</span>
+              <span className="text-emerald-700">{node.wins}{t("chart.win")}</span>
               <span className="text-chess-muted">/</span>
-              <span className="text-chess-muted">{node.draws}무</span>
+              <span className="text-chess-muted">{node.draws}{t("chart.draw")}</span>
               <span className="text-chess-muted">/</span>
-              <span className="text-red-700">{node.losses}패</span>
+              <span className="text-red-700">{node.losses}{t("chart.loss")}</span>
             </div>
             <span className={`font-bold w-10 text-right ${winColor(node.win_rate)}`}>
               {node.win_rate}%

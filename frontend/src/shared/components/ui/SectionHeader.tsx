@@ -4,6 +4,7 @@
 "use client";
 
 import { useLoadingProgress } from "@/hooks/useLoadingProgress";
+import { useTranslation } from "@/shared/lib/i18n";
 
 interface Props {
   title: string;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function SectionHeader({ title, desc, isLoading = false, progressPercent }: Props) {
+  const { t } = useTranslation();
   const pct = useLoadingProgress(isLoading, progressPercent);
   const showBar = pct > 0;
 
@@ -23,7 +25,7 @@ export default function SectionHeader({ title, desc, isLoading = false, progress
         {isLoading && (
           <span className="flex items-center gap-1.5 text-[11px] text-chess-accent/80 bg-chess-accent/8 border border-chess-accent/20 px-2.5 py-0.5 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-chess-accent animate-pulse" />
-            불러오는 중
+            {typeof t === "function" ? t("dh.loading") : "Loading..."}
           </span>
         )}
       </div>

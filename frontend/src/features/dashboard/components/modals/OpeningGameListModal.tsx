@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { OpeningTreeNode, PatternGameItem } from "@/types";
+import { useTranslation } from "@/shared/lib/i18n";
 
 interface Props {
   node: OpeningTreeNode | null;
@@ -18,11 +19,14 @@ function toAnalysisUrl(url: string): string {
   return url;
 }
 
-const RESULT_BADGE: Record<string, { label: string; cls: string }> = {
-  win:  { label: "승리", cls: "bg-emerald-700/10 text-emerald-700 border-emerald-700/30" },
-  loss: { label: "패배", cls: "bg-red-600/10 text-red-700 border-red-600/30" },
-  draw: { label: "무승부", cls: "bg-chess-border/30 text-chess-muted border-chess-muted/30" },
-};
+function getResultStyle(t: any, r: "win" | "loss" | "draw") {
+  const map = {
+    win:  { label: t("term.win"), cls: "bg-emerald-700/10 text-emerald-700 border-emerald-700/30" },
+    loss: { label: t("term.loss"), cls: "bg-red-600/10 text-red-700 border-red-600/30" },
+    draw: { label: t("term.draw"), cls: "bg-chess-border/30 text-chess-muted border-chess-muted/30" },
+  };
+  return map[r];
+}
 
 const RESULT_DOT: Record<string, string> = {
   win:  "bg-emerald-600",
@@ -30,8 +34,8 @@ const RESULT_DOT: Record<string, string> = {
   draw: "bg-chess-muted",
 };
 
-function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
-  const badge = RESULT_BADGE[game.result] ?? RESULT_BADGE.draw;
+function GameRow({ game, rank, t }: { game: any; rank: number; t: any }) {
+  const badge = getResultStyle(t, game.result) ?? getResultStyle(t, "draw");
   const dot   = RESULT_DOT[game.result]  ?? RESULT_DOT.draw;
 
   return (
@@ -46,14 +50,10 @@ function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
       <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
       <div className="flex-1 min-w-0">
         <p className="text-sm text-chess-primary font-medium truncate leading-snug">
-          {game.opening_name ?? "오프닝 정보 없음"}
+          {game.opening_name ?? t("pattern.noOpeningInfo")}
         </p>
         <p className="text-xs text-chess-muted mt-0.5">
-          {game.played_at
-            ? new Date(game.played_at).toLocaleDateString("ko-KR", {
-                year: "numeric", month: "short", day: "numeric",
-              })
-            : "날짜 불명"}
+            {game.played_at ? new Date(game.played_at).toLocaleDateString(t("term.win") === "Win" ? "en-US" : "ko-KR", { year: "numeric", month: "short", day: "numeric" }) : t("pattern.unknownDate")}
           {game.white && game.black && (
             <span className="ml-2 opacity-70">{game.white} vs {game.black}</span>
           )}
@@ -68,6 +68,8 @@ function GameRow({ game, rank }: { game: PatternGameItem; rank: number }) {
 }
 
 export default function OpeningGameListModal({ node, onClose }: Props) {
+  const { t } = useTranslation();
+
   useEffect(() => {
     if (!node) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -110,21 +112,21 @@ export default function OpeningGameListModal({ node, onClose }: Props) {
               {node.name.includes(":") ? node.name.split(":", 2)[1].trim() : node.name}
             </h2>
             <p className="text-sm text-chess-muted mt-1">
-              총 <span className="text-chess-primary font-semibold">{total}</span>게임
+              <span dangerouslySetInnerHTML={{ __html: t("pattern.totalGames").replace("{n}", `<span class="text-chess-primary font-semibold">${total}</span>`) }} />
             </p>
           </div>
 
           {/* Win rate badge */}
           <div className="flex flex-col items-center shrink-0">
             <span className={`text-2xl font-black ${winRateColor}`}>{winRate}%</span>
-            <span className="text-xs text-chess-muted">승률</span>
+            <span className="text-xs text-chess-muted">{t("pattern.winRate")}</span>
           </div>
 
           {/* Close button */}
           <button
             onClick={onClose}
             className="shrink-0 text-chess-muted hover:text-chess-primary transition-colors text-xl leading-none mt-0.5"
-            aria-label="닫기"
+            aria-label={t("sac.close")}
           >
             ✕
           </button>
@@ -133,11 +135,11 @@ export default function OpeningGameListModal({ node, onClose }: Props) {
         {/* W/D/L bar */}
         <div className="px-6 py-3 border-b border-chess-border/60">
           <div className="flex gap-2 text-xs mb-2">
-            <span className="text-emerald-700 font-semibold">{node.wins}승</span>
+            <span className="text-emerald-700 font-semibold">{node.wins}{t("term.win").substring(0, 1).toUpperCase()}</span>
             <span className="text-chess-muted">/</span>
-            <span className="text-chess-muted">{node.draws}무</span>
+            <span className="text-chess-muted">{node.draws}{t("term.draw").substring(0, 1).toUpperCase()}</span>
             <span className="text-chess-muted">/</span>
-            <span className="text-red-700 font-semibold">{node.losses}패</span>
+            <span className="text-red-700 font-semibold">{node.losses}{t("term.loss").substring(0, 1).toUpperCase()}</span>
           </div>
           {total > 0 && (
             <div className="flex w-full h-1.5 rounded-full overflow-hidden gap-px">
@@ -159,18 +161,18 @@ export default function OpeningGameListModal({ node, onClose }: Props) {
         {/* Game list */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
           {games.length === 0 ? (
-            <p className="text-center text-chess-muted text-sm py-8">
-              게임 링크 데이터가 없습니다.
-            </p>
+            <div className="py-12 text-center text-chess-muted text-sm border-t border-chess-border/50">
+              {t("pattern.noGameLink")}
+            </div>
           ) : (
-            games.map((g, i) => <GameRow key={g.url} game={g} rank={i + 1} />)
+            games.map((g, i) => <GameRow key={g.url} game={g} rank={i + 1} t={t} />)
           )}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-chess-border text-center">
           <p className="text-xs text-chess-muted">
-            최근 {games.length}게임 표시 · 클릭하여 분석 보드에서 게임 리뷰
+            {t("pattern.recentGamesHelp").replace("{n}", String(games.length))}
           </p>
         </div>
       </div>

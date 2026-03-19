@@ -100,10 +100,9 @@ function parseOppositeCastleDetail(detail: string): {
   };
 }
 
-type AdvantageBreakdownData = Extract<
-  NonNullable<TacticalPattern["chart_data"]>,
-  { type: "advantage_breakdown" }
->;
+type AdvantageBreakdownData = NonNullable<TacticalPattern["chart_data"]> & {
+  type: "advantage_breakdown";
+};
 
 // ─── 우위 유지력 브레이크다운 패널 (situation_id=4 전용) ──────
 function AdvantageBreakdown({ data }: { data: AdvantageBreakdownData }) {
@@ -411,7 +410,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
     : [];
   const cfg = (pattern.situation_id && PATTERN_CONFIG[pattern.situation_id]) || DEFAULT_CONFIG;
   const typeMeta = ANALYSIS_TYPE_META[cfg.analysisType];
-  const castleBreakdown = isOppositeCastle ? parseOppositeCastleDetail(pattern.detail) : null;
+  const castleBreakdown = isOppositeCastle ? parseOppositeCastleDetail(pattern.detail ?? "") : null;
   const iqpBreakdown = isIQPStructure && pattern.chart_data?.type === "iqp_comparison"
     ? pattern.chart_data
     : null;
@@ -633,7 +632,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               {(castlingTab === "opposite"
                 ? pattern.chart_data.opposite_games
                 : pattern.chart_data.same_games
-              ).filter((g) => !!g.url).length === 0 ? (
+              ).filter((g: any) => !!g?.url).length === 0 ? (
                 <p className="text-sm text-chess-muted text-center py-8">
                   {castlingTab === "opposite" ? "반대 방향 캐슬링 게임이 없습니다." : "같은 방향 캐슬링 게임이 없습니다."}
                 </p>
@@ -641,7 +640,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 (castlingTab === "opposite"
                   ? pattern.chart_data.opposite_games
                   : pattern.chart_data.same_games
-                ).filter((g) => !!g.url).map((g, i) => (
+                ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
                   <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
                 ))
               )}
@@ -673,7 +672,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               {(openingTab === "main"
                 ? pattern.chart_data.main_games
                 : pattern.chart_data.unfamiliar_games
-              ).filter((g) => !!g.url).length === 0 ? (
+              ).filter((g: any) => !!g?.url).length === 0 ? (
                 <p className="text-sm text-chess-muted text-center py-8">
                   {openingTab === "main" ? "주력 오프닝 게임이 없습니다." : "생소 오프닝 게임이 없습니다."}
                 </p>
@@ -681,7 +680,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 (openingTab === "main"
                   ? pattern.chart_data.main_games
                   : pattern.chart_data.unfamiliar_games
-                ).filter((g) => !!g.url).map((g, i) => (
+                ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
                   <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
                 ))
               )}
@@ -715,7 +714,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 : iqpTab === "opp"
                   ? pattern.chart_data.opp_iqp_games
                   : pattern.chart_data.none_iqp_games
-              ).filter((g) => !!g.url).length === 0 ? (
+              ).filter((g: any) => !!g?.url).length === 0 ? (
                 <p className="text-sm text-chess-muted text-center py-8">선택한 IQP 구간의 게임이 없습니다.</p>
               ) : (
                 (iqpTab === "my"
@@ -723,7 +722,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                   : iqpTab === "opp"
                     ? pattern.chart_data.opp_iqp_games
                     : pattern.chart_data.none_iqp_games
-                ).filter((g) => !!g.url).map((g, i) => (
+                ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
                   <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
                 ))
               )}
@@ -736,7 +735,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 <div className="flex-1 overflow-hidden grid grid-cols-12">
                   <div className="col-span-4 border-r border-chess-border bg-chess-bg/35 overflow-y-auto px-6 py-4 space-y-3">
                     {pattern.chart_data?.type === "advantage_breakdown" && (
-                      <AdvantageBreakdown data={pattern.chart_data} />
+                      <AdvantageBreakdown data={pattern.chart_data as AdvantageBreakdownData} />
                     )}
                     <div className="rounded-xl border border-chess-border bg-chess-bg/55 p-3">
                       <p className="text-[10px] uppercase tracking-wide text-chess-muted mb-1">해석 가이드</p>
@@ -827,7 +826,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                       {(castlingTab === "opposite"
                         ? pattern.chart_data.opposite_games
                         : pattern.chart_data.same_games
-                      ).filter((g) => !!g.url).length === 0 ? (
+                      ).filter((g: any) => !!g?.url).length === 0 ? (
                         <p className="text-sm text-chess-muted text-center py-8">
                           {castlingTab === "opposite" ? "반대 방향 캐슬링 게임이 없습니다." : "같은 방향 캐슬링 게임이 없습니다."}
                         </p>
@@ -835,7 +834,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                         (castlingTab === "opposite"
                           ? pattern.chart_data.opposite_games
                           : pattern.chart_data.same_games
-                        ).filter((g) => !!g.url).map((g, i) => (
+                        ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
                           <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
                         ))
                       )}
@@ -867,7 +866,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                       {(openingTab === "main"
                         ? pattern.chart_data.main_games
                         : pattern.chart_data.unfamiliar_games
-                      ).filter((g) => !!g.url).length === 0 ? (
+                      ).filter((g: any) => !!g?.url).length === 0 ? (
                         <p className="text-sm text-chess-muted text-center py-8">
                           {openingTab === "main" ? "주력 오프닝 게임이 없습니다." : "생소 오프닝 게임이 없습니다."}
                         </p>
@@ -875,7 +874,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                         (openingTab === "main"
                           ? pattern.chart_data.main_games
                           : pattern.chart_data.unfamiliar_games
-                        ).filter((g) => !!g.url).map((g, i) => (
+                        ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
                           <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
                         ))
                       )}
