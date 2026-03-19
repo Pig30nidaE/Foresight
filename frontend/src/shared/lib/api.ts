@@ -76,18 +76,8 @@ export const analyzeGameBothPlayers = async (
         timeout: 180_000,
       }
     );
-    // #region agent log
-    fetch('http://127.0.0.1:7481/ingest/be5a306c-8cb7-4841-9b1f-99923455307e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2df934'},body:JSON.stringify({sessionId:'2df934',runId:'post-fix',hypothesisId:'H1',location:'frontend/src/shared/lib/api.ts:analyzeGameBothPlayers',message:'api_success',data:{gameId, timePerMove, pgnChars:(pgn?.length??0), timeoutMs:180000},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return data;
   } catch (err: any) {
-    const isAxios = !!err?.isAxiosError;
-    const status = err?.response?.status ?? null;
-    const code = err?.code ?? null; // e.g. ECONNABORTED on timeout
-    const msg = String(err?.message ?? err).slice(0, 300);
-    // #region agent log
-    fetch('http://127.0.0.1:7481/ingest/be5a306c-8cb7-4841-9b1f-99923455307e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2df934'},body:JSON.stringify({sessionId:'2df934',runId:'post-fix',hypothesisId:'H1',location:'frontend/src/shared/lib/api.ts:analyzeGameBothPlayers',message:'api_error',data:{gameId,timePerMove,isAxios,status,code,msg,timeoutMs:180000},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     throw err;
   }
 };
