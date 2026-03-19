@@ -1,8 +1,8 @@
 """
-게임 데이터 분석 서비스 — Pandas 기반 통계 처리
+게임 데이터 분석 서비스 — 순수 Python 통계 처리
 """
 import re
-import pandas as pd
+from collections import defaultdict
 from typing import List, Optional
 from app.models.schemas import GameSummary, OpeningStats, PerformanceSummary, Platform
 from app.shared.services import opening_db
@@ -29,8 +29,8 @@ def _extract_first_moves(pgn: str):
 
 
 class AnalysisService:
-    def build_dataframe(self, games: List[GameSummary]) -> pd.DataFrame:
-        """GameSummary 리스트를 Pandas DataFrame으로 변환"""
+    def build_rows(self, games: List[GameSummary]) -> List[dict]:
+        """GameSummary 리스트를 dict 리스트로 변환"""
         rows = []
         for g in games:
             white1, black1 = _extract_first_moves(g.pgn or '')
@@ -48,7 +48,7 @@ class AnalysisService:
                 "black_move1": black1,
                 "url": g.url,
             })
-        return pd.DataFrame(rows)
+        return rows
 
     def get_performance_summary(
         self,
@@ -58,17 +58,17 @@ class AnalysisService:
         time_class: str = "blitz",
     ) -> PerformanceSummary:
         """전체 퍼포먼스 요약 통계"""
-        df = self.build_dataframe(games)
-        if not df.empty:
-            df = df[df["time_class"] == time_class]
+        rows = self.build_rows(games)
+        if rows:
+            rows = [r for r in rows if r["time_class"] == time_class]
 
-        total = len(df)
-        wins = len(df[df["result"] == "win"]) if total else 0
-        losses = len(df[df["result"] == "loss"]) if total else 0
-        draws = len(df[df["result"] == "draw"]) if total else 0
+        total = len(rows)
+        wins   = sum(1 for r in rows if r["result"] == "win")
+        losses = sum(1 for r in rows if r["result"] == "loss")
+        draws  = sum(1 for r in rows if r["result"] == "draw")
         win_rate = round(wins / total * 100, 1) if total else 0.0
 
-        top_openings = self.get_opening_stats(df, top_n=5)
+        top_openings = self.get_opening_stats(rows, top_n=5)
 
         return PerformanceSummary(
             username=username,
@@ -83,31 +83,30 @@ class AnalysisService:
         )
 
     def get_opening_stats(
-        self, df: pd.DataFrame, top_n: int = 10
+        self, rows: List[dict], top_n: int = 10
     ) -> List[OpeningStats]:
         """오프닝별 통계 (상위 N개)"""
-        if df.empty:
+        if not rows:
             return []
 
-        grouped = (
-            df.groupby(["opening_eco", "opening_name"])["result"]
-            .value_counts()
-            .unstack(fill_value=0)
-            .reset_index()
-        )
+        stats: dict = defaultdict(lambda: {"win": 0, "loss": 0, "draw": 0})
+        for r in rows:
+            key = (r["opening_eco"], r["opening_name"])
+            result = r["result"]
+            stats[key][result] = stats[key].get(result, 0) + 1
 
         result_list = []
-        for _, row in grouped.iterrows():
-            wins = row.get("win", 0)
-            losses = row.get("loss", 0)
-            draws = row.get("draw", 0)
-            total = wins + losses + draws
+        for (eco, name), counts in stats.items():
+            wins   = counts.get("win",  0)
+            losses = counts.get("loss", 0)
+            draws  = counts.get("draw", 0)
+            total  = wins + losses + draws
             if total == 0:
                 continue
             result_list.append(
                 OpeningStats(
-                    eco=row["opening_eco"],
-                    name=row["opening_name"],
+                    eco=eco,
+                    name=name,
                     games=total,
                     wins=wins,
                     losses=losses,
@@ -116,62 +115,60 @@ class AnalysisService:
                 )
             )
 
-        # 가장 많이 플레이한 오프닝 순 정렬
         result_list.sort(key=lambda x: x.games, reverse=True)
         return result_list[:top_n]
 
-    def get_result_trend(self, df: pd.DataFrame) -> List[dict]:
+    def get_result_trend(self, rows: List[dict]) -> List[dict]:
         """시간순 승/패/무 트렌드 (프론트 차트용)"""
-        if df.empty:
+        if not rows:
             return []
-        trend = (
-            df.sort_values("played_at")
-            .assign(
-                win=lambda x: (x["result"] == "win").astype(int),
-                loss=lambda x: (x["result"] == "loss").astype(int),
-                draw=lambda x: (x["result"] == "draw").astype(int),
-            )[["played_at", "win", "loss", "draw"]]
-            .to_dict(orient="records")
-        )
-        return trend
+        return [
+            {
+                "played_at": r["played_at"],
+                "win":  1 if r["result"] == "win"  else 0,
+                "loss": 1 if r["result"] == "loss" else 0,
+                "draw": 1 if r["result"] == "draw" else 0,
+            }
+            for r in sorted(rows, key=lambda r: r["played_at"])
+        ]
 
-    def get_first_move_stats(self, df: pd.DataFrame, username: str) -> dict:
+    def get_first_move_stats(self, rows: List[dict], username: str) -> dict:
         """
         섹션 1: 백/흑 첫 수 선호도 및 승률
         PGN에서 추출한 실제 첫 수(e4/d4/c4/Nf3 등)로 집계
         """
-        if df.empty:
+        if not rows:
             return {"white": [], "black": [], "total_games": 0}
 
-        white_rows = df[df["white"].str.lower() == username].copy() if "white" in df.columns else pd.DataFrame()
-        black_rows = df[df["black"].str.lower() == username].copy() if "black" in df.columns else pd.DataFrame()
+        white_rows = [r for r in rows if r.get("white") and r["white"].lower() == username]
+        black_rows = [r for r in rows if r.get("black") and r["black"].lower() == username]
 
-        def first_move_stats(subset: pd.DataFrame, move_col: str, top_n: int = 7) -> List[dict]:
-            if subset.empty or move_col not in subset.columns:
+        def first_move_stats(subset: List[dict], move_col: str, top_n: int = 7) -> List[dict]:
+            if not subset:
                 return []
-            valid = subset[subset[move_col].notna() & (subset[move_col] != '')].copy()
-            if valid.empty:
+            valid = [r for r in subset if r.get(move_col)]
+            if not valid:
                 return []
-            grouped = (
-                valid.groupby(move_col)["result"]
-                .value_counts()
-                .unstack(fill_value=0)
-                .reset_index()
-            )
+
+            agg: dict = defaultdict(lambda: {"win": 0, "loss": 0, "draw": 0})
+            for r in valid:
+                move = r[move_col]
+                result = r["result"]
+                agg[move][result] = agg[move].get(result, 0) + 1
+
             result = []
-            for _, row in grouped.iterrows():
-                move = row[move_col]
-                wins   = int(row.get("win",  0))
-                losses = int(row.get("loss", 0))
-                draws  = int(row.get("draw", 0))
+            for move, counts in agg.items():
+                wins   = int(counts.get("win",  0))
+                losses = int(counts.get("loss", 0))
+                draws  = int(counts.get("draw", 0))
                 total  = wins + losses + draws
                 if total < 5:
                     continue
                 result.append({
-                    "eco": move,                          # 재사용 필드: 실제 수
-                    "first_move_category": move,          # 프론트 호환용
+                    "eco": move,
+                    "first_move_category": move,
                     "games": total,
-                    "wins":  wins,
+                    "wins":   wins,
                     "losses": losses,
                     "draws":  draws,
                     "win_rate": round(wins / total * 100, 1),
@@ -182,23 +179,23 @@ class AnalysisService:
         return {
             "white": first_move_stats(white_rows, "white_move1"),
             "black": first_move_stats(black_rows, "black_move1"),
-            "total_games": len(df),  # 필터 전 실제 전체 게임 수 (데이터 부족 판단 기준)
+            "total_games": len(rows),
         }
 
-    def get_opening_tree(self, df: pd.DataFrame, depth: int = 3) -> List[dict]:
+    def get_opening_tree(self, rows: List[dict], depth: int = 3) -> List[dict]:
         """
         섹션 2-A: 오프닝 트리
         Level 1 : 오프닝 기본 이름 (콜론 앞 부분) — 예) "Caro-Kann Defense"
         Level 2 : 풀 변형명 + ECO3 코드  — 예) "Caro-Kann Defense: Advance Variation" (B12)
         """
-        if df.empty:
+        if not rows:
             return []
 
         base_tree: dict[str, dict] = {}
 
-        for _, row in df.iterrows():
-            eco  = row.get("opening_eco",  "") or ""
-            name = row.get("opening_name", "") or ""
+        for row in rows:
+            eco    = row.get("opening_eco",  "") or ""
+            name   = row.get("opening_name", "") or ""
             result = row.get("result", "draw")
 
             # 기본 오프닝명 — 콜론이 있으면 앞 부분, 없으면 전체
@@ -207,7 +204,6 @@ class AnalysisService:
             elif name and name != "Unknown":
                 base_name = name.strip()
             else:
-                # 게임에 이름 없으면 ECO DB 조회
                 base_name = opening_db.get_name_by_eco(eco[:3]) if eco else "Unknown"
                 if not base_name:
                     base_name = eco[:1] + "xx" if eco else "Unknown"
@@ -226,9 +222,9 @@ class AnalysisService:
                 }
             node = base_tree[base_name]
             node["games"] += 1
-            if result == "win":  node["wins"]   += 1
+            if result == "win":    node["wins"]   += 1
             elif result == "loss": node["losses"] += 1
-            else: node["draws"] += 1
+            else:                  node["draws"]  += 1
             game_url = row.get("url")
             if game_url:
                 node["games_list"].append({
@@ -298,7 +294,7 @@ class AnalysisService:
         return result_list
 
     def get_best_worst_openings(
-        self, df: pd.DataFrame, min_games: int = 10
+        self, rows: List[dict], min_games: int = 10
     ) -> dict:
         """
         MVP 섹션 2-B: 베스트/워스트 오프닝 요약
@@ -307,14 +303,13 @@ class AnalysisService:
         서로 다른 best/worst를 확보한다. 오프닝이 단 1종류뿐이면
         worst=None 을 반환해 "데이터 부족" 상태를 프론트에 정직하게 알린다.
         """
-        if df.empty:
+        if not rows:
             return {"best": None, "worst": None, "all": []}
 
-        stats = self.get_opening_stats(df, top_n=50)
+        stats = self.get_opening_stats(rows, top_n=50)
         if not stats:
             return {"best": None, "worst": None, "all": []}
 
-        # qualified 가 2개 이상이 될 때까지 min_games 를 낮춘다
         qualified = [s for s in stats if s.games >= min_games]
         if len(qualified) < 2:
             for fallback in [5, 3, 1]:
@@ -322,7 +317,6 @@ class AnalysisService:
                 if len(qualified) >= 2:
                     break
 
-        # 유일 오프닝(best == worst)인 경우: best만 반환
         if len(qualified) == 1:
             sole = qualified[0]
             return {
@@ -347,7 +341,6 @@ class AnalysisService:
             }
 
         best  = max(qualified, key=lambda x: x.win_rate)
-        # worst 는 best 와 ECO가 다른 항목 중에서 선택
         rest  = [s for s in qualified if s.eco != best.eco] or qualified
         worst = min(rest, key=lambda x: x.win_rate)
 
@@ -388,29 +381,6 @@ class AnalysisService:
         """
         MVP 섹션 3-A: 시간 압박 블런더 분석
         수 페이즈(opening/middlegame/endgame) × 시간 압박 여부 교차 집계.
-
-        Returns:
-        {
-          "total_games": int,
-          "games_with_clock": int,
-          "overall": {
-            "white": { pressure_ratio, avg_time_spent, pressure_moves, total_moves },
-            "black": { ... }
-          },
-          "by_phase": [
-            {
-              "phase": "opening"|"middlegame"|"endgame",
-              "white_pressure_ratio": float,  # 0~1
-              "black_pressure_ratio": float,
-              "white_avg_time": float|null,
-              "black_avg_time": float|null,
-            }, ...
-          ],
-          "per_move": [   # 수 번호(1~40)별 평균 소비 시간 + 압박 비율
-            { "move_number": int, "white_avg_time": float, "black_avg_time": float,
-              "white_pressure_pct": float, "black_pressure_pct": float }, ...
-          ]
-        }
         """
         uname = username.lower()
 
@@ -427,23 +397,22 @@ class AnalysisService:
                 "per_move": [],
             }
 
-        # 각 게임에서 '플레이어가 백인지 흑인지' 판단
         def _my_color(g: ParsedGame) -> Optional[str]:
             if g.white.lower() == uname:
                 return "white"
             if g.black.lower() == uname:
                 return "black"
-            return None   # 둘 다 아닌 경우(상대방 분석 시) None → 생략
+            return None
 
         # 수 레코드 평탄화
-        rows: list[dict] = []
+        data: list[dict] = []
         for g in clocked:
             my_color = _my_color(g)
             for m in g.moves:
                 if m.clock_after is None:
                     continue
                 is_mine = (my_color == m.color) if my_color else True
-                rows.append({
+                data.append({
                     "game_id": g.game_id,
                     "color": m.color,
                     "is_mine": is_mine,
@@ -454,66 +423,65 @@ class AnalysisService:
                     "is_pressure": m.is_time_pressure,
                 })
 
-        if not rows:
+        if not data:
             return {"total_games": total, "games_with_clock": 0,
                     "overall": {}, "by_phase": [], "per_move": []}
 
-        df = pd.DataFrame(rows)
-        my_df = df[df["is_mine"]] if uname else df
+        my_data = [r for r in data if r["is_mine"]] if uname else data
 
         # ── Overall ──────────────────────────────────────────────
-        def _summarise(sub: pd.DataFrame) -> dict:
-            if sub.empty:
+        def _summarise(sub: list[dict]) -> dict:
+            if not sub:
                 return {}
             n = len(sub)
-            p = sub["is_pressure"].sum()
-            times = sub["time_spent"].dropna()
+            p = sum(1 for r in sub if r["is_pressure"])
+            times = [r["time_spent"] for r in sub if r["time_spent"] is not None]
             return {
                 "total_moves": int(n),
                 "pressure_moves": int(p),
-                "pressure_ratio": round(float(p / n), 4) if n else 0.0,
-                "avg_time_spent": round(float(times.mean()), 2) if len(times) else None,
+                "pressure_ratio": round(p / n, 4) if n else 0.0,
+                "avg_time_spent": round(sum(times) / len(times), 2) if times else None,
             }
 
         overall: dict = {}
         if uname:
-            # 플레이어 색 무관하게 '내 수' 기준
-            overall["mine"] = _summarise(my_df)
+            overall["mine"] = _summarise(my_data)
         else:
-            overall["white"] = _summarise(df[df["color"] == "white"])
-            overall["black"] = _summarise(df[df["color"] == "black"])
+            overall["white"] = _summarise([r for r in data if r["color"] == "white"])
+            overall["black"] = _summarise([r for r in data if r["color"] == "black"])
 
         # ── By Phase ─────────────────────────────────────────────
         by_phase = []
         for phase in ["opening", "middlegame", "endgame"]:
-            ph_df = my_df[my_df["phase"] == phase] if uname else df[df["phase"] == phase]
-            if ph_df.empty:
+            sub = [r for r in (my_data if uname else data) if r["phase"] == phase]
+            if not sub:
                 continue
-            n = len(ph_df)
-            p = ph_df["is_pressure"].sum()
-            times = ph_df["time_spent"].dropna()
+            n = len(sub)
+            p = sum(1 for r in sub if r["is_pressure"])
+            times = [r["time_spent"] for r in sub if r["time_spent"] is not None]
             by_phase.append({
                 "phase": phase,
                 "moves": int(n),
                 "pressure_moves": int(p),
-                "pressure_ratio": round(float(p / n), 4) if n else 0.0,
-                "avg_time_spent": round(float(times.mean()), 2) if len(times) else None,
+                "pressure_ratio": round(p / n, 4) if n else 0.0,
+                "avg_time_spent": round(sum(times) / len(times), 2) if times else None,
             })
 
         # ── Per Move (수 번호 1~40, 이후 생략) ────────────────────
         per_move: list[dict] = []
+        base = my_data if uname else data
         for mn in range(1, 41):
-            mn_df = my_df[my_df["move_number"] == mn] if uname else df[df["move_number"] == mn]
-            if mn_df.empty:
+            sub = [r for r in base if r["move_number"] == mn]
+            if not sub:
                 continue
-            n = len(mn_df)
-            p = mn_df["is_pressure"].sum()
-            times = mn_df["time_spent"].dropna()
+            n = len(sub)
+            p = sum(1 for r in sub if r["is_pressure"])
+            times = [r["time_spent"] for r in sub if r["time_spent"] is not None]
             per_move.append({
                 "move_number": mn,
                 "games": int(n),
-                "pressure_pct": round(float(p / n * 100), 1) if n else 0.0,
-                "avg_time_spent": round(float(times.mean()), 2) if len(times) else None,
+                "pressure_pct": round(p / n * 100, 1) if n else 0.0,
+                "avg_time_spent": round(sum(times) / len(times), 2) if times else None,
             })
 
         return {

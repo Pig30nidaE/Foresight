@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 
 /**
- * 로딩 상태를 시뮬레이션 퍼센트(0~100)로 변환하는 훅.
- *
- * - isLoading=true  → 0% 에서 시작해 로그 곡선으로 ~88% 까지 서서히 증가
- * - isLoading=false → 100% 로 스냅, 650ms 후 0으로 리셋 (바 사라짐)
+ * 로딩 상태 + 실제 타깃 퍼센트를 UI 진행률(0~100)로 변환하는 훅.
+ * - isLoading=true  -> targetPercent(또는 0)까지 부드럽게 추적
+ * - isLoading=false -> 100으로 스냅 후 650ms 뒤 0으로 리셋
  */
-export function useLoadingProgress(isLoading: boolean): number {
+export function useLoadingProgress(isLoading: boolean, targetPercent?: number): number {
   const [pct, setPct] = useState(0);
   const curRef   = useRef(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resetRef = useRef<ReturnType<typeof setTimeout>  | null>(null);
+
+  const clamp = (value: number) => Math.max(0, Math.min(100, value));
 
   useEffect(() => {
     // 이전 타이머 정리
@@ -18,34 +19,56 @@ export function useLoadingProgress(isLoading: boolean): number {
     if (resetRef.current) clearTimeout(resetRef.current);
 
     if (isLoading) {
-      curRef.current = 0;
-      setPct(0);
+      const target = clamp(targetPercent ?? 0);
+
+      if (curRef.current === 0) {
+        curRef.current = target;
+        setPct(Math.round(curRef.current));
+      }
+
       timerRef.current = setInterval(() => {
-        const remaining = 88 - curRef.current;
-        if (remaining <= 0) {
+        const remaining = target - curRef.current;
+        if (Math.abs(remaining) < 0.3) {
+          curRef.current = target;
+          setPct(Math.round(curRef.current));
           if (timerRef.current) clearInterval(timerRef.current);
           return;
         }
-        // 로그 곡선: 남은 거리의 6%, 최소 0.4씩 증가 → 처음엔 빠르고 끝으로 갈수록 느림
-        const inc = Math.max(0.4, remaining * 0.06);
-        curRef.current = Math.min(88, curRef.current + inc);
+
+        // 타깃과의 차이를 빠르게 좁히되, 작은 값도 끊기지 않게 보정
+        const step = Math.sign(remaining) * Math.max(0.5, Math.abs(remaining) * 0.3);
+        curRef.current = clamp(curRef.current + step);
         setPct(Math.round(curRef.current));
-      }, 250);
+      }, 120);
     } else {
-      // 로딩 완료 → 100% 스냅 후 650ms 뒤 바 제거
-      if (curRef.current > 0) {
+      const finalTarget = clamp(targetPercent ?? 100);
+
+      if (curRef.current <= 0) {
+        curRef.current = 0;
+        setPct(0);
+        return () => {
+          if (timerRef.current) clearInterval(timerRef.current);
+        };
+      }
+
+      // 실제 완료 시에만 100% 스냅 후 바 제거
+      if (finalTarget >= 100 && curRef.current > 0) {
+        curRef.current = 100;
         setPct(100);
         resetRef.current = setTimeout(() => {
           curRef.current = 0;
           setPct(0);
         }, 650);
+      } else {
+        curRef.current = 0;
+        setPct(0);
       }
     }
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isLoading]);
+  }, [isLoading, targetPercent]);
 
   return pct;
 }

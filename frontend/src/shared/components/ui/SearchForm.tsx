@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "@/shared/lib/i18n";
 
 export default function SearchForm() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [username, setUsername] = useState("");
   const [platform, setPlatform] = useState<"chess.com" | "lichess">("chess.com");
 
@@ -44,7 +46,7 @@ export default function SearchForm() {
         type="text"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        placeholder="유저명 입력 (예: MagnusCarlsen)"
+        placeholder={typeof t === "function" ? t("dh.searchPlaceholder") : "유저명 입력 (예: MagnusCarlsen)"}
         className="flex-1 bg-chess-surface border border-chess-border rounded-lg px-4 py-2 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors"
       />
 
@@ -53,7 +55,7 @@ export default function SearchForm() {
         type="submit"
         className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-6 py-2 rounded-lg transition-colors shrink-0"
       >
-        분석 시작 →
+        {typeof t === "function" ? t("dh.startAnalysis") : "분석 시작 →"}
       </button>
     </form>
   );

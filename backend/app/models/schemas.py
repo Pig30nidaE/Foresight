@@ -100,3 +100,54 @@ class PerformanceSummary(BaseModel):
     draws: int
     win_rate: float
     top_openings: List[OpeningStats] = []
+
+
+# ─────────────────────────────────────────────
+# 개별 게임 분석 스키마 (T1~T5 등급)
+# ─────────────────────────────────────────────
+
+class MoveTier(str, Enum):
+    TF = "TF"
+    TH = "TH"
+    T1 = "T1"
+    T2 = "T2"
+    T3 = "T3"
+    T4 = "T4"
+    T5 = "T5"
+    T6 = "T6"
+
+
+class TopMoveInfo(BaseModel):
+    san: str
+    cp: int
+    rank: int
+
+
+class AnalyzedMoveDetail(BaseModel):
+    halfmove: int
+    move_number: int
+    color: str
+    san: str
+    uci: str
+    cp_before: Optional[int]
+    cp_after: Optional[int]
+    cp_loss: int
+    win_pct_before: float
+    win_pct_after: float
+    win_pct_loss: float
+    tier: MoveTier
+    top_moves: List[TopMoveInfo]
+    user_move_rank: int
+    is_only_best: bool
+
+
+class SingleGameAnalysisResponse(BaseModel):
+    game_id: str
+    username: str
+    user_color: str
+    total_moves: int
+    analyzed_moves: List[AnalyzedMoveDetail]
+    tier_counts: dict
+    tier_percentages: dict
+    avg_cp_loss: float
+    accuracy: float
