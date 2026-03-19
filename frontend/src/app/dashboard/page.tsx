@@ -7,12 +7,14 @@ import type { Platform, TimeClass } from "@/types";
 import { Suspense, useState, useEffect } from "react";
 import GameHistorySection from "@/features/dashboard/components/GameHistorySection";
 import AnalysisSection from "@/features/dashboard/components/AnalysisSection";
+import { useTranslation } from "@/shared/lib/i18n";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
 
 function DashboardContent() {
   const params = useSearchParams();
   const router = useRouter();
+  const { t } = useTranslation();
   const initUsername = params.get("username") || "";
   const initPlatform = (params.get("platform") || "chess.com") as Platform;
 
@@ -113,7 +115,7 @@ function DashboardContent() {
               >
                 {tc}
                 {count != null && (
-                  <span className="ml-1 text-xs opacity-70">({count} Games)</span>
+                  <span className="ml-1 text-xs opacity-70">({count} {t("dh.games")})</span>
                 )}
               </button>
             );
@@ -123,14 +125,14 @@ function DashboardContent() {
         <input
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="유저명 입력 (예: MagnusCarlsen)"
+          placeholder={t("dh.searchPlaceholder")}
           className="flex-1 min-w-48 bg-chess-surface border border-chess-border rounded-lg px-4 py-2 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors"
         />
         <button
           type="submit"
           className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-6 py-2 rounded-lg transition-colors shrink-0"
         >
-          분석 시작 →
+          {t("dh.startAnalysis")}
         </button>
       </form>
 
@@ -144,7 +146,7 @@ function DashboardContent() {
       {!submitted && (
         <div className="flex flex-col items-center py-24 gap-3 text-chess-muted">
           <span className="text-5xl select-none">♟️</span>
-          <p className="text-sm">유저명을 입력하고 분석을 시작하세요.</p>
+          <p className="text-sm">{t("dh.emptyState")}</p>
         </div>
       )}
 
@@ -198,8 +200,8 @@ function DashboardContent() {
           {/* ── 인페이지 탭 네비게이션 ── */}
           <div className="flex gap-1 border-b border-chess-border">
             {([
-              { value: "games",     label: "📋 전적검색" },
-              { value: "analysis",  label: "🔍 분석" },
+              { value: "games",     label: t("dh.tab.games") },
+              { value: "analysis",  label: t("dh.tab.analysis") },
             ] as const).map((tab) => (
               <button
                 key={tab.value}
@@ -246,7 +248,7 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<div>Loading Dashboard...</div>}>
       <DashboardContent />
     </Suspense>
   );
