@@ -22,10 +22,6 @@ const NAV_ITEMS = [
 
 
 
-type Platform = "chess.com" | "lichess";
-
-
-
 export default function Navbar() {
 
   const pathname = usePathname();
@@ -33,8 +29,6 @@ export default function Navbar() {
   const router = useRouter();
 
   const [username, setUsername] = useState("");
-
-  const [platform, setPlatform] = useState<Platform>("chess.com");
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -48,7 +42,7 @@ export default function Navbar() {
 
     if (!username.trim()) return;
 
-    router.push(`/dashboard?platform=${platform}&username=${encodeURIComponent(username.trim())}`);
+    router.push(`/dashboard?platform=chess.com&username=${encodeURIComponent(username.trim())}`);
 
     setUsername("");
 
@@ -128,7 +122,7 @@ export default function Navbar() {
             type="button"
             className="p-2 rounded-full hover:bg-chess-border/40 transition-colors"
             aria-label="설정"
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => setSettingsOpen((v) => !v)}
           >
             <Settings size={22} />
           </button>
@@ -137,38 +131,6 @@ export default function Navbar() {
 
           {/* Search Bar */}
           <form onSubmit={handleSearch} className="flex items-center gap-1.5">
-
-          <div className="flex rounded-md overflow-hidden border border-chess-border text-xs">
-
-            {(["chess.com", "lichess"] as const).map((p) => (
-
-              <button
-
-                key={p}
-
-                type="button"
-
-                onClick={() => setPlatform(p)}
-
-                className={`px-2 py-1.5 font-medium transition-colors ${
-
-                  platform === p
-
-                    ? "bg-chess-accent text-white"
-
-                    : "bg-chess-surface text-chess-muted hover:text-chess-primary"
-
-                }`}
-
-              >
-
-                {p === "chess.com" ? "C" : "L"}
-
-              </button>
-
-            ))}
-
-          </div>
 
           <input
 

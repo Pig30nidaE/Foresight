@@ -8,7 +8,7 @@ from app.features.opening_tier.services.opening_tier_service import (
 def test_infer_opening_side_from_ply_parity():
     assert _infer_opening_side(["e2e4"], 1) == "white"
     assert _infer_opening_side(["e2e4", "c7c6"], 2) == "black"
-    # moves가 없는 BFS/legacy 캐시 데이터는 depth parity로 추론
+    # moves가 없는 BFS 데이터는 depth parity로 추론
     assert _infer_opening_side(None, 5) == "white"
     assert _infer_opening_side(None, 4) == "black"
 

@@ -62,7 +62,7 @@ export interface PerformanceSummary {
 // 개별 게임 분석 타입 (T1~T5 등급)
 // ─────────────────────────────────────────────
 
-export type MoveTier = "TH" | "T1" | "T2" | "T3" | "T4" | "T5";
+export type MoveTier = "TH" | "TF" | "T1" | "T2" | "T3" | "T4" | "T5" | "T6";
 
 export interface TopMoveInfo {
   san: string;
@@ -100,7 +100,7 @@ export interface PlayerAnalysis {
   tier_percentages: Record<MoveTier, number>;
   avg_cp_loss: number;
   accuracy: number;
-  moves_by_tier: Record<MoveTier, AnalyzedMove[]>;  // T1~T5별 수 목록
+  moves_by_tier: Record<MoveTier, AnalyzedMove[]>;  // 등급별 수 목록
 }
 
 // 양쪽 플레이어 분석 응답

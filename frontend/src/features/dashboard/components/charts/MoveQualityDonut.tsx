@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { MoveQualityStats } from "@/types";
+import { useTranslation, type I18nKey } from "@/shared/lib/i18n";
 
 // 플레이스홀더 (엔진 분석 결과 없을 때)
 const PLACEHOLDER = [
@@ -22,16 +23,18 @@ const PLACEHOLDER = [
 const CustomTooltip = ({
   active,
   payload,
+  t,
 }: {
   active?: boolean;
   payload?: { name: string; value: number; payload: { color: string; count: number } }[];
+  t: (key: I18nKey) => string;
 }) => {
   if (!active || !payload?.length) return null;
   const { name, value, payload: p } = payload[0];
   return (
     <div className="bg-chess-bg border border-chess-border rounded px-3 py-2 text-xs shadow-sm">
       <p className="font-bold text-chess-primary">{name}</p>
-      <p className="text-chess-muted">{value}% ({p.count}수)</p>
+      <p className="text-chess-muted">{t("chart.movesCount").replace("{value}", String(value)).replace("{count}", String(p.count))}</p>
     </div>
   );
 };
@@ -42,6 +45,7 @@ interface Props {
 }
 
 export default function MoveQualityDonut({ data, isLoading = false }: Props) {
+  const { t } = useTranslation();
   const hasData = !!data && data.total_moves > 0;
   const cats = hasData ? data.categories : PLACEHOLDER;
   // placeholder 시엔 균등 분배로 회색톤 표시
@@ -54,12 +58,12 @@ export default function MoveQualityDonut({ data, isLoading = false }: Props) {
       {/* 상태 배지 */}
       {isLoading && (
         <p className="text-xs text-chess-muted mb-2 animate-pulse">
-          🔍 Stockfish 분석 중... (최대 ~30초)
+          {t("chart.analyzing")}
         </p>
       )}
       {!isLoading && !hasData && (
         <p className="text-xs text-amber-400/80 mb-2 text-center">
-          ⚡ 엔진 분석을 위해 잠시 기다려 주세요
+          {t("chart.waitingEngine")}
         </p>
       )}
 
@@ -70,19 +74,19 @@ export default function MoveQualityDonut({ data, isLoading = false }: Props) {
             <p className="text-2xl font-bold text-emerald-400">
               {data!.accuracy.toFixed(1)}%
             </p>
-            <p className="text-xs text-chess-muted">정확도</p>
+            <p className="text-xs text-chess-muted">{t("chart.accuracyRate")}</p>
           </div>
           <div className="text-center">
             <p className="text-2xl font-bold text-chess-primary">
               {data!.acpl.toFixed(0)}
             </p>
-            <p className="text-xs text-chess-muted">평균 CP 손실</p>
+            <p className="text-xs text-chess-muted">{t("chart.acpl")}</p>
           </div>
           <div className="text-center">
             <p className="text-2xl font-bold text-chess-primary">
               {data!.games_analyzed}
             </p>
-            <p className="text-xs text-chess-muted">분석 게임</p>
+            <p className="text-xs text-chess-muted">{t("chart.analyzedGames")}</p>
           </div>
         </div>
       )}
@@ -108,7 +112,7 @@ export default function MoveQualityDonut({ data, isLoading = false }: Props) {
               />
             ))}
           </Pie>
-          {hasData && <Tooltip content={<CustomTooltip />} />}
+          {hasData && <Tooltip content={<CustomTooltip t={t} />} />}
         </PieChart>
       </ResponsiveContainer>
 
@@ -121,7 +125,7 @@ export default function MoveQualityDonut({ data, isLoading = false }: Props) {
               style={{ backgroundColor: entry.color, opacity: hasData ? 1 : 0.3 }}
             />
             <span className="text-chess-muted truncate">
-              {entry.emoji} {entry.category}
+              {entry.category}
             </span>
             <span className="text-chess-primary ml-auto font-mono">
               {hasData ? `${entry.percentage}%` : "—"}

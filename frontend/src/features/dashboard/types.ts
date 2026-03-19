@@ -38,6 +38,19 @@ export interface FirstMoveEntry {
 export interface PatternGameItem {
   url: string;
   result: "win" | "loss" | "draw";
+  opening_name?: string | null;
+  played_at?: string | null;
+  white?: string | null;
+  black?: string | null;
+  context?: string | null;
+  is_success?: boolean | null;
+  // advantage breakdown용(핀/희생 등) 상태
+  advantage_outcome?: "smooth" | "shaky" | "blown" | null;
+  metric_value?: number | null;
+  metric_label?: string | null;
+
+  // 서버 스키마가 확장될 수 있으므로 UI에서 알 수 없는 필드는 허용
+  [key: string]: any;
 }
 
 export interface OpeningTreeNode {
@@ -170,4 +183,114 @@ export interface TacticalProgressResponse {
   analyzed: number;
   ready: boolean;
   status: string;
+}
+
+// ────────────────────────────────────────────
+// 전술 패턴 UI 전용 타입 (TacticalPatternsCard)
+// ────────────────────────────────────────────
+export interface ClusterInfo {
+  id?: string | number;
+  label: string;
+  description: string;
+  win_rate: number;
+  n_games: number;
+  key_traits: string[];
+  is_strength?: boolean;
+  is_weakness?: boolean;
+  [key: string]: any;
+}
+
+export interface AiInsights {
+  generated_by: string;
+  best_situation: string;
+  worst_situation: string;
+  strengths_summary: string;
+  weaknesses_summary: string;
+  recommendations: string[];
+  training_focus: string;
+  [key: string]: any;
+}
+
+export interface XGBoostRiskFactor {
+  feature: string;
+  description?: string | null;
+  importance?: number | null;
+  [key: string]: any;
+}
+
+export interface XGBoostProfile {
+  blunder_game_rate: number;
+  is_meaningful?: boolean;
+  games_analyzed: number;
+  lift_over_baseline?: number | null;
+  top_risk_factors: XGBoostRiskFactor[];
+
+  // 기술 지표(있을 수도/없을 수도)
+  precision?: number | null;
+  recall?: number | null;
+  f1?: number | null;
+  quality_note?: string | null;
+
+  validation_support?: {
+    positive: number | null;
+    negative: number | null;
+  } | null;
+
+  // 서버 확장 대비
+  [key: string]: any;
+}
+
+export type TacticalChartData = {
+  type: string;
+  [key: string]: any;
+};
+
+export interface TacticalPattern {
+  // 카드/리스트 공통 필드
+  label: string;
+  icon: string;
+  situation_id?: number | null;
+  category: string;
+  score: number;
+
+  // 수치/설명(선택)
+  key_metric_value?: number | null;
+  key_metric_unit?: string;
+  key_metric_label?: string;
+  insight?: string | null;
+  detail?: string;
+  insufficient_data?: boolean;
+
+  // 차트 데이터
+  chart_data?: TacticalChartData | null;
+
+  // 예시 게임(있을 때만)
+  example_game?: { url?: string | null; hint?: string | null } | null;
+
+  // 상세 모달에서 쓰는 게임 목록
+  top_games?: PatternGameItem[];
+
+  [key: string]: any;
+}
+
+export interface TacticalAnalysis {
+  patterns: TacticalPattern[];
+  strengths: TacticalPattern[];
+  weaknesses: TacticalPattern[];
+
+  cluster_analysis?:
+    | {
+        overall_win_rate: number;
+        n_clusters: number;
+        summary: string;
+        clusters: ClusterInfo[];
+        [key: string]: any;
+      }
+    | null;
+
+  xgboost_profile?: XGBoostProfile | null;
+  ai_insights?: AiInsights | null;
+
+  // 서버가 추가 필드를 내려줄 수 있으므로
+  [key: string]: any;
 }

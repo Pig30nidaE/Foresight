@@ -7,8 +7,8 @@ Z-score 기반 S/A/B/C/D 티어를 배정합니다.
 탐색 전략:
     1. OPENINGS_CATALOG의 각 오프닝에 대해 python-chess로 FEN을 생성
     2. asyncio.Semaphore로 동시 요청 수를 제한하며 병렬 API 호출
-    3. 결과를 인메모리 캐시 + 디스크 캐시(JSON)에 저장 (TTL: 30일, 월별 갱신)
-    4. 카탈로그 탐색으로 충분한 결과를 얻지 못하면 BFS 폴백
+    3. 카탈로그 탐색으로 오프닝별 통계를 수집
+    4. 충분하지 않으면 BFS 폴백으로 보완
 
 CSV/JSON 내보내기:
     export_to_csv() / export_to_json_bytes() 로 bytes 반환 → 파일 다운로드용
@@ -22,7 +22,7 @@ import json
 import logging
 import statistics
 from collections import deque
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -89,12 +89,25 @@ SPEED_MAP: Dict[str, str] = {
     "classical": "classical",
 }
 
-# ── 캐시 설정 ─────────────────────────────────────────────────────────
-CACHE_TTL = timedelta(days=30)
-DATA_WINDOW_MONTHS = 6  # 최근 N개월 데이터만 사용
+# ── 데이터 기간 설정 ─────────────────────────────────────────────────
+DATA_WINDOW_MONTHS = 1  # 한달치 데이터만 사용
 
-# 인메모리 캐시: (rating, speed, since, until) → (openings, timestamp)
-_cache: Dict[Tuple[int, str, str, str], Tuple[Dict[str, "_OpeningNode"], datetime]] = {}
+# ── 캐시 (자정 일괄 갱신) ─────────────────────────────────────────────
+_SPEEDS = ("bullet", "blitz", "rapid", "classical")
+
+# backend/data/opening_tier_cache/
+CACHE_DIR = (
+    Path(__file__).resolve()
+    .parent   # services/
+    .parent   # opening_tier/
+    .parent   # features/
+    .parent   # app/
+    .parent   # backend/
+    / "data"
+    / "opening_tier_cache"
+)
+_LATEST_CACHE_PATH = CACHE_DIR / "opening_tier_latest.json"
+_CACHE_STAMP_FORMAT = "%Y-%m-%d"
 
 
 def _compute_date_range() -> Tuple[str, str]:
@@ -121,19 +134,6 @@ def _compute_date_range() -> Tuple[str, str]:
     return since, until
 
 
-# 디스크 캐시 디렉터리: backend/data/opening_tier_cache/
-CACHE_DIR = (
-    Path(__file__).resolve()
-    .parent   # services/
-    .parent   # opening_tier/
-    .parent   # features/
-    .parent   # app/
-    .parent   # backend/
-    / "data"
-    / "opening_tier_cache"
-)
-
-
 @dataclass
 class _OpeningNode:
     eco: str
@@ -152,6 +152,18 @@ def _infer_opening_side(moves: Optional[List[str]], depth: int) -> str:
     return "white" if ply % 2 == 1 else "black"
 
 
+# ECO별 "기준 오프닝 색"을 카탈로그에서 확정해 둡니다.
+# BFS로 더 깊은 수순에서 같은 ECO가 다시 등장해도(마지막 수 색은 달라질 수 있음)
+# ECO 기준 색은 고정하도록 하기 위함입니다.
+_CANONICAL_OPENING_SIDE_BY_ECO: Dict[str, str] = {
+    entry["eco"]: _infer_opening_side(entry["moves"], len(entry["moves"]))
+    for entry in OPENINGS_CATALOG
+}
+
+# 캐시 로직 버전: 로직 변경 시 기존 캐시는 무시하고 새로 생성합니다.
+CACHE_LOGIC_VERSION = 2
+
+
 def _display_label(bracket_key: int) -> str:
     """Chess.com 기준 레이팅 표시 라벨 반환."""
     lo, hi = _BRACKET_DISPLAY[bracket_key]
@@ -159,6 +171,92 @@ def _display_label(bracket_key: int) -> str:
 
 
 class OpeningTierService:
+    def __init__(self) -> None:
+        # NOTE: asyncio primitives are created lazily (first time called in async context).
+        self._tier_cache: Optional[Dict[str, List[Dict[str, Any]]]] = None
+        self._cache_since: Optional[str] = None
+        self._cache_until: Optional[str] = None
+        self._cache_stamp: Optional[str] = None
+        self._cache_ready: Optional[asyncio.Event] = None
+        self._refresh_lock: Optional[asyncio.Lock] = None
+        self._scheduler_task: Optional[asyncio.Task] = None
+
+    def _cache_key(self, rating: int, speed: str, color: str) -> str:
+        return f"{rating}|{speed}|{color}"
+
+    def _current_stamp(self) -> str:
+        # 자정 기준은 서버(UTC) 날짜로 계산
+        return datetime.utcnow().strftime(_CACHE_STAMP_FORMAT)
+
+    async def _ensure_async_primitives(self) -> None:
+        if self._tier_cache is None:
+            self._tier_cache = {}
+        if self._cache_ready is None:
+            self._cache_ready = asyncio.Event()
+            self._cache_ready.clear()
+        if self._refresh_lock is None:
+            self._refresh_lock = asyncio.Lock()
+
+    async def load_cache_from_disk_if_valid(self) -> bool:
+        """현재 날짜 스탬프에 해당하는 캐시가 있으면 로드합니다.
+
+        없으면 네트워크 프리페치(탐색)는 수행하지 않습니다.
+        """
+        await self._ensure_async_primitives()
+        assert self._cache_ready is not None
+
+        stamp = self._current_stamp()
+        if not _LATEST_CACHE_PATH.exists():
+            return False
+
+        try:
+            raw = json.loads(_LATEST_CACHE_PATH.read_text(encoding="utf-8"))
+            if raw.get("stamp") != stamp:
+                return False
+            if raw.get("logic_version") != CACHE_LOGIC_VERSION:
+                return False
+            items: Dict[str, List[Dict[str, Any]]] = raw.get("items", {})
+            since = raw.get("since")
+            until = raw.get("until")
+            if not since or not until:
+                return False
+
+            self._tier_cache = items
+            self._cache_since = since
+            self._cache_until = until
+            self._cache_stamp = stamp
+            self._cache_ready.set()
+            return True
+        except Exception as exc:
+            logger.warning("Opening tier cache load failed: %s", exc)
+            return False
+
+    def start_midnight_cache_refresher(self) -> None:
+        """다음 자정에 캐시를 일괄 재계산합니다."""
+        if self._scheduler_task is not None:
+            return
+
+        async def loop() -> None:
+            while True:
+                try:
+                    now = datetime.utcnow()
+                    next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    if next_midnight <= now:
+                        next_midnight = next_midnight + timedelta(days=1)
+                    sleep_s = (next_midnight - now).total_seconds()
+                    await asyncio.sleep(max(sleep_s, 0))
+                    await self.refresh_cache_for_all()
+                except asyncio.CancelledError:
+                    return
+                except Exception as exc:
+                    logger.exception("Opening tier cache refresh loop error: %s", exc)
+
+        self._scheduler_task = asyncio.create_task(loop())
+
+    def stop_midnight_cache_refresher(self) -> None:
+        if self._scheduler_task is not None:
+            self._scheduler_task.cancel()
+            self._scheduler_task = None
 
     # ─────────────────────────────────────────────────
     # Public API
@@ -167,9 +265,31 @@ class OpeningTierService:
     async def get_opening_tiers(
         self, rating: int, speed: str, color: str
     ) -> Tuple[List[Dict[str, Any]], str]:
-        """오프닝 티어 목록과 데이터 기간 반환. 캐시 미스 시 카탈로그/BFS 탐색 수행."""
-        openings, since, until = await self._get_or_fetch(rating, speed)
-        return self._assign_tiers(openings, color), f"{since} ~ {until}"
+        """오프닝 티어 목록과 데이터 기간 반환.
+
+        캐시가 로드된 경우에는 캐시에서 반환하고,
+        캐시가 없는 경우(서버 시작 직후/첫 자정 전 등)에는 요청 시점에만 탐색합니다.
+        """
+        await self._ensure_async_primitives()
+
+        assert self._cache_ready is not None
+        if self._cache_ready.is_set() and self._tier_cache is not None:
+            key = self._cache_key(rating, speed, color)
+            cached = self._tier_cache.get(key)
+            if cached is not None and self._cache_since and self._cache_until:
+                return cached, f"{self._cache_since} ~ {self._cache_until}"
+
+        since, until = _compute_date_range()
+        openings = await self._fetch_openings(rating, speed, since=since, until=until)
+        tiers = self._assign_tiers(openings, color)
+
+        # 캐시가 로드된 상태라면, 없는 키는 메모리에만 추가 (디스크는 자정 갱신에서만).
+        if self._cache_ready.is_set() and self._tier_cache is not None:
+            self._tier_cache[self._cache_key(rating, speed, color)] = tiers
+            if self._cache_since is None:
+                self._cache_since = since
+                self._cache_until = until
+        return tiers, f"{since} ~ {until}"
 
     def get_bracket_labels(self, speed: str) -> List[RatingBracket]:  # noqa: ARG002
         """레이팅 구간 목록 반환 (Chess.com 기준 라벨)."""
@@ -231,44 +351,87 @@ class OpeningTierService:
             "openings": openings_data,
         }
         return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    async def refresh_cache_for_all(
+        self,
+        ratings: Optional[List[int]] = None,
+        speeds: Optional[List[str]] = None,
+        colors: Optional[List[str]] = None,
+    ) -> str:
+        """자정에 모든 오프닝 티어표 데이터를 일괄 생성/저장합니다."""
+        await self._ensure_async_primitives()
+        assert self._refresh_lock is not None
 
-    def invalidate_cache(self, rating: int, speed: str) -> None:
-        """인메모리 + 디스크 캐시 무효화."""
-        since, until = _compute_date_range()
-        _cache.pop((rating, speed, since, until), None)
-        path = self._disk_cache_path(rating, speed, since, until)
-        if path.exists():
+        async with self._refresh_lock:
+            assert self._cache_ready is not None
+            self._cache_ready.clear()
+
+            # 스케줄러는 "기존 캐시 삭제 후 업데이트"를 원하므로 디스크 먼저 삭제합니다.
             try:
-                path.unlink()
-            except OSError as exc:
-                logger.warning("Failed to delete disk cache %s: %s", path, exc)
+                if CACHE_DIR.exists():
+                    for p in CACHE_DIR.glob("*.json"):
+                        try:
+                            p.unlink()
+                        except OSError:
+                            pass
+            except Exception:
+                # 디스크 삭제 실패해도 즉시 죽지 말고, 캐시 계산/스왑은 계속합니다.
+                logger.exception("Opening tier cache disk delete failed")
 
-    # ─────────────────────────────────────────────────
-    # 캐시 레이어 (인메모리 + 디스크)
-    # ─────────────────────────────────────────────────
+            stamp = self._current_stamp()
+            since, until = _compute_date_range()
 
-    async def _get_or_fetch(
-        self, rating: int, speed: str
-    ) -> Tuple[Dict[str, "_OpeningNode"], str, str]:
-        since, until = _compute_date_range()
-        cache_key = (rating, speed, since, until)
+            if ratings is None:
+                ratings = list(RATING_BRACKETS)
+            if speeds is None:
+                speeds = list(_SPEEDS)
+            if colors is None:
+                colors = ["white", "black"]
 
-        # 1. 인메모리 캐시
-        if cache_key in _cache:
-            result, ts = _cache[cache_key]
-            if datetime.utcnow() - ts < CACHE_TTL:
-                return result, since, until
+            # 재계산
+            new_items: Dict[str, List[Dict[str, Any]]] = {}
+            for rating in ratings:
+                for speed in speeds:
+                    openings = await self._fetch_openings(
+                        rating, speed, since=since, until=until
+                    )
+                    for color in colors:
+                        tiers = self._assign_tiers(openings, color)
+                        new_items[self._cache_key(rating, speed, color)] = tiers
 
-        # 2. 디스크 캐시
-        disk_result = self._disk_cache_load(rating, speed, since, until)
-        if disk_result is not None:
-            _cache[cache_key] = (disk_result, datetime.utcnow())
-            return disk_result, since, until
+            payload = {
+                "logic_version": CACHE_LOGIC_VERSION,
+                "stamp": stamp,
+                "since": since,
+                "until": until,
+                "items": new_items,
+            }
+            _LATEST_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-        # 3. 카탈로그 기반 병렬 탐색 (Primary)
+            # atomic-ish write: temp -> replace
+            tmp_path = _LATEST_CACHE_PATH.with_suffix(".tmp")
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp_path.replace(_LATEST_CACHE_PATH)
+
+            self._tier_cache = new_items
+            self._cache_since = since
+            self._cache_until = until
+            self._cache_stamp = stamp
+            self._cache_ready.set()
+            return stamp
+
+    async def _fetch_openings(
+        self,
+        rating: int,
+        speed: str,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
+    ) -> Dict[str, "_OpeningNode"]:
+        if since is None or until is None:
+            since, until = _compute_date_range()
+        # 1. 카탈로그 기반 병렬 탐색 (Primary)
         openings = await self._catalog_explore(rating, speed, since, until)
 
-        # 4. BFS 폴백 (카탈로그 결과 부족 시)
+        # 2. BFS 폴백 (카탈로그 결과 부족 시)
         if len(openings) < MIN_CATALOG_RESULTS:
             logger.warning(
                 "Catalog returned %d entries for rating=%s speed=%s, falling back to BFS",
@@ -278,66 +441,7 @@ class OpeningTierService:
             for eco, node in bfs_openings.items():
                 if eco not in openings or node.depth > openings[eco].depth:
                     openings[eco] = node
-
-        # 5. 캐시 저장
-        _cache[cache_key] = (openings, datetime.utcnow())
-        self._disk_cache_save(rating, speed, since, until, openings)
-        return openings, since, until
-
-    # ── 디스크 캐시 헬퍼 ─────────────────────────────────────────────
-
-    @staticmethod
-    def _disk_cache_path(rating: int, speed: str, since: str, until: str) -> Path:
-        return CACHE_DIR / f"{rating}_{speed}_{since}_{until}.json"
-
-    def _disk_cache_load(
-        self, rating: int, speed: str, since: str, until: str
-    ) -> Optional[Dict[str, "_OpeningNode"]]:
-        path = self._disk_cache_path(rating, speed, since, until)
-        if not path.exists():
-            return None
-        try:
-            mtime = datetime.fromtimestamp(path.stat().st_mtime)
-            if datetime.utcnow() - mtime > CACHE_TTL:
-                return None
-            with path.open(encoding="utf-8") as f:
-                raw: Dict[str, Any] = json.load(f)
-            if not raw:
-                return None
-            normalized: Dict[str, _OpeningNode] = {}
-            for eco, node in raw.items():
-                side = node.get("opening_side")
-                if side not in {"white", "black"}:
-                    side = _infer_opening_side(node.get("moves"), int(node.get("depth", 0)))
-                normalized[eco] = _OpeningNode(
-                    eco=node.get("eco", eco),
-                    name=node.get("name", ""),
-                    opening_side=side,
-                    white_wins=int(node.get("white_wins", 0)),
-                    draws=int(node.get("draws", 0)),
-                    black_wins=int(node.get("black_wins", 0)),
-                    depth=int(node.get("depth", 0)),
-                    moves=node.get("moves"),
-                )
-            return normalized
-        except Exception as exc:
-            logger.warning("Disk cache load failed %s_%s_%s_%s: %s", rating, speed, since, until, exc)
-            return None
-
-    def _disk_cache_save(
-        self, rating: int, speed: str, since: str, until: str, openings: Dict[str, "_OpeningNode"]
-    ) -> None:
-        if not openings:
-            return
-        try:
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            path = self._disk_cache_path(rating, speed, since, until)
-            payload = {eco: asdict(node) for eco, node in openings.items()}
-            with path.open("w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
-            logger.info("Disk cache saved: %s", path)
-        except Exception as exc:
-            logger.warning("Disk cache save failed %s_%s_%s_%s: %s", rating, speed, since, until, exc)
+        return openings
 
     # ─────────────────────────────────────────────────
     # 카탈로그 기반 병렬 탐색 (Primary)
@@ -395,7 +499,11 @@ class OpeningTierService:
                 _OpeningNode(
                     eco=eco,
                     name=name,
-                    opening_side=_infer_opening_side(entry["moves"], depth),
+                    # 같은 ECO가 더 깊은 포지션에서도 다시 나타날 수 있는데,
+                    # 색 분류는 ECO 기준으로 고정해 흔들림을 제거합니다.
+                    opening_side=_CANONICAL_OPENING_SIDE_BY_ECO.get(
+                        eco, _infer_opening_side(entry["moves"], depth)
+                    ),
                     white_wins=white_wins,
                     draws=draws,
                     black_wins=black_wins,
@@ -474,7 +582,9 @@ class OpeningTierService:
                             openings[eco] = _OpeningNode(
                                 eco=eco,
                                 name=name,
-                                opening_side=_infer_opening_side(None, depth),
+                                opening_side=_CANONICAL_OPENING_SIDE_BY_ECO.get(
+                                    eco, _infer_opening_side(None, depth)
+                                ),
                                 white_wins=white_wins,
                                 draws=draws,
                                 black_wins=black_wins,
@@ -692,20 +802,41 @@ class OpeningTierService:
         values = [s[1] for s in scored]
         mean = statistics.mean(values)
         stdev = statistics.stdev(values) if len(values) > 1 else 1.0
+        # Tier.S의 절대 z-임계값이 데이터 분포에 따라 너무 빡빡해질 때가 있어,
+        # 점수(tier_score) 상위 비율을 S로 우선 배정해 S 출현 빈도를 높입니다.
+        # (하드코딩 숫자 3~4가 아니라 "비율"로 범위를 늘립니다.)
+        top_s_ratio = 0.065  # ~60개면 S가 대략 3~4개 수준
+        n = len(scored)
+        top_s_count = max(1, int(round(n * top_s_ratio)))
 
-        result = []
+        scored_sorted = sorted(scored, key=lambda x: x[1], reverse=True)
+        top_s_ecos = {eco for eco, _, _ in scored_sorted[:top_s_count]}
+
+        result: List[Dict[str, Any]] = []
         for eco, score, node in scored:
             z = (score - mean) / stdev if stdev > 0 else 0.0
             total = node.white_wins + node.draws + node.black_wins
-            win_rate = (
-                node.white_wins if color == "white" else node.black_wins
-            ) / total
+            win_rate = (node.white_wins if color == "white" else node.black_wins) / total
             draw_rate = node.draws / total
+
+            if eco in top_s_ecos:
+                tier = Tier.S
+            else:
+                # S 제외하고 나머지 티어만 기존 z-range 기준으로 매핑
+                if z >= 0.6:
+                    tier = Tier.A
+                elif z >= -0.6:
+                    tier = Tier.B
+                elif z >= -1.258:
+                    tier = Tier.C
+                else:
+                    tier = Tier.D
+
             result.append(
                 {
                     "eco": eco,
                     "name": node.name,
-                    "tier": self._z_to_tier(z),
+                    "tier": tier,
                     "white_wins": node.white_wins,
                     "draws": node.draws,
                     "black_wins": node.black_wins,

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import SearchForm from "@/shared/components/ui/SearchForm";
 import { useTranslation } from "@/shared/lib/i18n";

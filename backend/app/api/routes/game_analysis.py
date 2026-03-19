@@ -1,19 +1,16 @@
 """
 개별 게임 분석 엔드포인트 (양쪽 플레이어)
 ────────────────────────────────────────────────────
-Stockfish 기반 T1~T5 수 품질 분석 (흑/백 모두 분석)
+Stockfish 기반 T1~T6 수 품질 분석 (흑/백 모두 분석)
 
 POST /api/v1/game-analysis/game
-  → 단일 게임의 PGN을 받아 양쪽 플레이어를 T1~T5 등급으로 분석
+  → 단일 게임의 PGN을 받아 양쪽 플레이어를 T1~T6 등급으로 분석
   → 각 등급별 수 목록 포함 (클릭시 체스보드에 표시용 FEN 포함)
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-import json
-import time
-from pathlib import Path
 from functools import partial
 
 from fastapi import APIRouter, HTTPException, Body
@@ -34,27 +31,6 @@ from app.models.schemas import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_DEBUG_LOG_PATH = Path("/Users/pig30nidae/Pig30nidaE/Project/Foresight/.cursor/debug-2df934.log")
-
-
-def _agent_log(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "pre-fix") -> None:
-    try:
-        payload = {
-            "sessionId": "2df934",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        _DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-
 
 class AnalyzedMoveDetail(BaseModel):
     """개별 수 분석 상세"""
@@ -93,7 +69,7 @@ class PlayerAnalysisData(BaseModel):
     # 등급별 수 목록 (필터링용)
     moves_by_tier: Dict[str, List[AnalyzedMoveDetail]] = Field(
         default_factory=dict,
-        description="T1~T5별 수 목록. 예: {'T1': [...], 'T2': [...]}"
+        description="T1~T6별 수 목록. 예: {'T1': [...], 'T2': [...]}"
     )
 
 
@@ -115,6 +91,7 @@ class GameAnalysisRequest(BaseModel):
     pgn: str
     game_id: str = ""
     time_per_move: float = 0.15  # 기본 분석 시간 (초)
+    stockfish_depth: Optional[int] = None
 
 
 def _convert_move_to_schema(move: AnalyzedMove) -> AnalyzedMoveDetail:
@@ -168,21 +145,22 @@ async def analyze_game_both_players(
     request: GameAnalysisRequest = Body(...),
 ):
     """
-    **양쪽 플레이어 T1~T5 분석**
+    **양쪽 플레이어 T1~T6 분석**
     
-    PGN을 받아 Stockfish로 분석하고 **흑/백 양쪽 플레이어**의 수를 T1~T5 등급으로 분류합니다.
+    PGN을 받아 Stockfish로 분석하고 **흑/백 양쪽 플레이어**의 수를 T1~T6 등급으로 분류합니다.
     
     **등급 기준:**
-    - **T1 (최상)**: 유일한 최선수이면서 평가 손실이 거의 없는 수
-    - **T2 (우수)**: 엔진 1순위 추천수 중 손실이 작은 수
-    - **T3 (양호)**: 엔진 2~3순위이거나 공동 최선에 가까운 수
-    - **T4 (보통)**: 추천수는 아니지만 치명적이지 않은 수
-    - **T5 (불량)**: 평가 손실이 큰 실수
+    - **T1 (브릴리언트)**: 불리한 상황 역전/희생 등 전술적 고품질 수
+    - **T2 (최상)**: 최상급 정확수
+    - **T3 (우수)**: 우수한 수
+    - **T4 (양호)**: 양호한 수
+    - **T5 (보통)**: 아쉬운 수
+    - **T6 (실수)**: 평가 손실이 큰 실수
     
     **응답:**
     - 양쪽 플레이어 분석 데이터 (`white_analysis`, `black_analysis`)
     - 각 플레이어의 전체 수 품질 통계 (`tier_counts`, `tier_percentages`)
-    - 등급별 수 목록 (`moves_by_tier`) - T1~T5 탭 필터링용
+    - 등급별 수 목록 (`moves_by_tier`) - T1~T6 탭 필터링용
     - 수별 FEN (`fen_before`, `fen_after`) - 체스보드 표시용
     - Chess.com 방식 정확도 (`accuracy`)
     """
@@ -190,19 +168,6 @@ async def analyze_game_both_players(
         raise HTTPException(status_code=400, detail="PGN이 필요합니다.")
     
     try:
-        # region agent log
-        _agent_log(
-            "H1",
-            "backend/app/api/routes/game_analysis.py:analyze_game_both_players",
-            "request_received",
-            {
-                "game_id": request.game_id,
-                "time_per_move": request.time_per_move,
-                "pgn_chars": len(request.pgn or ""),
-            },
-        )
-        # endregion
-        t0 = time.perf_counter()
         logger.info(
             f"[Game Analysis - Both Players] {request.game_id} "
             f"(time_per_move: {request.time_per_move}s)"
@@ -216,20 +181,9 @@ async def analyze_game_both_players(
             game_id=request.game_id,
             time_per_move=request.time_per_move,
             time_per_multi=request.time_per_move * 0.8,
+            stockfish_depth=request.stockfish_depth,
         )
         result = await loop.run_in_executor(None, fn)
-        # region agent log
-        _agent_log(
-            "H2",
-            "backend/app/api/routes/game_analysis.py:analyze_game_both_players",
-            "analysis_returned",
-            {
-                "game_id": request.game_id,
-                "result_is_none": result is None,
-                "elapsed_ms": int((time.perf_counter() - t0) * 1000),
-            },
-        )
-        # endregion
         
         if result is None:
             raise HTTPException(
@@ -258,17 +212,5 @@ async def analyze_game_both_players(
     except HTTPException:
         raise
     except Exception as exc:
-        # region agent log
-        _agent_log(
-            "H3",
-            "backend/app/api/routes/game_analysis.py:analyze_game_both_players",
-            "unhandled_exception",
-            {
-                "game_id": request.game_id,
-                "exc_type": type(exc).__name__,
-                "exc_str": str(exc)[:500],
-            },
-        )
-        # endregion
         logger.exception(f"[Game Analysis Error] {exc}")
         raise HTTPException(status_code=500, detail=str(exc))

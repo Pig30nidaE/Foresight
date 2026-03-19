@@ -59,7 +59,8 @@ export const getOpeningStats = async (
 export const analyzeGameBothPlayers = async (
   pgn: string,
   gameId: string,
-  timePerMove = 0.15
+  timePerMove = 0.15,
+  stockfishDepth?: number
 ): Promise<BothPlayersAnalysis> => {
   try {
     const { data } = await api.post(
@@ -68,6 +69,7 @@ export const analyzeGameBothPlayers = async (
         pgn,
         game_id: gameId,
         time_per_move: timePerMove,
+        stockfish_depth: stockfishDepth,
       },
       {
         // 분석은 수가 많으면 30초를 쉽게 초과합니다. (기본 axios timeout=30s)
@@ -95,9 +97,10 @@ export const analyzeSingleGame = async (
   pgn: string,
   username: string,
   gameId: string,
-  timePerMove = 0.15
+  timePerMove = 0.15,
+  stockfishDepth?: number
 ): Promise<SingleGameAnalysis> => {
-  const result = await analyzeGameBothPlayers(pgn, gameId, timePerMove);
+  const result = await analyzeGameBothPlayers(pgn, gameId, timePerMove, stockfishDepth);
   
   // 양쪽 분석 중 해당 유저의 분석만 반환
   const targetAnalysis = 
@@ -111,8 +114,8 @@ export const analyzeSingleGame = async (
     user_color: targetAnalysis.color,
     total_moves: targetAnalysis.total_moves,
     analyzed_moves: targetAnalysis.analyzed_moves,
-    tier_counts: targetAnalysis.tier_counts as Record<"T1" | "T2" | "T3" | "T4" | "T5", number>,
-    tier_percentages: targetAnalysis.tier_percentages as Record<"T1" | "T2" | "T3" | "T4" | "T5", number>,
+    tier_counts: targetAnalysis.tier_counts as Record<"TH" | "TF" | "T1" | "T2" | "T3" | "T4" | "T5" | "T6", number>,
+    tier_percentages: targetAnalysis.tier_percentages as Record<"TH" | "TF" | "T1" | "T2" | "T3" | "T4" | "T5" | "T6", number>,
     avg_cp_loss: targetAnalysis.avg_cp_loss,
     accuracy: targetAnalysis.accuracy,
   };

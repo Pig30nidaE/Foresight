@@ -18,7 +18,7 @@ export default function BestWorstCard({ data }: Props) {
       {data.best ? (
         <div className="bg-emerald-700/8 border border-emerald-700/35 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">🏆</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />
             <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
               {t("chart.bestOpening")}
             </span>
@@ -40,7 +40,7 @@ export default function BestWorstCard({ data }: Props) {
       {data.worst ? (
         <div className="bg-red-700/8 border border-red-600/35 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">⚠️</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" />
             <span className="text-xs font-bold text-red-700 uppercase tracking-wider">
               {t("chart.worstOpening")}
             </span>

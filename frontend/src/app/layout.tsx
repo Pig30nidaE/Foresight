@@ -18,7 +18,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={`${inter.className} bg-chess-bg text-chess-primary min-h-screen`}>
+      <body
+        className={`${inter.className} min-h-screen bg-[var(--background)] text-[var(--foreground)]`}
+      >
         <Providers>
           <Navbar />
           <main className="max-w-screen-2xl mx-auto px-6 py-10">{children}</main>

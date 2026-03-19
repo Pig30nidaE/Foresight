@@ -50,11 +50,11 @@ async def get_opening_stats(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class)
 
-        df = analysis_svc.build_dataframe(games)
-        if not df.empty and time_class:
-            df = df[df["time_class"] == time_class]
+        rows = analysis_svc.build_rows(games)
+        if rows and time_class:
+            rows = [r for r in rows if r["time_class"] == time_class]
 
-        return analysis_svc.get_opening_stats(df, top_n)
+        return analysis_svc.get_opening_stats(rows, top_n)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -76,16 +76,16 @@ async def get_opponent_analysis(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class)
 
-        df = analysis_svc.build_dataframe(games)
-        if not df.empty and time_class:
-            df = df[df["time_class"] == time_class]
+        rows = analysis_svc.build_rows(games)
+        if rows and time_class:
+            rows = [r for r in rows if r["time_class"] == time_class]
 
-        openings = analysis_svc.get_opening_stats(df, top_n=10)
-        trend = analysis_svc.get_result_trend(df)
+        openings = analysis_svc.get_opening_stats(rows, top_n=10)
+        trend = analysis_svc.get_result_trend(rows)
 
-        total = len(df)
-        wins = len(df[df["result"] == "win"]) if total else 0
-        losses = len(df[df["result"] == "loss"]) if total else 0
+        total = len(rows)
+        wins   = sum(1 for r in rows if r["result"] == "win")
+        losses = sum(1 for r in rows if r["result"] == "loss")
 
         return {
             "username": username,
