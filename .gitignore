@@ -69,3 +69,8 @@ htmlcov/
 # Cache / Generated
 backend/app/services/_eco_cache.json
 .cache/
+
+# Local dev convenience scripts
+start.sh
+start.cmd
+start.ps1
