@@ -100,8 +100,12 @@ function parseOppositeCastleDetail(detail: string): {
   };
 }
 
+type AdvantageBreakdownData = NonNullable<TacticalPattern["chart_data"]> & {
+  type: "advantage_breakdown";
+};
+
 // ─── 우위 유지력 브레이크다운 패널 (situation_id=4 전용) ──────
-function AdvantageBreakdown({ data }: { data: NonNullable<TacticalPattern["chart_data"]> }) {
+function AdvantageBreakdown({ data }: { data: AdvantageBreakdownData }) {
   const total = asFiniteNumber(data.total);
   const maintained = asFiniteNumber(data.maintained ?? data.converted);
   const reversedMid = asFiniteNumber(data.reversed_mid ?? data.shaky);
@@ -123,7 +127,6 @@ function AdvantageBreakdown({ data }: { data: NonNullable<TacticalPattern["chart
         <div className="bg-amber-600 h-full transition-all"  style={{ width: `${midPct}%` }}      title={`미들게임 역전 ${reversedMid}건`} />
         <div className="bg-red-600 h-full transition-all"    style={{ width: `${endPct}%` }}      title={`엔드게임 역전 ${reversedEnd}건`} />
       </div>
-
       {/* 수치 범례 */}
       <div className="grid grid-cols-3 gap-2 text-xs">
         <div className="flex flex-col gap-0.5">
@@ -193,20 +196,26 @@ function GameRow({ game, rank, config }: GameRowProps) {
 
   const hasCtx    = !!game.context;
   const hasMetric = game.metric_value != null && game.metric_label;
+  const dotClass = `w-2 h-2 rounded-full shrink-0 mt-1.5 ${dot}`;
+  const statusClass = `text-xs font-bold ${statusCls}`;
+  const resultBadgeClass = [
+    "text-[10px] px-1.5 py-0.5 rounded-full border font-semibold",
+    badge.cls,
+    config.analysisType === "win_rate" ? "text-xs" : "opacity-70",
+  ].join(" ");
 
   return (
     <a
       href={toAnalysisUrl(game.url)}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-start gap-3 rounded-xl border border-chess-border bg-chess-bg/80
-                 px-4 py-3 hover:border-chess-muted hover:bg-chess-surface transition-all duration-150"
+      className="group flex items-start gap-3 rounded-xl border border-chess-border bg-chess-bg/80 px-4 py-3 hover:border-chess-muted hover:bg-chess-surface transition-all duration-150"
     >
       {/* 순위 */}
       <span className="text-xs font-mono text-chess-muted w-5 shrink-0 text-right mt-0.5">#{rank}</span>
 
       {/* 결과 점 */}
-      <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${dot}`} />
+      <span className={dotClass} />
 
       {/* 오프닝 + 날짜/플레이어 */}
       <div className="flex-1 min-w-0 space-y-0.5">
@@ -233,12 +242,11 @@ function GameRow({ game, rank, config }: GameRowProps) {
       {/* 우측 배지 영역 */}
       <div className="flex flex-col items-end gap-1 shrink-0">
         {/* 패턴 성공/실패 레이블 */}
-        <span className={`text-xs font-bold ${statusCls}`}>{statusLabel}</span>
+        <span className={statusClass}>{statusLabel}</span>
 
         {/* 핵심 수치 배지 (있을 때만) */}
         {hasMetric && (
-          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md
-                           border border-amber-700/30 bg-amber-700/8 text-amber-700 font-mono">
+          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border border-amber-700/30 bg-amber-700/8 text-amber-700 font-mono">
             {game.metric_value!.toFixed(
               game.metric_label?.includes("비율") || game.metric_label?.includes("CP") ? 1 : 0
             )}
@@ -247,8 +255,7 @@ function GameRow({ game, rank, config }: GameRowProps) {
         )}
 
         {/* 게임 결과 배지 (수 품질 분석이면 작게, 승률 분석이면 보통 크기) */}
-        <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-semibold ${badge.cls}
-          ${config.analysisType === "win_rate" ? "text-xs" : "opacity-70"}`}>
+        <span className={resultBadgeClass}>
           {badge.label}
         </span>
       </div>
@@ -375,13 +382,6 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
   const [openingTab, setOpeningTab] = useState<"main" | "unfamiliar">("main");
   const [advantageTab, setAdvantageTab] = useState<"kept" | "blown">("kept");
 
-  useEffect(() => {
-    setCastlingTab("opposite");
-    setIqpTab("my");
-    setOpeningTab("main");
-    setAdvantageTab("kept");
-  }, [pattern]);
-
   // ESC 키 닫기 (희생 모달에서는 SacrificePatternModal이 자체 처리)
   useEffect(() => {
     if (!pattern || isSacrifice) return;
@@ -410,7 +410,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
     : [];
   const cfg = (pattern.situation_id && PATTERN_CONFIG[pattern.situation_id]) || DEFAULT_CONFIG;
   const typeMeta = ANALYSIS_TYPE_META[cfg.analysisType];
-  const castleBreakdown = isOppositeCastle ? parseOppositeCastleDetail(pattern.detail) : null;
+  const castleBreakdown = isOppositeCastle ? parseOppositeCastleDetail(pattern.detail ?? "") : null;
   const iqpBreakdown = isIQPStructure && pattern.chart_data?.type === "iqp_comparison"
     ? pattern.chart_data
     : null;
@@ -427,8 +427,8 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-xl max-h-[88vh] flex flex-col
-                   bg-chess-surface border border-chess-border rounded-2xl shadow-2xl overflow-hidden"
+        className={`relative w-full ${isAdvantageRetention ? "max-w-6xl" : "max-w-xl"} max-h-[88vh] flex flex-col
+                   bg-chess-surface border border-chess-border rounded-2xl shadow-2xl overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── 헤더 ── */}
@@ -484,8 +484,10 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
           <button onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary transition-colors text-xl leading-none p-1">✕</button>
         </div>
 
-        {/* ── 점수 + 요약 ── */}
-        <div className={`px-6 py-3 border-b border-chess-border space-y-2 ${
+        {/* ── 본문: 좌측 기존 항목 / 우측 경기 기록 ── */}
+        <div className="flex-1 min-h-0 md:grid md:grid-cols-12">
+        {/* ── 점수 + 요약 (좌측) ── */}
+        <div className={`overflow-y-auto px-6 py-3 border-b border-chess-border space-y-2 md:col-span-4 md:border-b-0 md:border-r ${
           (isOppositeCastle || isIQPStructure || isOpeningFamiliarity) ? "bg-gradient-to-b from-chess-bg/55 to-chess-bg/30" : "bg-chess-bg/40"
         }`}>
           <div className="flex items-center justify-between">
@@ -599,8 +601,10 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
           )}
         </div>
 
-        {/* ── 게임 목록 ── */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+        {/* ── 게임 목록 (우측) ── */}
+        <div
+          className="overflow-y-auto px-6 py-4 space-y-2 md:col-span-8 md:bg-chess-bg/20"
+        >
           {isOppositeCastle && pattern.chart_data?.type === "castling_comparison" ? (
             <>
               {/* 방향별 탭 네비게이션 */}
@@ -628,7 +632,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               {(castlingTab === "opposite"
                 ? pattern.chart_data.opposite_games
                 : pattern.chart_data.same_games
-              ).filter((g) => !!g.url).length === 0 ? (
+              ).filter((g: any) => !!g?.url).length === 0 ? (
                 <p className="text-sm text-chess-muted text-center py-8">
                   {castlingTab === "opposite" ? "반대 방향 캐슬링 게임이 없습니다." : "같은 방향 캐슬링 게임이 없습니다."}
                 </p>
@@ -636,7 +640,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 (castlingTab === "opposite"
                   ? pattern.chart_data.opposite_games
                   : pattern.chart_data.same_games
-                ).filter((g) => !!g.url).map((g, i) => (
+                ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
                   <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
                 ))
               )}
@@ -668,7 +672,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               {(openingTab === "main"
                 ? pattern.chart_data.main_games
                 : pattern.chart_data.unfamiliar_games
-              ).filter((g) => !!g.url).length === 0 ? (
+              ).filter((g: any) => !!g?.url).length === 0 ? (
                 <p className="text-sm text-chess-muted text-center py-8">
                   {openingTab === "main" ? "주력 오프닝 게임이 없습니다." : "생소 오프닝 게임이 없습니다."}
                 </p>
@@ -676,7 +680,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 (openingTab === "main"
                   ? pattern.chart_data.main_games
                   : pattern.chart_data.unfamiliar_games
-                ).filter((g) => !!g.url).map((g, i) => (
+                ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
                   <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
                 ))
               )}
@@ -710,7 +714,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 : iqpTab === "opp"
                   ? pattern.chart_data.opp_iqp_games
                   : pattern.chart_data.none_iqp_games
-              ).filter((g) => !!g.url).length === 0 ? (
+              ).filter((g: any) => !!g?.url).length === 0 ? (
                 <p className="text-sm text-chess-muted text-center py-8">선택한 IQP 구간의 게임이 없습니다.</p>
               ) : (
                 (iqpTab === "my"
@@ -718,7 +722,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                   : iqpTab === "opp"
                     ? pattern.chart_data.opp_iqp_games
                     : pattern.chart_data.none_iqp_games
-                ).filter((g) => !!g.url).map((g, i) => (
+                ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
                   <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
                 ))
               )}
@@ -726,85 +730,181 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
           ) : (
             <>
               {/* 우위 유지력 전용 브레이크다운 패널 */}
-              {pattern.chart_data?.type === "advantage_breakdown" && (
-                <div className="pb-2">
-                  <AdvantageBreakdown data={pattern.chart_data} />
-                </div>
-              )}
-              {games.length === 0 ? (
-                <p className="text-sm text-chess-muted text-center py-8">URL 있는 대표 게임이 없습니다.</p>
-              ) : (
-                <>
-                  {/* 통계 요약 */}
-                  <div className="pb-2">
-                    <StatSummary games={games} config={cfg} />
+              {/* ── 게임 목록 ── */}
+              {isAdvantageRetention ? (
+                <div className="flex-1 overflow-hidden grid grid-cols-12">
+                  <div className="col-span-4 border-r border-chess-border bg-chess-bg/35 overflow-y-auto px-6 py-4 space-y-3">
+                    {pattern.chart_data?.type === "advantage_breakdown" && (
+                      <AdvantageBreakdown data={pattern.chart_data as AdvantageBreakdownData} />
+                    )}
+                    <div className="rounded-xl border border-chess-border bg-chess-bg/55 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-chess-muted mb-1">해석 가이드</p>
+                      <ul className="space-y-1 text-xs text-chess-primary/90">
+                        <li>완벽 유지: 우위를 끝까지 지켜 승리</li>
+                        <li>흔들렸지만 승리: 한때 역전됐지만 재역전</li>
+                        <li>역전·실패: 우위를 놓쳐 무승부 또는 패배</li>
+                      </ul>
+                    </div>
                   </div>
-                  {isAdvantageRetention ? (
-                    <div className="space-y-3">
-                      <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-1">
+
+                  <div className="col-span-8 overflow-y-auto px-6 py-4 space-y-3">
+                    {games.length === 0 ? (
+                      <p className="text-sm text-chess-muted text-center py-8">URL 있는 대표 게임이 없습니다.</p>
+                    ) : (
+                      <>
+                        <StatSummary games={games} config={cfg} />
+                        <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-1">
+                          {([
+                            ["kept", "✅ 우위 유지 성공", advantageKeptGames.length],
+                            ["blown", "⚠️ 역전·실패", advantageBlownGames.length],
+                          ] as ["kept" | "blown", string, number][]).map(([id, label, cnt]) => (
+                            <button
+                              key={id}
+                              onClick={() => setAdvantageTab(id)}
+                              className={`flex-1 pb-2 text-sm font-semibold transition-colors relative ${
+                                advantageTab === id ? "text-chess-primary" : "text-chess-muted hover:text-chess-primary"
+                              }`}
+                            >
+                              {label}
+                              <span className="ml-1 text-[10px] font-normal opacity-70">({cnt})</span>
+                              {advantageTab === id && (
+                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+
+                        {advantageTab === "kept" ? (
+                          advantageKeptGames.length === 0 ? (
+                            <p className="text-sm text-chess-muted text-center py-6">우위를 끝까지 지킨 대표 게임이 없습니다.</p>
+                          ) : (
+                            advantageKeptGames.map((g, i) => (
+                              <GameRow key={`${g.url}-kept-${i}`} game={g} rank={i + 1} config={cfg} />
+                            ))
+                          )
+                        ) : (
+                          advantageBlownGames.length === 0 ? (
+                            <p className="text-sm text-chess-muted text-center py-6">역전된 대표 게임이 없습니다.</p>
+                          ) : (
+                            advantageBlownGames.map((g, i) => (
+                              <GameRow key={`${g.url}-blown-${i}`} game={g} rank={i + 1} config={cfg} />
+                            ))
+                          )
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className={`flex-1 overflow-y-auto px-6 py-4 space-y-2 ${
+                  isOppositeCastle ? "md:w-[58%] md:ml-auto md:border-l md:border-chess-border/70 md:bg-chess-bg/20" : ""
+                }`}>
+                  {isOppositeCastle && pattern.chart_data?.type === "castling_comparison" ? (
+                    <>
+                      {/* 방향별 탭 네비게이션 */}
+                      <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-3">
                         {([
-                          ["kept", "✅ 우위 유지 성공", advantageKeptGames.length],
-                          ["blown", "⚠️ 역전·실패", advantageBlownGames.length],
-                        ] as ["kept" | "blown", string, number][]).map(([id, label, cnt]) => (
+                          ["opposite", "⚔️ 반대 방향", pattern.chart_data.opposite_games.length],
+                          ["same",     "🤝 같은 방향",  pattern.chart_data.same_games.length],
+                        ] as ["opposite" | "same", string, number][]).map(([id, label, cnt]) => (
                           <button
                             key={id}
-                            onClick={() => setAdvantageTab(id)}
+                            onClick={() => setCastlingTab(id)}
                             className={`flex-1 pb-2 text-sm font-semibold transition-colors relative ${
-                              advantageTab === id ? "text-chess-primary" : "text-chess-muted hover:text-chess-primary"
+                              castlingTab === id ? "text-chess-primary" : "text-chess-muted hover:text-chess-primary"
                             }`}
                           >
                             {label}
                             <span className="ml-1 text-[10px] font-normal opacity-70">({cnt})</span>
-                            {advantageTab === id && (
+                            {castlingTab === id && (
                               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />
                             )}
                           </button>
                         ))}
                       </div>
-
-                      {advantageTab === "kept" ? (
-                        advantageKeptGames.length === 0 ? (
-                          <p className="text-sm text-chess-muted text-center py-6">우위를 끝까지 지킨 대표 게임이 없습니다.</p>
-                        ) : (
-                          advantageKeptGames.map((g, i) => (
-                            <GameRow key={`${g.url}-kept-${i}`} game={g} rank={i + 1} config={cfg} />
-                          ))
-                        )
+                      {/* 선택된 탭 게임 목록 */}
+                      {(castlingTab === "opposite"
+                        ? pattern.chart_data.opposite_games
+                        : pattern.chart_data.same_games
+                      ).filter((g: any) => !!g?.url).length === 0 ? (
+                        <p className="text-sm text-chess-muted text-center py-8">
+                          {castlingTab === "opposite" ? "반대 방향 캐슬링 게임이 없습니다." : "같은 방향 캐슬링 게임이 없습니다."}
+                        </p>
                       ) : (
-                        advantageBlownGames.length === 0 ? (
-                          <p className="text-sm text-chess-muted text-center py-6">역전된 대표 게임이 없습니다.</p>
-                        ) : (
-                          advantageBlownGames.map((g, i) => (
-                            <GameRow key={`${g.url}-blown-${i}`} game={g} rank={i + 1} config={cfg} />
-                          ))
-                        )
+                        (castlingTab === "opposite"
+                          ? pattern.chart_data.opposite_games
+                          : pattern.chart_data.same_games
+                        ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
+                          <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
+                        ))
                       )}
-                    </div>
+                    </>
+                  ) : isOpeningFamiliarity && pattern.chart_data?.type === "opening_comparison" ? (
+                    <>
+                      {/* 오프닝 친숙도 탭 네비게이션 */}
+                      <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-3">
+                        {([
+                          ["main", "📘 주력 오프닝", pattern.chart_data.main_games.length],
+                          ["unfamiliar", "🧪 생소 오프닝", pattern.chart_data.unfamiliar_games.length],
+                        ] as ["main" | "unfamiliar", string, number][]).map(([id, label, cnt]) => (
+                          <button
+                            key={id}
+                            onClick={() => setOpeningTab(id)}
+                            className={`flex-1 pb-2 text-sm font-semibold transition-colors relative ${
+                              openingTab === id ? "text-chess-primary" : "text-chess-muted hover:text-chess-primary"
+                            }`}
+                          >
+                            {label}
+                            <span className="ml-1 text-[10px] font-normal opacity-70">({cnt})</span>
+                            {openingTab === id && (
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      {/* 선택된 탭 게임 목록 */}
+                      {(openingTab === "main"
+                        ? pattern.chart_data.main_games
+                        : pattern.chart_data.unfamiliar_games
+                      ).filter((g: any) => !!g?.url).length === 0 ? (
+                        <p className="text-sm text-chess-muted text-center py-8">
+                          {openingTab === "main" ? "주력 오프닝 게임이 없습니다." : "생소 오프닝 게임이 없습니다."}
+                        </p>
+                      ) : (
+                        (openingTab === "main"
+                          ? pattern.chart_data.main_games
+                          : pattern.chart_data.unfamiliar_games
+                        ).filter((g: any) => !!g?.url).map((g: any, i: number) => (
+                          <CastlingGameRow key={`${g.url}-${i}`} game={g} rank={i + 1} />
+                        ))
+                      )}
+                    </>
                   ) : (
                     <>
-                      <p className="text-xs text-chess-muted uppercase tracking-wider">
-                        관련도 높은 대표 게임 ({games.length}개)
-                      </p>
-                      {games.map((g, i) => (
-                        <GameRow key={`${g.url}-${i}`} game={g} rank={i + 1} config={cfg} />
-                      ))}
+                      {games.length === 0 ? (
+                        <p className="text-sm text-chess-muted text-center py-8">URL 있는 대표 게임이 없습니다.</p>
+                      ) : (
+                        <>
+                          {/* 통계 요약 */}
+                          <div className="pb-2">
+                            <StatSummary games={games} config={cfg} />
+                          </div>
+                          <p className="text-xs text-chess-muted uppercase tracking-wider">
+                            관련도 높은 대표 게임 ({games.length}개)
+                          </p>
+                          {games.map((g, i) => (
+                            <GameRow key={`${g.url}-${i}`} game={g} rank={i + 1} config={cfg} />
+                          ))}
+                        </>
+                      )}
                     </>
                   )}
-                </>
+                </div>
               )}
+
             </>
           )}
         </div>
-
-        {/* ── 푸터 ── */}
-        <div className="px-6 py-3 border-t border-chess-border bg-chess-bg/50 flex items-center justify-between">
-          <p className="text-xs text-chess-muted">클릭 → 분석 보드에서 게임 리뷰</p>
-          <button
-            onClick={onClose}
-            className="text-xs text-chess-muted hover:text-chess-primary transition-colors px-3 py-1.5 rounded-lg border border-chess-border hover:border-chess-muted"
-          >
-            닫기
-          </button>
         </div>
       </div>
     </div>

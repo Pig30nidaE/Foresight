@@ -5,6 +5,7 @@ import type { Color, OpeningTierEntry, Tier } from "../types";
 import { TIER_CONFIG } from "../types";
 import TierBadge from "./TierBadge";
 import OpeningTierTable from "./OpeningTierTable";
+import { useTranslation } from "@/shared/lib/i18n";
 
 interface Props {
   tier: Tier;
@@ -21,6 +22,7 @@ export default function TierSection({
   defaultOpen = false,
   onOpeningClick,
 }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   const cfg = TIER_CONFIG[tier];
 
@@ -35,7 +37,7 @@ export default function TierSection({
       >
         <TierBadge tier={tier} />
         <span className={`font-semibold ${cfg.color}`}>{tier} Tier</span>
-        <span className="text-chess-muted text-sm">({entries.length}개)</span>
+        <span className="text-chess-muted text-sm">{t("tier.count").replace("{n}", String(entries.length))}</span>
         <span className="ml-auto text-chess-muted text-sm">{open ? "▼" : "▶"}</span>
       </button>
 

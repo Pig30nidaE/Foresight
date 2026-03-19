@@ -57,3 +57,76 @@ export interface PerformanceSummary {
   win_rate: number;
   top_openings: OpeningStats[];
 }
+
+// ─────────────────────────────────────────────
+// 개별 게임 분석 타입 (T1~T5 등급)
+// ─────────────────────────────────────────────
+
+export type MoveTier = "TH" | "TF" | "T1" | "T2" | "T3" | "T4" | "T5" | "T6";
+
+export interface TopMoveInfo {
+  san: string;
+  cp: number;
+  rank: number;
+}
+
+export interface AnalyzedMove {
+  halfmove: number;
+  move_number: number;
+  color: "white" | "black";
+  san: string;
+  uci: string;
+  fen_before: string;  // 수 전 FEN (체스보드 표시용)
+  fen_after: string;   // 수 후 FEN
+  cp_before: number | null;
+  cp_after: number | null;
+  cp_loss: number;
+  win_pct_before: number;
+  win_pct_after: number;
+  win_pct_loss: number;
+  tier: MoveTier;
+  top_moves: TopMoveInfo[];
+  user_move_rank: number;
+  is_only_best: boolean;
+}
+
+// 개별 플레이어 분석 결과
+export interface PlayerAnalysis {
+  username: string;
+  color: "white" | "black";
+  total_moves: number;
+  analyzed_moves: AnalyzedMove[];
+  tier_counts: Record<MoveTier, number>;
+  tier_percentages: Record<MoveTier, number>;
+  avg_cp_loss: number;
+  accuracy: number;
+  moves_by_tier: Record<MoveTier, AnalyzedMove[]>;  // 등급별 수 목록
+}
+
+// 양쪽 플레이어 분석 응답
+export interface BothPlayersAnalysis {
+  game_id: string;
+  white_player: string;
+  black_player: string;
+  white_analysis: PlayerAnalysis;
+  black_analysis: PlayerAnalysis;
+  opening?: {
+    eco?: string;
+    name?: string;
+    th_plies?: number;
+    th_fullmoves?: number;
+  };
+}
+
+// 하위 호환: 단일 플레이어 분석
+export interface SingleGameAnalysis {
+  game_id: string;
+  username: string;
+  user_color: "white" | "black";
+  total_moves: number;
+  analyzed_moves: AnalyzedMove[];
+  tier_counts: Record<MoveTier, number>;
+  tier_percentages: Record<MoveTier, number>;
+  avg_cp_loss: number;
+  accuracy: number;
+}
