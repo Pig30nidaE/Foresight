@@ -132,7 +132,7 @@ export default function BlunderTimeline({ data }: Props) {
         {phaseData && phaseData.length > 0 && (
           <div className="bg-gradient-to-br from-chess-bg/80 to-chess-bg/30 border border-chess-border rounded-2xl p-4">
             <div className="flex items-end justify-between gap-3 mb-3">
-              <p className="text-xs tracking-wide text-chess-muted">PHASE PRESSURE MAP</p>
+              <p className="text-xs tracking-wide text-chess-muted">{t("chart.phasePressureMap")}</p>
               {topRiskPhase && (
                 <p className="text-[11px] text-chess-muted">
                   {t("chart.highestRisk")} <span className="font-bold text-chess-primary">{topRiskPhase.phase}</span>

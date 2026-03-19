@@ -5,19 +5,25 @@ GET  /api/v1/opening-tier/global    → 레이팅 구간별 오프닝 티어 랭
 GET  /api/v1/opening-tier/brackets  → 레이팅 구간 목록 (Lichess + Chess.com 라벨)
 GET  /api/v1/opening-tier/detail    → 오프닝 핵심 포인트 + YouTube 링크
 GET  /api/v1/opening-tier/export    → CSV 또는 JSON 파일 다운로드
-DELETE /api/v1/opening-tier/cache   → 특정 구간 캐시 무효화
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from app.features.opening_tier.services.opening_tier_service import OpeningTierService, RATING_BRACKETS
 from app.features.opening_tier.services.opening_detail_service import get_opening_detail
 
 router = APIRouter()
-_service = OpeningTierService()
 
 _VALID_RATINGS = set(RATING_BRACKETS)  # 서비스 정의와 자동 동기화
 _VALID_SPEEDS = {"bullet", "blitz", "rapid", "classical"}
+
+
+def _get_service(request: Request) -> OpeningTierService:
+    svc = getattr(request.app.state, "opening_tier_service", None)
+    if svc is None:
+        svc = OpeningTierService()
+        request.app.state.opening_tier_service = svc
+    return svc
 
 
 def _validate_rating(rating: int) -> None:
@@ -46,19 +52,20 @@ def _validate_color(color: str) -> None:
 
 @router.get("/global")
 async def get_global_opening_tiers(
+    request: Request,
     rating: int = Query(..., description="Lichess 레이팅 구간 (400/800/1200/1600/2000/2400)"),
     speed: str = Query("blitz", description="타임클래스 (bullet/blitz/rapid/classical)"),
     color: str = Query("white", description="기준 색상 (white/black)"),
 ):
     """레이팅 구간별 오프닝 티어 랭킹 반환.
 
-    첫 요청 시 Lichess Explorer API 병렬 탐색으로 30–60초 소요될 수 있습니다.
-    이후 24시간 인메모리 + 디스크 캐시됩니다.
+    Lichess Explorer API 병렬 탐색으로 30–60초 소요될 수 있습니다.
     """
     _validate_rating(rating)
     _validate_speed(speed)
     _validate_color(color)
 
+    _service = _get_service(request)
     try:
         openings, data_period = await _service.get_opening_tiers(rating, speed, color)
     except RuntimeError as exc:
@@ -76,9 +83,11 @@ async def get_global_opening_tiers(
 
 @router.get("/brackets")
 async def get_rating_brackets(
+    request: Request,
     speed: str = Query("blitz", description="타임클래스 (bullet/blitz/rapid/classical)"),
 ):
     """레이팅 구간 목록 반환 (Lichess 9개 구간 + Chess.com 변환 라벨)."""
+    _service = _get_service(request)
     _validate_speed(speed)
     brackets = _service.get_bracket_labels(speed)
     return {
@@ -108,6 +117,7 @@ async def get_opening_detail_route(
 
 @router.get("/export")
 async def export_opening_tiers(
+    request: Request,
     rating: int = Query(..., description="Lichess 레이팅 구간"),
     speed: str = Query("blitz", description="타임클래스"),
     color: str = Query("white", description="기준 색상 (white/black)"),
@@ -120,6 +130,7 @@ async def export_opening_tiers(
     _validate_rating(rating)
     _validate_speed(speed)
     _validate_color(color)
+    _service = _get_service(request)
     if format not in {"json", "csv"}:
         raise HTTPException(
             status_code=400,
@@ -145,19 +156,3 @@ async def export_opening_tiers(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-@router.delete("/cache")
-async def invalidate_cache(
-    rating: int = Query(..., description="Lichess 레이팅 구간"),
-    speed: str = Query("blitz", description="타임클래스"),
-):
-    """특정 레이팅/스피드 조합의 캐시를 강제 무효화.
-
-    다음 /global 요청 시 Lichess Explorer를 재탐색합니다.
-    """
-    _validate_rating(rating)
-    _validate_speed(speed)
-
-    _service.invalidate_cache(rating, speed)
-    return {"message": f"캐시 무효화 완료: rating={rating} speed={speed}"}

@@ -1,8 +1,8 @@
-import { useSettings } from "./SettingsContext";
+import { useSettings, type Language, type Theme } from "./SettingsContext";
 import { useTranslation } from "../../lib/i18n";
 import { useState } from "react";
 
-const DEPTH_OPTIONS = [12, 15, 18, 20, 22];
+const DEPTH_OPTIONS = [12, 18, 24, 30, 36, 42, 48];
 
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { language, setLanguage, theme, setTheme, stockfishDepth, setStockfishDepth } = useSettings();
@@ -14,8 +14,11 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/20">
-      <div className="bg-white dark:bg-chess-bg border border-chess-border rounded-lg shadow-lg mt-20 mr-8 w-80 p-6 flex flex-col gap-6">
+    <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/20" onClick={onClose} role="dialog" aria-modal="true">
+      <div
+        className="bg-white dark:bg-chess-bg border border-chess-border rounded-lg shadow-lg mt-20 mr-8 w-80 p-6 flex flex-col gap-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="font-bold text-lg mb-2">{t("settings.title")}</h2>
         {/* 언어 선택 */}
         <div>
@@ -23,7 +26,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           <select
             className="w-full border rounded px-2 py-1 bg-chess-surface"
             value={draftLang}
-            onChange={e => setDraftLang(e.target.value as any)}
+            onChange={(e) => setDraftLang(e.target.value as Language)}
           >
             <option value="ko">한국어</option>
             <option value="en">English</option>
@@ -35,7 +38,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           <select
             className="w-full border rounded px-2 py-1 bg-chess-surface"
             value={draftTheme}
-            onChange={e => setDraftTheme(e.target.value as any)}
+            onChange={(e) => setDraftTheme(e.target.value as Theme)}
           >
             <option value="light">{t("settings.theme.light")}</option>
             <option value="dark">{t("settings.theme.dark")}</option>

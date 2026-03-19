@@ -1,6 +1,7 @@
 "use client";
 
 import type { FirstMoveEntry } from "@/types";
+import { useTranslation } from "@/shared/lib/i18n";
 
 interface Props {
   data: FirstMoveEntry[];
@@ -19,9 +20,10 @@ const SIDE_LABEL: Record<"white" | "black", string> = {
 };
 
 export default function FirstMoveBar({ data, side }: Props) {
+  const { t } = useTranslation();
   if (!data.length) {
     return (
-      <p className="text-chess-muted text-sm py-4 text-center">데이터가 부족합니다.</p>
+      <p className="text-chess-muted text-sm py-4 text-center">{t("chart.notEnoughFirstMoveData")}</p>
     );
   }
 
@@ -30,7 +32,7 @@ export default function FirstMoveBar({ data, side }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="text-sm font-semibold text-chess-primary mb-4">{SIDE_LABEL[side]}</div>
+      <div className="text-sm font-semibold text-chess-primary mb-4">{t(`chart.${side}` as any)}</div>
 
       {sorted.map((entry) => {
         const widthPct = Math.round((entry.games / maxGames) * 100);
@@ -57,7 +59,7 @@ export default function FirstMoveBar({ data, side }: Props) {
                 >
                   {entry.win_rate.toFixed(1)}%
                 </span>
-                <span className="text-xs text-chess-muted">{entry.games}국</span>
+                <span className="text-xs text-chess-muted">{t("chart.nGames").replace("{n}", String(entry.games))}</span>
               </div>
             </div>
 
@@ -86,13 +88,13 @@ export default function FirstMoveBar({ data, side }: Props) {
       {/* Legend */}
       <div className="flex gap-5 text-xs text-chess-muted pt-2 border-t border-chess-border/70">
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-emerald-600 inline-block" /> 승
+          <span className="w-3 h-3 rounded-sm bg-emerald-600 inline-block" /> {t("chart.win")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-chess-muted inline-block" /> 무
+          <span className="w-3 h-3 rounded-sm bg-chess-muted inline-block" /> {t("chart.draw")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-red-700 inline-block" /> 패
+          <span className="w-3 h-3 rounded-sm bg-red-700 inline-block" /> {t("chart.loss")}
         </span>
       </div>
     </div>

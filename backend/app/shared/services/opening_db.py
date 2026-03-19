@@ -86,7 +86,9 @@ def _build_indexes(rows: list[dict]) -> None:
         epd_raw = (row.get("epd") or "").strip()
         if epd_raw:
             key = _normalize_epd(epd_raw)
-            _by_epd[key] = {"eco": eco, "name": row["name"], "uci": row.get("uci", "")}
+            # 포지션 키가 여러 ECO에 중복 매칭되는 경우가 있어 덮어쓰기 방지
+            if key not in _by_epd:
+                _by_epd[key] = {"eco": eco, "name": row["name"], "uci": row.get("uci", "")}
             continue
 
         # ── Fallback: TSV에 epd가 비어있는 경우가 있어 PGN으로 포지션을 계산 ──
@@ -130,7 +132,8 @@ def _build_indexes(rows: list[dict]) -> None:
                 board.push(move)
 
             key = _normalize_epd(" ".join(board.fen().split()[:4]))
-            _by_epd[key] = {"eco": eco, "name": row["name"], "uci": row.get("uci", "")}
+            if key not in _by_epd:
+                _by_epd[key] = {"eco": eco, "name": row["name"], "uci": row.get("uci", "")}
         except Exception:
             continue
 

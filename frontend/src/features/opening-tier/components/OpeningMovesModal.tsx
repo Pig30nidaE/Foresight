@@ -7,6 +7,7 @@ import { Chessboard } from "react-chessboard";
 import type { OpeningTierEntry, OpeningDetail } from "../types";
 import { getOpeningDetail } from "../api";
 import { getOpeningDescription } from "../openingDescriptions";
+import { useTranslation } from "@/shared/lib/i18n";
 
 interface Props {
   entry: OpeningTierEntry | null;
@@ -20,6 +21,7 @@ interface Position {
 }
 
 export default function OpeningMovesModal({ entry, onClose, color = "white" }: Props) {
+  const { t } = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [detail, setDetail] = useState<OpeningDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -120,7 +122,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
         {/* Body */}
         {!entry.moves ? (
           <div className="flex items-center justify-center py-16 text-chess-muted text-sm">
-            수 순서 정보 없음
+            {t("tier.noMoves")}
           </div>
         ) : (
           <div className="flex flex-col md:flex-row gap-5 p-5 overflow-y-auto">
@@ -180,7 +182,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
             <div className="flex-1 min-w-0 flex flex-col gap-4">
               <div>
                 <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
-                  수 순서
+                  {t("tier.moveSeq")}
                 </p>
                 <div className="flex flex-wrap gap-1 content-start">
                   {positions?.slice(1).map((pos, i) => {
@@ -211,7 +213,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
               {description && (
                 <div className="rounded-lg bg-chess-accent/5 border border-chess-accent/20 px-3 py-2.5">
                   <p className="text-xs text-chess-muted mb-1 font-medium uppercase tracking-wide">
-                    메인 아이디어
+                    {t("tier.mainIdea")}
                   </p>
                   <p className="text-sm text-chess-primary leading-relaxed">
                     {description}
@@ -232,7 +234,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
               className="flex items-center gap-1.5 w-full text-left group mb-2"
             >
               <p className="text-xs text-chess-muted font-medium uppercase tracking-wide">
-                핵심 포인트
+                {t("tier.keyPoints")}
               </p>
               <svg
                 className={`w-3.5 h-3.5 text-chess-muted transition-transform duration-200 ${tipsOpen ? "rotate-180" : ""}`}
@@ -272,7 +274,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                   </ol>
                 ) : (
                   <p className="text-xs text-chess-muted">
-                    핵심 포인트를 불러올 수 없습니다.
+                    {t("tier.failedKeyPoints")}
                   </p>
                 )}
               </div>
@@ -282,7 +284,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
           {/* YouTube 검색 링크 */}
           <div>
             <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
-              유튜브 한국어 해설
+              {t("tier.youtube")}
             </p>
             {detail ? (
               <a
@@ -298,7 +300,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                 >
                   <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
                 </svg>
-                YouTube에서 {entry.name} 해설 영상 검색
+                {t("tier.searchYoutube").replace("{name}", entry.name)}
               </a>
             ) : detailLoading ? (
               <div className="h-7 w-48 rounded-lg bg-chess-border/40 animate-pulse" />
@@ -316,7 +318,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                 >
                   <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
                 </svg>
-                YouTube에서 {entry.name} 해설 영상 검색
+                {t("tier.searchYoutube").replace("{name}", entry.name)}
               </a>
             )}
           </div>
@@ -325,7 +327,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
         {/* Footer */}
         <div className="px-6 py-2.5 border-t border-chess-border text-center">
           <p className="text-xs text-chess-muted">
-            ← → 키로 이동 · ESC 또는 배경 클릭으로 닫기
+            {t("tier.modalHelp")}
           </p>
         </div>
       </div>
