@@ -24,6 +24,19 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Dark Mode (Tailwind `dark:` 기반 + CSS 변수 기반) */
+html.dark {
+  --background: #0b1220;
+  --foreground: #e5e7eb;
+
+  --color-chess-bg: #0b1220;
+  --color-chess-surface: #111827;
+  --color-chess-border: #334155;
+  --color-chess-muted: #9ca3af;
+  --color-chess-primary: #e5e7eb;
+  --color-chess-accent: #f59e0b;
+}
+
 /* ── 커스텀 스크롤바 ─────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;

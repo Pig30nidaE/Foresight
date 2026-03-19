@@ -1,7 +1,11 @@
+"use client";
+
 import Link from "next/link";
 import SearchForm from "@/shared/components/ui/SearchForm";
+import { useTranslation } from "@/shared/lib/i18n";
 
 export default function Home() {
+  const { t } = useTranslation();
   return (
     <div className="relative flex flex-col items-center justify-center min-h-[80vh] gap-12 text-center overflow-hidden">
       {/* Dot-grid background */}
@@ -15,9 +19,9 @@ export default function Home() {
           <span className="text-chess-accent">sight</span>
         </h1>
         <p className="text-chess-muted text-lg max-w-md leading-relaxed">
-          체스 대회 참가자를 위한 AI 기반 대국 분석 플랫폼.
+          {t("home.desc1")}
           <br />
-          오프닝 분석 · 상대 준비 · 약점 파악
+          {t("home.desc2")}
         </p>
       </div>
 
@@ -34,10 +38,10 @@ export default function Home() {
         >
           <div className="text-2xl mb-3">📋</div>
           <h3 className="font-semibold text-chess-primary group-hover:text-chess-accent transition-colors">
-            오프닝 티어표
+            {t("home.openingTiers")}
           </h3>
           <p className="text-chess-muted text-sm mt-1">
-            레이팅 구간별 오프닝 S/A/B/C/D 승률 랭킹
+            {t("home.openingTiersDesc")}
           </p>
         </Link>
         <Link
@@ -46,10 +50,10 @@ export default function Home() {
         >
           <div className="text-2xl mb-3">🎯</div>
           <h3 className="font-semibold text-chess-primary group-hover:text-chess-accent transition-colors">
-            상대 분석
+            {t("home.search")}
           </h3>
           <p className="text-chess-muted text-sm mt-1">
-            대회 상대의 패턴 · 오프닝 · 약점 리포트
+            {t("home.searchDesc")}
           </p>
         </Link>
       </div>

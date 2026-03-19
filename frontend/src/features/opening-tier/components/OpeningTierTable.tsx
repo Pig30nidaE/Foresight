@@ -1,5 +1,6 @@
 import type { Color, OpeningTierEntry } from "../types";
 import TierBadge from "./TierBadge";
+import { useTranslation } from "@/shared/lib/i18n";
 
 function WinRateBar({
   winRate,
@@ -39,19 +40,20 @@ interface Props {
 }
 
 export default function OpeningTierTable({ entries, color, onOpeningClick }: Props) {
+  const { t } = useTranslation();
   if (entries.length === 0) {
-    return <p className="text-chess-muted text-sm py-4">오프닝 없음</p>;
+    return <p className="text-chess-muted text-sm py-4">{t("tier.noOpenings")}</p>;
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-chess-muted text-xs border-b border-chess-border">
-            <th className="text-left py-2 pr-3 font-medium">등급</th>
-            <th className="text-left py-2 pr-3 font-medium">ECO</th>
-            <th className="text-left py-2 pr-3 font-medium">오프닝</th>
-            <th className="text-left py-2 pr-3 font-medium min-w-36">승률</th>
-            <th className="text-right py-2 font-medium">총 게임</th>
+            <th className="text-left py-2 pr-3 font-medium">{t("tier.tableTier")}</th>
+            <th className="text-left py-2 pr-3 font-medium">{t("tier.tableEco")}</th>
+            <th className="text-left py-2 pr-3 font-medium">{t("tier.tableOpening")}</th>
+            <th className="text-left py-2 pr-3 font-medium min-w-36">{t("tier.tableWinRate")}</th>
+            <th className="text-right py-2 font-medium">{t("tier.tableTotalGames")}</th>
           </tr>
         </thead>
         <tbody>

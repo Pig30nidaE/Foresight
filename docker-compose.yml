@@ -1,30 +1,54 @@
-version: "3.9"
-
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: foresight-backend
+    working_dir: /app
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
     environment:
-      - PYTHONUNBUFFERED=1
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      STOCKFISH_PATH: "/usr/games/stockfish"
+      WATCHFILES_FORCE_POLLING: "true"
+      PYTHONPATH: "/app"
     env_file:
       - .env
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
     container_name: foresight-frontend
+    working_dir: /app
     ports:
       - "3000:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+      - /app/.next/cache
+    environment:
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
+      FAST_REFRESH: "true"
+      NODE_ENV: "development"
+      WATCHPACK_WATCHER_DELAY: "300"
     env_file:
       - .env
     depends_on:
-      - backend
-    command: npm run dev
+      backend:
+        condition: service_healthy
+    command: npm run dev -- --hostname 0.0.0.0 --port 3000 --turbopack
