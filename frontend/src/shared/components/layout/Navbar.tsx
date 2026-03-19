@@ -3,16 +3,21 @@
 
 
 import { useState } from "react";
+import { Settings } from "lucide-react";
 
 import Link from "next/link";
 
 import { usePathname, useRouter } from "next/navigation";
 
+import SettingsModal from "../settings/SettingsModal";
+import { useTranslation } from "../../lib/i18n";
 
 
+
+// We will translate these keys inside the component
 const NAV_ITEMS = [
-  { href: "/opening-tier", label: "오프닝 티어표" },
-  { href: "/dashboard",    label: "전적 검색" },
+  { href: "/opening-tier", labelKey: "nav.openingTier" as const },
+  { href: "/dashboard",    labelKey: "nav.dashboard" as const },
 ];
 
 
@@ -30,6 +35,10 @@ export default function Navbar() {
   const [username, setUsername] = useState("");
 
   const [platform, setPlatform] = useState<Platform>("chess.com");
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const { t } = useTranslation();
 
 
 
@@ -73,7 +82,7 @@ export default function Navbar() {
 
           <nav className="flex items-center gap-1 text-sm">
 
-            {NAV_ITEMS.map(({ href, label }) => {
+            {NAV_ITEMS.map(({ href, labelKey }) => {
 
               const active = pathname.startsWith(href);
 
@@ -97,7 +106,7 @@ export default function Navbar() {
 
                 >
 
-                  {label}
+                  {t(labelKey)}
 
                 </Link>
 
@@ -111,9 +120,23 @@ export default function Navbar() {
 
 
 
-        {/* Search Bar */}
+        {/* Search Bar + Settings */}
 
-        <form onSubmit={handleSearch} className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Settings Button */}
+          <button
+            type="button"
+            className="p-2 rounded-full hover:bg-chess-border/40 transition-colors"
+            aria-label="설정"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings size={22} />
+          </button>
+
+          <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="flex items-center gap-1.5">
 
           <div className="flex rounded-md overflow-hidden border border-chess-border text-xs">
 
@@ -155,7 +178,7 @@ export default function Navbar() {
 
             onChange={(e) => setUsername(e.target.value)}
 
-            placeholder="유저명 검색..."
+            placeholder={t("nav.searchPlaceholder")}
 
             className="w-40 bg-chess-surface border border-chess-border rounded-md px-3 py-1.5 text-sm text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors"
 
@@ -169,11 +192,12 @@ export default function Navbar() {
 
           >
 
-            분석
+            {t("nav.analyze")}
 
           </button>
 
-        </form>
+          </form>
+        </div>
 
       </div>
 
