@@ -21,6 +21,7 @@ import {
   BestWorstSkeleton,
   TimelineSkeleton,
 } from "@/shared/components/ui/SkeletonCard";
+import { useTranslation } from "@/shared/lib/i18n";
 
 const GAME_COUNT_PRESETS = [50, 100, 200, 300, 500] as const;
 
@@ -42,6 +43,7 @@ export default function AnalysisSection({
   const [treeViewSide, setTreeViewSide] = useState<"white" | "black">("white");
   const [maxGames, setMaxGames] = useState<number>(100);
   const [pendingMaxGames, setPendingMaxGames] = useState<number>(100);
+  const { t } = useTranslation();
 
   // 상대 분석 데이터 독립적 로딩 (캐싱 설정: 5분 stale, 30분 cache)
   const queryOptions = {
@@ -99,7 +101,7 @@ export default function AnalysisSection({
     <div className="space-y-6">
       {/* 게임 횟수 선택 UI */}
       <div className="flex items-center gap-2 rounded-lg border border-chess-border px-3 py-2 bg-chess-surface/50">
-        <span className="text-xs font-medium text-chess-muted">분석 게임 수</span>
+        <span className="text-xs font-medium text-chess-muted">{t("as.gameCount")}</span>
         <div className="flex rounded-md overflow-hidden border border-chess-border">
           {GAME_COUNT_PRESETS.map((size) => (
             <button
@@ -112,7 +114,7 @@ export default function AnalysisSection({
                   : "bg-chess-surface text-chess-muted hover:text-chess-primary"
               }`}
             >
-              {size}판
+              {size} {t("as.games")}
             </button>
           ))}
         </div>
@@ -126,10 +128,10 @@ export default function AnalysisSection({
               : "bg-chess-primary text-white hover:bg-chess-primary/85"
           }`}
         >
-          적용
+          {t("as.apply")}
         </button>
         <span className="text-xs text-chess-muted ml-2">
-          현재: 최근 {maxGames}게임 분석 중
+          {t("as.currentInfo").replace("{n}", String(maxGames))}
         </span>
       </div>
 
@@ -138,10 +140,11 @@ export default function AnalysisSection({
         <div className="flex items-center gap-3 bg-amber-700/8 border border-amber-700/35 rounded-2xl px-5 py-4">
           <span className="text-2xl leading-none select-none">⚠️</span>
           <div>
-            <p className="font-semibold text-amber-700 text-sm">데이터 부족 — 분석 불가</p>
+            <p className="font-semibold text-amber-700 text-sm">{t("as.insufficient")}</p>
             <p className="text-amber-700/70 text-xs mt-0.5">
-              {timeClass.toUpperCase()} 기준 {totalGames}게임 조회됨.
-              최소 5게임이 필요합니다. 다른 타임클래스를 선택하거나 전적을 더 쌓아 보세요.
+              {t("as.insufficientDesc")
+                .replace("{tc}", timeClass.toUpperCase())
+                .replace("{n}", String(totalGames))}
             </p>
           </div>
         </div>
@@ -151,8 +154,8 @@ export default function AnalysisSection({
       <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
         {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
         <SectionHeader
-          title="백 / 흑 첫 수 선호도 및 승률"
-          desc="가장 많이 사용한 오프닝 계열과 결과 분포"
+          title={t("as.section1Title")}
+          desc={t("as.section1Desc")}
           isLoading={loadingFirst}
           progressPercent={section1Progress}
         />
@@ -171,8 +174,8 @@ export default function AnalysisSection({
         <div className="lg:col-span-2 bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
           {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
           <SectionHeader
-            title="오프닝 트리 탐색기"
-            desc="오프닝별 게임 수 및 승률 — 클릭하여 전개"
+            title={t("as.section2Title")}
+            desc={t("as.section2Desc")}
             isLoading={loadingTreeW || loadingTreeB || loadingBW}
             progressPercent={section2Progress}
           />
@@ -190,7 +193,7 @@ export default function AnalysisSection({
                     : "bg-chess-border/50 text-chess-muted hover:text-chess-primary"
                 }`}
               >
-                {s === "white" ? "⬜ 백" : "⬛ 흑"}
+                {s === "white" ? t("as.white") : t("as.black")}
               </button>
             ))}
           </div>
@@ -206,8 +209,8 @@ export default function AnalysisSection({
         <div className="bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
           {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
           <SectionHeader
-            title="오프닝 퍼포먼스"
-            desc="Best / Worst 오프닝 요약"
+            title={t("as.section2b.title")}
+            desc={t("as.section2b.desc")}
             isLoading={loadingBW}
             progressPercent={section2Progress}
           />
@@ -216,7 +219,7 @@ export default function AnalysisSection({
           ) : bestWorst ? (
             <BestWorstCard data={bestWorst} />
           ) : (
-            <p className="text-chess-muted text-sm">데이터 없음</p>
+            <p className="text-chess-muted text-sm">{t("as.noData")}</p>
           )}
         </div>
       </section>
@@ -225,8 +228,8 @@ export default function AnalysisSection({
       <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
         {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
         <SectionHeader
-          title="시간 압박 블런더 비율"
-          desc="남은 시간에 따른 블런더 발생률 추이"
+          title={t("as.section3Title")}
+          desc={t("as.section3Desc")}
           isLoading={loadingTP}
           progressPercent={section3Progress}
         />

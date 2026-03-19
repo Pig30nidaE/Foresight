@@ -62,7 +62,7 @@ export interface PerformanceSummary {
 // 개별 게임 분석 타입 (T1~T5 등급)
 // ─────────────────────────────────────────────
 
-export type MoveTier = "T1" | "T2" | "T3" | "T4" | "T5";
+export type MoveTier = "TH" | "T1" | "T2" | "T3" | "T4" | "T5";
 
 export interface TopMoveInfo {
   san: string;
@@ -110,6 +110,12 @@ export interface BothPlayersAnalysis {
   black_player: string;
   white_analysis: PlayerAnalysis;
   black_analysis: PlayerAnalysis;
+  opening?: {
+    eco?: string;
+    name?: string;
+    th_plies?: number;
+    th_fullmoves?: number;
+  };
 }
 
 // 하위 호환: 단일 플레이어 분석
