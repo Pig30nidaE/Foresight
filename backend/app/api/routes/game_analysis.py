@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import json
+import time
+from pathlib import Path
 from functools import partial
 
 from fastapi import APIRouter, HTTPException, Body
@@ -31,6 +34,26 @@ from app.models.schemas import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_DEBUG_LOG_PATH = Path("/Users/pig30nidae/Pig30nidaE/Project/Foresight/.cursor/debug-2df934.log")
+
+
+def _agent_log(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "pre-fix") -> None:
+    try:
+        payload = {
+            "sessionId": "2df934",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        _DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 
 class AnalyzedMoveDetail(BaseModel):
@@ -81,6 +104,10 @@ class BothPlayersAnalysisResponse(BaseModel):
     black_player: str
     white_analysis: PlayerAnalysisData
     black_analysis: PlayerAnalysisData
+    opening: Dict[str, object] = Field(
+        default_factory=dict,
+        description="오프닝 라인 및 이론수(TH). 예: {eco,name,th_plies,th_fullmoves}"
+    )
 
 
 class GameAnalysisRequest(BaseModel):
@@ -146,11 +173,11 @@ async def analyze_game_both_players(
     PGN을 받아 Stockfish로 분석하고 **흑/백 양쪽 플레이어**의 수를 T1~T5 등급으로 분류합니다.
     
     **등급 기준:**
-    - **T1 (최상)**: 해당 포지션에서 유일한 최선수
-    - **T2 (우수)**: 엔진 1순위 추천수
-    - **T3 (양호)**: 엔진 2~3순위 추천수
-    - **T4 (보통)**: 순위권外지만 승률 손실 ≤30%
-    - **T5 (불량)**: 승률 손실 >30% (큰 실수)
+    - **T1 (최상)**: 유일한 최선수이면서 평가 손실이 거의 없는 수
+    - **T2 (우수)**: 엔진 1순위 추천수 중 손실이 작은 수
+    - **T3 (양호)**: 엔진 2~3순위이거나 공동 최선에 가까운 수
+    - **T4 (보통)**: 추천수는 아니지만 치명적이지 않은 수
+    - **T5 (불량)**: 평가 손실이 큰 실수
     
     **응답:**
     - 양쪽 플레이어 분석 데이터 (`white_analysis`, `black_analysis`)
@@ -163,6 +190,19 @@ async def analyze_game_both_players(
         raise HTTPException(status_code=400, detail="PGN이 필요합니다.")
     
     try:
+        # region agent log
+        _agent_log(
+            "H1",
+            "backend/app/api/routes/game_analysis.py:analyze_game_both_players",
+            "request_received",
+            {
+                "game_id": request.game_id,
+                "time_per_move": request.time_per_move,
+                "pgn_chars": len(request.pgn or ""),
+            },
+        )
+        # endregion
+        t0 = time.perf_counter()
         logger.info(
             f"[Game Analysis - Both Players] {request.game_id} "
             f"(time_per_move: {request.time_per_move}s)"
@@ -178,6 +218,18 @@ async def analyze_game_both_players(
             time_per_multi=request.time_per_move * 0.8,
         )
         result = await loop.run_in_executor(None, fn)
+        # region agent log
+        _agent_log(
+            "H2",
+            "backend/app/api/routes/game_analysis.py:analyze_game_both_players",
+            "analysis_returned",
+            {
+                "game_id": request.game_id,
+                "result_is_none": result is None,
+                "elapsed_ms": int((time.perf_counter() - t0) * 1000),
+            },
+        )
+        # endregion
         
         if result is None:
             raise HTTPException(
@@ -200,10 +252,23 @@ async def analyze_game_both_players(
             black_player=result.black_player,
             white_analysis=white_data,
             black_analysis=black_data,
+            opening=result.opening or {},
         )
         
     except HTTPException:
         raise
     except Exception as exc:
+        # region agent log
+        _agent_log(
+            "H3",
+            "backend/app/api/routes/game_analysis.py:analyze_game_both_players",
+            "unhandled_exception",
+            {
+                "game_id": request.game_id,
+                "exc_type": type(exc).__name__,
+                "exc_str": str(exc)[:500],
+            },
+        )
+        # endregion
         logger.exception(f"[Game Analysis Error] {exc}")
         raise HTTPException(status_code=500, detail=str(exc))

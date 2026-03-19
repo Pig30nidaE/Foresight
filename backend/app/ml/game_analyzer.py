@@ -15,15 +15,40 @@ import io
 import math
 import shutil
 import logging
+import json
+import time
+from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from enum import Enum
 
 import chess
 import chess.pgn
 import chess.engine
 
+from app.shared.services import opening_db
+
 logger = logging.getLogger(__name__)
+
+_DEBUG_LOG_PATH = Path("/Users/pig30nidae/Pig30nidaE/Project/Foresight/.cursor/debug-2df934.log")
+
+
+def _agent_log(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "pre-fix") -> None:
+    try:
+        payload = {
+            "sessionId": "2df934",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        _DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 STOCKFISH_PATH: str = (
     shutil.which("stockfish")
@@ -34,9 +59,44 @@ STOCKFISH_PATH: str = (
 
 MATE_SCORE = 10_000
 
+ONLY_BEST_MARGIN_CP = 40
+T1_MAX_CP_LOSS = 10
+T1_MAX_WIN_PCT_LOSS = 1.5
+T2_MAX_CP_LOSS = 25
+T2_MAX_WIN_PCT_LOSS = 4.0
+T3_MAX_CP_LOSS = 60
+T3_MAX_WIN_PCT_LOSS = 10.0
+T4_MAX_CP_LOSS = 140
+T4_MAX_WIN_PCT_LOSS = 22.0
+
+
+def _compute_accuracy(analyzed_moves: list) -> float:
+    """
+    per-move accuracy의 조화평균으로 게임 정확도 계산 (Lichess 방식)
+
+    - 각 수마다: acc_i = 103.1668 * exp(-0.04354 * wpl_i) - 3.1669
+    - 조화평균: n / sum(1 / acc_i) → 블런더에 더 민감하게 반응
+    - TH(이론수) 제외: wpl≈0 이므로 acc≈100, 포함 시 인위적으로 정확도 상승
+
+    avg_wpl을 공식에 직접 대입하면 Jensen 부등식(볼록 함수)으로 인해
+    실제 값보다 항상 높게 계산되는 오류가 있으므로 이 방식으로 대체.
+    """
+    non_th = [m for m in analyzed_moves if getattr(m, 'tier', None) is not None and m.tier.value != 'TH']
+    if not non_th:
+        return 0.0
+    accs = [
+        max(0.0, min(100.0, 103.1668 * math.exp(-0.04354 * m.win_pct_loss) - 3.1669))
+        for m in non_th
+    ]
+    n = len(accs)
+    # 조화평균: acc=0인 경우 0.01로 clamp해 ZeroDivision 방지
+    harmonic = n / sum(1.0 / (a if a > 0.0 else 0.01) for a in accs)
+    return round(max(0.0, min(100.0, harmonic)), 1)
+
 
 class MoveTier(Enum):
     """수 품질 등급 T1~T5"""
+    TH = "TH"  # 오프닝 이론수 (theory move)
     T1 = "T1"  # 유일 최선수
     T2 = "T2"  # 엔진 1순위 추천
     T3 = "T3"  # 엔진 2~3순위 추천
@@ -46,6 +106,7 @@ class MoveTier(Enum):
 
 # 등급별 메타데이터 (UI 표시용)
 TIER_META = {
+    MoveTier.TH: {"label": "이론", "emoji": "TH", "color": "#8b5cf6", "description": "오프닝 이론수"},
     MoveTier.T1: {"label": "최상", "emoji": "★", "color": "#10b981", "description": "유일한 최선수"},
     MoveTier.T2: {"label": "우수", "emoji": "✓", "color": "#34d399", "description": "엔진 1순위 추천"},
     MoveTier.T3: {"label": "양호", "emoji": "○", "color": "#6ee7b7", "description": "엔진 2~3순위 추천"},
@@ -112,11 +173,8 @@ class GameAnalysisResult:
             sum(m.cp_loss for m in self.analyzed_moves) / total, 1
         )
         
-        # Chess.com 방식 정확도 (승률 손실 기반)
-        avg_wpl = sum(m.win_pct_loss for m in self.analyzed_moves) / total
-        self.accuracy = round(
-            max(0.0, min(100.0, 103.1668 * math.exp(-0.04354 * avg_wpl) - 3.1669)), 1
-        )
+        # per-move accuracy 조화평균 방식 (Lichess 방식, TH 이론수 제외)
+        self.accuracy = _compute_accuracy(self.analyzed_moves)
 
 
 @dataclass
@@ -153,11 +211,8 @@ class PlayerAnalysisResult:
             sum(m.cp_loss for m in self.analyzed_moves) / total, 1
         )
         
-        # Chess.com 방식 정확도 (승률 손실 기반)
-        avg_wpl = sum(m.win_pct_loss for m in self.analyzed_moves) / total
-        self.accuracy = round(
-            max(0.0, min(100.0, 103.1668 * math.exp(-0.04354 * avg_wpl) - 3.1669)), 1
-        )
+        # per-move accuracy 조화평균 방식 (Lichess 방식, TH 이론수 제외)
+        self.accuracy = _compute_accuracy(self.analyzed_moves)
 
 
 @dataclass
@@ -168,6 +223,59 @@ class BothPlayersAnalysisResult:
     black_player: str
     white_analysis: PlayerAnalysisResult
     black_analysis: PlayerAnalysisResult
+    opening: dict = field(default_factory=dict)
+
+
+def _compute_opening_theory(pgn_str: str) -> dict:
+    """
+    오프닝 라인(변형) 및 이론수(TH)를 계산.
+
+    정의(간단/안전):
+    - 시작 포지션에서부터 게임 수순을 한 수씩 진행하며, 해당 포지션(EPD)이 오프닝 DB에 존재하는 동안만 '이론수'로 간주.
+    - 첫 미스매치가 나오면 중단. (연속 구간)
+    - 마지막으로 매칭된 엔트리의 name/eco를 '오프닝 라인'으로 반환.
+    """
+    try:
+        if not opening_db.is_loaded():
+            return {}
+
+        game = chess.pgn.read_game(io.StringIO(pgn_str))
+        if game is None:
+            return {}
+
+        board = game.board()
+        node = game
+        th_plies = 0
+        last_entry: Optional[dict] = None
+
+        def key4(b: chess.Board) -> str:
+            # Use FEN 4-field key to match lichess openings EPD keys robustly
+            return " ".join(b.fen().split()[:4])
+
+        while node.variations:
+            next_node = node.variations[0]
+            move = next_node.move
+            board.push(move)
+            entry = opening_db.get_entry_by_epd(key4(board))
+            if not entry:
+                break
+            th_plies += 1
+            last_entry = entry
+            node = next_node
+
+        if not last_entry or th_plies == 0:
+            return {}
+
+        # fullmove: 2 plies = 1 fullmove
+        th_fullmoves = (th_plies + 1) // 2
+        return {
+            "eco": last_entry.get("eco"),
+            "name": last_entry.get("name"),
+            "th_plies": th_plies,
+            "th_fullmoves": th_fullmoves,
+        }
+    except Exception:
+        return {}
 
 
 def _cp_to_win_pct(cp: Optional[int]) -> float:
@@ -241,35 +349,30 @@ def _determine_tier(
     user_win_pct_loss: float,
     user_rank: int,
     is_only_best: bool,
-    top_moves: List[Tuple[str, str, int, int]],
-    user_uci: str
 ) -> MoveTier:
     """
     T1~T5 등급 결정
-    
-    T1: 유일한 최선수 (is_only_best가 True이며 user_rank == 1)
-    T2: 엔진 1순위 추천 (user_rank == 1)
-    T3: 엔진 2~3순위 추천 (2 <= user_rank <= 3)
-    T4: 순위권外지만 승률 손실 ≤ 30%
-    T5: 승률 손실 > 30%
+
+    분류는 추천 순위와 실제 손실을 함께 본다.
+
+    T1: 유일한 최선수이면서 손실이 사실상 없는 수
+    T2: 1순위 수이면서 손실이 작은 수
+    T3: 2~3순위이거나 공동 최선에 가까운 수
+    T4: 무난하지만 눈에 띄는 손실이 있는 수
+    T5: 큰 실수
     """
-    # T5: 큰 실수 (승률 손실 > 30%)
-    if user_win_pct_loss > 30.0:
+    if user_cp_loss >= T4_MAX_CP_LOSS or user_win_pct_loss > T4_MAX_WIN_PCT_LOSS:
         return MoveTier.T5
-    
-    # T1: 유일한 최선수
-    if is_only_best and user_rank == 1:
+
+    if is_only_best and user_rank == 1 and user_cp_loss <= T1_MAX_CP_LOSS and user_win_pct_loss <= T1_MAX_WIN_PCT_LOSS:
         return MoveTier.T1
-    
-    # T2: 엔진 1순위 추천
-    if user_rank == 1:
+
+    if user_rank == 1 and user_cp_loss <= T2_MAX_CP_LOSS and user_win_pct_loss <= T2_MAX_WIN_PCT_LOSS:
         return MoveTier.T2
-    
-    # T3: 엔진 2~3순위 추천
-    if 2 <= user_rank <= 3:
+
+    if 1 <= user_rank <= 3 and user_cp_loss <= T3_MAX_CP_LOSS and user_win_pct_loss <= T3_MAX_WIN_PCT_LOSS:
         return MoveTier.T3
-    
-    # T4: 순위권外지만 승률 손실이 적은 수
+
     return MoveTier.T4
 
 
@@ -382,17 +485,17 @@ def analyze_single_game_sync(
                                 break
                         
                         # 유일한 최선수 여부 확인
-                        # 2순위와의 평가 차이가 30센티폰 이상이면 유일한 최선수로 간주
+                        # 2순위와의 평가 차이가 충분히 클 때만 유일 최선으로 간주한다.
                         if len(top_moves_raw) >= 2:
                             second_cp = top_moves_raw[1][2]
-                            if best_cp - second_cp > 30 and user_rank == 1:
+                            if best_cp - second_cp >= ONLY_BEST_MARGIN_CP and user_rank == 1:
                                 is_only_best = True
                         elif len(top_moves_raw) == 1 and user_rank == 1:
                             is_only_best = True
                     
                     # 등급 결정
                     tier = _determine_tier(
-                        cp_loss, win_pct_loss, user_rank, is_only_best, top_moves_raw, user_uci
+                        cp_loss, win_pct_loss, user_rank, is_only_best
                     )
                     
                     # 상위 수 정보 정리
@@ -471,6 +574,7 @@ def _analyze_single_move_with_fen(
     # 수 실행 후 평가
     board.push(move)
     fen_after = board.fen()
+    epd_after = " ".join(fen_after.split()[:4])
     info_after = engine.analyse(
         board,
         chess.engine.Limit(time=time_per_move),
@@ -506,15 +610,22 @@ def _analyze_single_move_with_fen(
         # 유일한 최선수 여부 확인
         if len(top_moves_raw) >= 2:
             second_cp = top_moves_raw[1][2]
-            if best_cp - second_cp > 30 and user_rank == 1:
+            if best_cp - second_cp >= ONLY_BEST_MARGIN_CP and user_rank == 1:
                 is_only_best = True
         elif len(top_moves_raw) == 1 and user_rank == 1:
             is_only_best = True
     
     # 등급 결정
     tier = _determine_tier(
-        cp_loss, win_pct_loss, user_rank, is_only_best, top_moves_raw, user_uci
+        cp_loss, win_pct_loss, user_rank, is_only_best
     )
+
+    # 오프닝 이론수(TH): 수 후 포지션이 오프닝 DB(EPD)에 매칭되면 TH로 부여
+    try:
+        if opening_db.is_loaded() and opening_db.get_entry_by_epd(epd_after):
+            tier = MoveTier.TH
+    except Exception:
+        pass
     
     # 상위 수 정보 정리
     top_moves_info = [
@@ -575,6 +686,28 @@ def analyze_both_players_sync(
     black_moves: List[AnalyzedMove] = []
     
     try:
+        # region agent log
+        stockfish_resolved = STOCKFISH_PATH
+        stockfish_exists = False
+        try:
+            stockfish_exists = bool(stockfish_resolved) and Path(stockfish_resolved).exists()
+        except Exception:
+            stockfish_exists = False
+        _agent_log(
+            "H2",
+            "backend/app/ml/game_analyzer.py:analyze_both_players_sync",
+            "engine_start",
+            {
+                "game_id": game_id,
+                "time_per_move": time_per_move,
+                "time_per_multi": time_per_multi,
+                "stockfish_path": stockfish_resolved,
+                "stockfish_exists": stockfish_exists,
+                "opening_db_loaded": opening_db.is_loaded(),
+            },
+        )
+        # endregion
+        t0 = time.perf_counter()
         with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
             board = game.board()
             node = game
@@ -599,12 +732,43 @@ def analyze_both_players_sync(
                 board.push(move)
                 node = next_node
                 halfmove += 1
+        # region agent log
+        _agent_log(
+            "H1",
+            "backend/app/ml/game_analyzer.py:analyze_both_players_sync",
+            "engine_complete",
+            {
+                "game_id": game_id,
+                "halfmove_total": halfmove,
+                "white_moves": len(white_moves),
+                "black_moves": len(black_moves),
+                "elapsed_ms": int((time.perf_counter() - t0) * 1000),
+                "approx_expected_ms": int(max(0.0, halfmove * (time_per_move * 2 + time_per_multi)) * 1000),
+            },
+        )
+        # endregion
     
     except FileNotFoundError:
         logger.error(f"Stockfish not found: {STOCKFISH_PATH}")
+        # region agent log
+        _agent_log(
+            "H2",
+            "backend/app/ml/game_analyzer.py:analyze_both_players_sync",
+            "stockfish_filenotfound",
+            {"game_id": game_id, "stockfish_path": STOCKFISH_PATH},
+        )
+        # endregion
         return None
     except Exception as exc:
         logger.exception(f"Game analysis error: {exc}")
+        # region agent log
+        _agent_log(
+            "H3",
+            "backend/app/ml/game_analyzer.py:analyze_both_players_sync",
+            "engine_exception",
+            {"game_id": game_id, "exc_type": type(exc).__name__, "exc_str": str(exc)[:500]},
+        )
+        # endregion
         return None
     
     # 결과 생성
@@ -622,10 +786,12 @@ def analyze_both_players_sync(
         analyzed_moves=black_moves,
     )
     
+    opening = _compute_opening_theory(pgn_str)
     return BothPlayersAnalysisResult(
         game_id=game_id,
         white_player=white_player,
         black_player=black_player,
         white_analysis=white_analysis,
         black_analysis=black_analysis,
+        opening=opening,
     )

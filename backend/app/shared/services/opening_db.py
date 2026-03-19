@@ -39,6 +39,18 @@ _by_eco: dict[str, dict] = {}
 _by_epd: dict[str, dict] = {}
 
 
+def _normalize_epd(epd: str) -> str:
+    """
+    lichess-org/chess-openings의 epd 키는 보통 "piece turn castling ep" 4필드 형태.
+    python-chess의 Board.epd()는 hmvc/fmvn 같은 operations를 붙일 수 있어서 그대로면 매칭이 깨질 수 있다.
+    여기서는 공백 기준 앞의 4필드만 사용해 키를 정규화한다.
+    """
+    if not epd:
+        return epd
+    parts = epd.strip().split()
+    return " ".join(parts[:4]) if len(parts) >= 4 else epd.strip()
+
+
 # ── TSV 파싱 ─────────────────────────────────────────────────
 def _parse_tsv(text: str) -> list[dict]:
     rows: list[dict] = []
@@ -71,12 +83,56 @@ def _build_indexes(rows: list[dict]) -> None:
                 "epd": row["epd"],
             }
         # epd 기준: 포지션별 정확한 이름 저장 (모든 변형 포함)
-        if row["epd"]:
-            _by_epd[row["epd"]] = {
-                "eco": eco,
-                "name": row["name"],
-                "uci": row["uci"],
-            }
+        epd_raw = (row.get("epd") or "").strip()
+        if epd_raw:
+            key = _normalize_epd(epd_raw)
+            _by_epd[key] = {"eco": eco, "name": row["name"], "uci": row.get("uci", "")}
+            continue
+
+        # ── Fallback: TSV에 epd가 비어있는 경우가 있어 PGN으로 포지션을 계산 ──
+        pgn_line = (row.get("pgn") or "").strip()
+        if not pgn_line:
+            continue
+
+        try:
+            import chess  # type: ignore
+        except Exception:
+            continue
+
+        try:
+            board = chess.Board()
+            # 매우 단순한 SAN 토큰 파서: 숫자, 결과, 코멘트 등을 제거하고 SAN만 적용
+            tokens = (
+                pgn_line.replace("\n", " ")
+                .replace("{", " { ")
+                .replace("}", " } ")
+                .split()
+            )
+            in_comment = False
+            for tok in tokens:
+                if tok == "{":
+                    in_comment = True
+                    continue
+                if tok == "}":
+                    in_comment = False
+                    continue
+                if in_comment:
+                    continue
+                if tok.endswith(".") or tok.count(".") >= 1:
+                    continue
+                if tok in ("1-0", "0-1", "1/2-1/2", "*"):
+                    continue
+                # NAG/annotation 제거 (e4!, e4?! 등은 python-chess에서 처리하지만 안전하게 일부 trim)
+                san = tok.strip()
+                if not san:
+                    continue
+                move = board.parse_san(san)
+                board.push(move)
+
+            key = _normalize_epd(" ".join(board.fen().split()[:4]))
+            _by_epd[key] = {"eco": eco, "name": row["name"], "uci": row.get("uci", "")}
+        except Exception:
+            continue
 
 
 def _all_rows_for_cache(rows: list[dict]) -> list[dict]:
@@ -161,7 +217,7 @@ def get_entry_by_epd(epd: str) -> Optional[dict]:
     포지션(EPD) → {eco, name, uci}
     PGN에서 현재 포지션을 계산한 뒤 정확한 오프닝 변형을 조회할 때 사용.
     """
-    return _by_epd.get(epd)
+    return _by_epd.get(_normalize_epd(epd))
 
 
 def is_loaded() -> bool:
