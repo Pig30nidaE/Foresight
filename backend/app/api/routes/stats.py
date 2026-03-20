@@ -54,7 +54,7 @@ async def get_first_move_stats(
         import time as _t, json as _j
         try:
             _pgn_count = sum(1 for g in games if getattr(g, "pgn", None))
-            with open("/Users/pig30nidae/Pig30nidaE/Project/Foresight/.cursor/debug-ce40e3.log","a") as _f:
+            with open("/app/debug-ce40e3.log","a") as _f:
                 _f.write(_j.dumps({"sessionId":"ce40e3","timestamp":int(_t.time()*1000),"location":"stats.py:get_first_move_stats","message":"games PGN availability","hypothesisId":"A","data":{"total_games":len(games),"games_with_pgn":_pgn_count,"platform":str(platform),"username":username}})+"\n")
         except Exception:
             pass
@@ -187,7 +187,7 @@ async def get_time_pressure(
         import time as _t, json as _j
         try:
             _pgn_count2 = sum(1 for g in games if getattr(g, "pgn", None))
-            with open("/Users/pig30nidae/Pig30nidaE/Project/Foresight/.cursor/debug-ce40e3.log","a") as _f:
+            with open("/app/debug-ce40e3.log","a") as _f:
                 _f.write(_j.dumps({"sessionId":"ce40e3","timestamp":int(_t.time()*1000),"location":"stats.py:get_time_pressure","message":"time-pressure games PGN availability","hypothesisId":"A-C","data":{"total_games":len(games),"games_with_pgn":_pgn_count2,"platform":str(platform),"username":username}})+"\n")
         except Exception:
             pass

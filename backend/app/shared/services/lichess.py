@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import httpx
 import re
 from datetime import datetime, timezone
@@ -28,6 +29,80 @@ class LichessRateLimitedError(Exception):
     """Lichess가 429를 반환했고 재시도 후에도 실패한 경우."""
 
     pass
+
+
+def _build_pgn(raw: dict, w_disp: str, b_disp: str) -> Optional[str]:
+    """Lichess NDJSON 게임 객체 → PGN 문자열 재구성.
+
+    NDJSON 포맷에는 'pgn' 필드가 없으므로 'moves'(SAN 공백구분)와
+    'clocks'(센티초 배열)로 PGN을 직접 구성한다.
+    """
+    moves_str = (raw.get("moves") or "").strip()
+    if not moves_str:
+        return None
+
+    winner = raw.get("winner")
+    if winner == "white":
+        result_str = "1-0"
+    elif winner == "black":
+        result_str = "0-1"
+    else:
+        result_str = "1/2-1/2"
+
+    date_str = "????.??.??"
+    ts = raw.get("createdAt")
+    if ts:
+        try:
+            dt = datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc)
+            date_str = dt.strftime("%Y.%m.%d")
+        except Exception:
+            pass
+
+    tc_obj = raw.get("clock") or {}
+    initial = tc_obj.get("initial")
+    increment = tc_obj.get("increment")
+    tc_str = f"{initial}+{increment}" if initial is not None and increment is not None else "-"
+
+    opening = raw.get("opening") or {}
+    eco = opening.get("eco", "")
+    opening_name = opening.get("name", "")
+
+    lines = [
+        f'[Event "Lichess {raw.get("speed", "")}"]',
+        f'[Site "https://lichess.org/{raw.get("id", "")}"]',
+        f'[Date "{date_str}"]',
+        f'[White "{w_disp}"]',
+        f'[Black "{b_disp}"]',
+        f'[Result "{result_str}"]',
+        f'[TimeControl "{tc_str}"]',
+    ]
+    if eco:
+        lines.append(f'[ECO "{eco}"]')
+    if opening_name:
+        lines.append(f'[Opening "{opening_name}"]')
+    lines.append("")  # blank line before moves
+
+    move_tokens = moves_str.split()
+    clocks = raw.get("clocks")  # centiseconds, alternates white/black
+    parts: list = []
+    move_num = 1
+    for i, san in enumerate(move_tokens):
+        if i % 2 == 0:
+            parts.append(f"{move_num}.")
+        parts.append(san)
+        if isinstance(clocks, list) and i < len(clocks):
+            cs = int(clocks[i])
+            total_s = cs // 100  # centiseconds → seconds
+            h = total_s // 3600
+            m = (total_s % 3600) // 60
+            s = total_s % 60
+            parts.append(f"{{[%clk {h}:{m:02d}:{s:02d}]}}")
+        if i % 2 == 1:
+            move_num += 1
+    parts.append(result_str)
+    lines.append(" ".join(parts))
+
+    return "\n".join(lines)
 
 
 def _parse_cp_evals(pgn: str) -> Optional[List[Optional[float]]]:
@@ -89,6 +164,11 @@ def _side_display_name(side: dict) -> str:
 
 class LichessService:
     BASE_URL = settings.LICHESS_BASE_URL
+    _RECENT_GAMES_TTL_SEC = 45.0
+    _recent_games_cache: dict[tuple, tuple[float, List[GameSummary]]] = {}
+    _recent_games_locks: dict[tuple, asyncio.Lock] = {}
+    # Lichess는 게임 다운로드를 동시에 1개만 허용하도록 권고 (rate limit 준수)
+    _download_semaphore: asyncio.Semaphore = asyncio.Semaphore(1)
 
     def _user_agent(self) -> str:
         if settings.LICHESS_USER_AGENT.strip():
@@ -200,63 +280,87 @@ class LichessService:
         until_ms: Optional[int] = None,  # Unix milliseconds
         *,
         clocks: bool = False,
-        evals: bool = True,
+        evals: bool = False,
     ) -> List[GameSummary]:
         """게임 목록 조회 (ndjson 스트림). since_ms/until_ms 로 기간 필터링 가능.
 
-        clocks=True: PGN에 %clk (시간 압박 분석 등).
-        evals=False: 응답 크기·속도 제한 완화 (집계 통계에 eval 불필요 시).
+        clocks=True: PGN에 %clk 어노테이션 포함 (시간 압박 분석용).
+        evals=True: Lichess Stockfish 평가 포함 (기본 False — 자체 Stockfish 사용).
         """
-        # API max는 요청 개수와 맞춤 (항상 5000이면 속도 제한·부하 증가)
         fetch_max = min(max(max_games, 50), 5000)
-        params: dict = {
-            "max": fetch_max,
-            "opening": "true",
-            "clocks": "true" if clocks else "false",
-            "evals": "true" if evals else "false",
-        }
-        if perf_type:
-            params["perfType"] = perf_type
-        if since_ms:
-            params["since"] = since_ms
-        if until_ms:
-            params["until"] = until_ms
+        cache_key = (username.lower(), fetch_max, perf_type, since_ms, until_ms, clocks, evals)
 
-        uid = _quote_user_path(username)
-        async with httpx.AsyncClient() as client:
-            resp = await self._get_with_429_retry(
-                client,
-                f"{self.BASE_URL}/games/user/{uid}",
-                headers=self._get_headers(),
-                params=params,
-                timeout=90.0,
-            )
+        # 1차 캐시 확인 (락 없이 빠른 경로)
+        now = time.monotonic()
+        cached = self._recent_games_cache.get(cache_key)
+        if cached and (now - cached[0]) <= self._RECENT_GAMES_TTL_SEC:
+            logger.debug("Lichess games cache hit for %s", username)
+            return list(cached[1])
 
-        games: List[GameSummary] = []
-        uname = _api_username(username)
-        for line in resp.text.strip().split("\n"):
-            if not line:
-                continue
+        # 동일 cache_key 동시 요청은 하나만 Lichess에 도달하도록 락 획득
+        lock = self._recent_games_locks.setdefault(cache_key, asyncio.Lock())
+        async with lock:
+            # 락 획득 후 재확인 (이중 잠금 패턴)
+            now = time.monotonic()
+            cached = self._recent_games_cache.get(cache_key)
+            if cached and (now - cached[0]) <= self._RECENT_GAMES_TTL_SEC:
+                logger.debug("Lichess games cache hit (post-lock) for %s", username)
+                return list(cached[1])
+
+            params: dict = {
+                "max": fetch_max,
+                "opening": "true",
+                "clocks": "true" if clocks else "false",
+                "evals": "true" if evals else "false",
+            }
+            if perf_type:
+                params["perfType"] = perf_type
+            if since_ms:
+                params["since"] = since_ms
+            if until_ms:
+                params["until"] = until_ms
+
+            uid = _quote_user_path(username)
+            async with self._download_semaphore:
+                async with httpx.AsyncClient() as client:
+                    resp = await self._get_with_429_retry(
+                        client,
+                        f"{self.BASE_URL}/games/user/{uid}",
+                        headers=self._get_headers(),
+                        params=params,
+                        timeout=90.0,
+                    )
+
+            # #region agent log
+            import json as _j
             try:
-                raw = json.loads(line)
-                parsed = self._parse_game(raw, uname, perf_type)
-                if parsed.game_id:
-                    games.append(parsed)
+                _first_line = resp.text.strip().split("\n")[0] if resp.text.strip() else ""
+                _sample: dict = {}
+                try: _sample = _j.loads(_first_line)
+                except Exception: pass
+                with open("/app/debug-ce40e3.log", "a") as _f:
+                    _f.write(_j.dumps({"sessionId": "ce40e3", "runId": "post-fix", "timestamp": int(time.time() * 1000), "location": "lichess.py:get_recent_games", "message": "response sample", "data": {"has_pgn_field": "pgn" in _sample, "has_moves_field": "moves" in _sample, "has_clocks_field": "clocks" in _sample, "moves_snippet": str(_sample.get("moves", "<MISSING>"))[:80], "clocks_sample": _sample.get("clocks", [])[:4] if isinstance(_sample.get("clocks"), list) else "<MISSING>"}}) + "\n")
             except Exception:
-                continue
+                pass
+            # #endregion
 
-        return games
+            games: List[GameSummary] = []
+            uname = _api_username(username)
+            for line in resp.text.strip().split("\n"):
+                if not line:
+                    continue
+                try:
+                    raw = json.loads(line)
+                    parsed = self._parse_game(raw, uname, perf_type)
+                    if parsed.game_id:
+                        games.append(parsed)
+                except Exception:
+                    continue
+
+            self._recent_games_cache[cache_key] = (time.monotonic(), list(games))
+            return games
 
     def _parse_game(self, raw: dict, username_lower: str, perf_type: Optional[str] = None) -> GameSummary:
-        # #region agent log
-        import time as _t, json as _j
-        try:
-            _pgn_raw = raw.get("pgn"); _moves_raw = raw.get("moves"); _clocks_raw = raw.get("clocks")
-            with open("/Users/pig30nidae/Pig30nidaE/Project/Foresight/.cursor/debug-ce40e3.log","a") as _f:
-                _f.write(_j.dumps({"sessionId":"ce40e3","timestamp":int(_t.time()*1000),"location":"lichess.py:_parse_game","message":"raw field check","hypothesisId":"A-B-C-D","data":{"has_pgn_key":"pgn" in raw,"pgn_type":type(_pgn_raw).__name__,"pgn_snippet":str(_pgn_raw)[:80] if _pgn_raw else None,"has_moves_key":"moves" in raw,"moves_snippet":str(_moves_raw)[:80] if _moves_raw else None,"has_clocks_key":"clocks" in raw,"clocks_sample":_clocks_raw[:5] if isinstance(_clocks_raw,list) else _clocks_raw,"game_id":raw.get("id"),"speed":raw.get("speed")}})+"\n")
-        except Exception:
-            pass
-        # #endregion
         players = raw.get("players", {})
         white = players.get("white") if isinstance(players.get("white"), dict) else {}
         black = players.get("black") if isinstance(players.get("black"), dict) else {}
@@ -303,11 +407,15 @@ class LichessService:
         if not opening_name and eco_code:
             opening_name = opening_db.get_name_by_eco(eco_code)
 
-        pgn = raw.get("pgn")
-        if isinstance(pgn, str):
-            pgn_out: Optional[str] = pgn
-        else:
-            pgn_out = None
+        pgn_out: Optional[str] = _build_pgn(raw, w_disp, b_disp)
+        # #region agent log
+        import time as _t, json as _j
+        try:
+            with open("/app/debug-ce40e3.log","a") as _f:
+                _f.write(_j.dumps({"sessionId":"ce40e3","runId":"post-fix","timestamp":int(_t.time()*1000),"location":"lichess.py:_parse_game","message":"pgn_out after _build_pgn","hypothesisId":"A","data":{"game_id":raw.get("id"),"has_moves":bool(raw.get("moves")),"has_clocks":bool(raw.get("clocks")),"pgn_out_none":pgn_out is None,"pgn_snippet":pgn_out[:120] if pgn_out else None}})+"\n")
+        except Exception:
+            pass
+        # #endregion
 
         return GameSummary(
             game_id=str(raw.get("id", "") or ""),

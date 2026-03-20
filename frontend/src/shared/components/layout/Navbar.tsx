@@ -55,37 +55,40 @@ export default function Navbar() {
   return (
     <>
       <header className="border-b border-chess-border/60 bg-chess-bg/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+        {/* 모바일/태블릿은 동일한 틀, 데스크톱(md 이상)에서만 좌측 정렬이 되도록 wrapper를 분리 */}
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
+          {/* 좌측 영역: 로고 + (md 이상에서만) 네비 링크 */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {/* 로고 */}
+            <Link
+              href="/"
+              className="flex items-center gap-1.5 font-bold text-lg tracking-tight select-none shrink-0"
+            >
+              <span className="text-xl leading-none">♟️</span>
+              <span className="text-chess-primary">Fore</span>
+              <span className="text-chess-accent">sight</span>
+            </Link>
 
-          {/* 로고 */}
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 font-bold text-lg tracking-tight select-none shrink-0"
-          >
-            <span className="text-xl leading-none">♟️</span>
-            <span className="text-chess-primary">Fore</span>
-            <span className="text-chess-accent">sight</span>
-          </Link>
-
-          {/* ── 데스크톱 전용 (md 이상) ── */}
-          <nav className="hidden md:flex items-center gap-1 text-sm">
-            {NAV_ITEMS.map(({ href, labelKey }) => {
-              const active = pathname.startsWith(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-colors ${
-                    active
-                      ? "bg-chess-accent text-white"
-                      : "text-chess-muted hover:text-chess-primary hover:bg-chess-border/50"
-                  }`}
-                >
-                  {t(labelKey)}
-                </Link>
-              );
-            })}
-          </nav>
+            {/* ── 데스크톱 전용 (md 이상) ── */}
+            <nav className="hidden md:flex items-center gap-1 text-sm shrink-0">
+              {NAV_ITEMS.map(({ href, labelKey }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-colors ${
+                      active
+                        ? "bg-chess-accent text-white"
+                        : "text-chess-muted hover:text-chess-primary hover:bg-chess-border/50"
+                    }`}
+                  >
+                    {t(labelKey)}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
 
           {/* ── 데스크톱 검색 + 설정 (md 이상) ── */}
           <div className="hidden md:flex items-center gap-3 shrink-0">
@@ -116,7 +119,7 @@ export default function Navbar() {
           </div>
 
           {/* ── 모바일 우측 아이콘 (md 미만) ── */}
-          <div className="flex md:hidden items-center gap-1">
+          <div className="flex md:hidden items-center gap-1 shrink-0">
             <button
               type="button"
               className="p-2.5 rounded-full hover:bg-chess-border/40 transition-colors"

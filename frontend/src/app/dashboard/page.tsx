@@ -79,22 +79,108 @@ function DashboardContent() {
   };
 
   return (
-    <div className="space-y-5 sm:space-y-8">
+    <div className="relative space-y-5 sm:space-y-8">
+
+      {/* ── Lichess Coming Soon Overlay ── */}
+      {platform === "lichess" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-chess-bg/60">
+          <div className="flex flex-col items-center gap-3 px-8 py-10 rounded-2xl bg-chess-surface/90 border border-chess-border shadow-2xl text-center max-w-sm mx-4">
+            <span className="text-5xl select-none">🚧</span>
+            <h3 className="text-lg font-bold text-chess-primary">
+              {t("lichess.comingSoon.title")}
+            </h3>
+            <p className="text-sm text-chess-muted leading-relaxed">
+              {t("lichess.comingSoon.desc")}
+            </p>
+            <button
+              type="button"
+              onClick={() => setPlatform("chess.com")}
+              className="mt-2 px-5 py-2 rounded-lg bg-chess-accent hover:bg-chess-accent/80 text-white text-sm font-semibold transition-colors"
+            >
+              Chess.com →
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Search Bar ── */}
       <form
         onSubmit={handleSearch}
         className="flex flex-col gap-3 bg-chess-surface/60 border border-chess-border rounded-2xl p-4 sm:p-5"
       >
-        {/* 플랫폼 + 타임클래스 토글 (한 줄) */}
-        <div className="flex gap-2">
+        {/* 모바일: 기존(세로) 검색 필터 */}
+        <div className="md:hidden flex flex-col gap-3 w-full">
+          {/* 플랫폼 + 타임클래스 토글 */}
+          <div className="flex gap-2">
+            <div className="flex rounded-lg overflow-hidden border border-chess-border">
+              {(["chess.com", "lichess"] as Platform[]).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPlatform(p)}
+                  className={`px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
+                    platform === p
+                      ? "bg-chess-accent text-white"
+                      : "bg-chess-surface text-chess-muted hover:text-chess-primary"
+                  }`}
+                >
+                  {p === "chess.com" ? "Chess.com" : "Lichess"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 타임클래스 토글 (전체 너비) */}
+          <div className="flex rounded-lg overflow-hidden border border-chess-border w-full">
+            {TIME_CLASSES.map((tc) => {
+              const count = tcGameCount(tc);
+              return (
+                <button
+                  key={tc}
+                  type="button"
+                  onClick={() => setTimeClass(tc)}
+                  className={`flex-1 py-2 text-xs capitalize transition-colors ${
+                    timeClass === tc
+                      ? "bg-chess-primary text-white"
+                      : "bg-chess-surface text-chess-muted hover:text-chess-primary"
+                  }`}
+                >
+                  {tc}
+                  {count != null && (
+                    <span className="hidden sm:inline ml-1 text-xs opacity-70">({count})</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 유저명 입력 + 제출 버튼 */}
+          <div className="flex gap-2">
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder={t("dh.searchPlaceholder")}
+              className="flex-1 w-full bg-chess-surface border border-chess-border rounded-lg px-4 py-2.5 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors text-sm"
+            />
+            <button
+              type="submit"
+              className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-4 py-2.5 rounded-lg transition-colors shrink-0 text-sm"
+            >
+              {t("dh.startAnalysis")}
+            </button>
+          </div>
+        </div>
+
+        {/* PC: 기존(가로) 검색 필터 */}
+        <div className="hidden md:flex items-center gap-3 w-full">
           {/* 플랫폼 토글 */}
-          <div className="flex rounded-lg overflow-hidden border border-chess-border">
+          <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
             {(["chess.com", "lichess"] as Platform[]).map((p) => (
               <button
                 key={p}
                 type="button"
                 onClick={() => setPlatform(p)}
-                className={`px-3 sm:px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
                   platform === p
                     ? "bg-chess-accent text-white"
                     : "bg-chess-surface text-chess-muted hover:text-chess-primary"
@@ -104,46 +190,46 @@ function DashboardContent() {
               </button>
             ))}
           </div>
-        </div>
 
-        {/* 타임클래스 토글 (전체 너비) */}
-        <div className="flex rounded-lg overflow-hidden border border-chess-border w-full">
-          {TIME_CLASSES.map((tc) => {
-            const count = tcGameCount(tc);
-            return (
-              <button
-                key={tc}
-                type="button"
-                onClick={() => setTimeClass(tc)}
-                className={`flex-1 py-2 text-xs sm:text-sm capitalize transition-colors ${
-                  timeClass === tc
-                    ? "bg-chess-primary text-white"
-                    : "bg-chess-surface text-chess-muted hover:text-chess-primary"
-                }`}
-              >
-                {tc}
-                {count != null && (
-                  <span className="hidden sm:inline ml-1 text-xs opacity-70">({count})</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+          {/* 타임클래스 토글 */}
+          <div className="flex rounded-lg overflow-hidden border border-chess-border flex-1 min-w-0">
+            {TIME_CLASSES.map((tc) => {
+              const count = tcGameCount(tc);
+              return (
+                <button
+                  key={tc}
+                  type="button"
+                  onClick={() => setTimeClass(tc)}
+                  className={`flex-1 py-2 text-sm capitalize transition-colors ${
+                    timeClass === tc
+                      ? "bg-chess-primary text-white"
+                      : "bg-chess-surface text-chess-muted hover:text-chess-primary"
+                  }`}
+                >
+                  {tc}
+                  {count != null && (
+                    <span className="ml-2 text-xs opacity-70">({count})</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-        {/* 유저명 입력 + 제출 버튼 */}
-        <div className="flex gap-2">
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder={t("dh.searchPlaceholder")}
-            className="flex-1 w-full bg-chess-surface border border-chess-border rounded-lg px-4 py-2.5 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors text-sm"
-          />
-          <button
-            type="submit"
-            className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-4 sm:px-6 py-2.5 rounded-lg transition-colors shrink-0 text-sm"
-          >
-            {t("dh.startAnalysis")}
-          </button>
+          {/* 유저명 입력 + 제출 버튼 */}
+          <div className="flex items-center gap-2 shrink-0">
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder={t("dh.searchPlaceholder")}
+              className="w-56 bg-chess-surface border border-chess-border rounded-lg px-4 py-2.5 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors text-sm"
+            />
+            <button
+              type="submit"
+              className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors shrink-0 text-sm"
+            >
+              {t("dh.startAnalysis")}
+            </button>
+          </div>
         </div>
       </form>
 
