@@ -501,20 +501,32 @@ function GameAnalysisPanel({
   }, [filteredMoves, selectedMove, setSelectedMove]);
 
   // keep selected move visible within the move list container (no page-level scroll)
+  // Use getBoundingClientRect: offsetTop is relative to offsetParent, not the scroll box.
   useEffect(() => {
     if (!selectedMove) return;
-    const el = moveBtnRefs.current[selectedMove.halfmove];
-    const container = moveListRef.current;
-    if (!el || !container) return;
-    const elTop = el.offsetTop;
-    const elBottom = elTop + el.offsetHeight;
-    const cTop = container.scrollTop;
-    const cBottom = cTop + container.clientHeight;
-    if (elTop < cTop) {
-      container.scrollTop = elTop;
-    } else if (elBottom > cBottom) {
-      container.scrollTop = elBottom - container.clientHeight;
-    }
+
+    const scrollSelectedIntoView = () => {
+      const el = moveBtnRefs.current[selectedMove.halfmove];
+      const container = moveListRef.current;
+      if (!el || !container) return;
+
+      const cRect = container.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const relativeTop = elRect.top - cRect.top + container.scrollTop;
+      const relativeBottom = relativeTop + elRect.height;
+      const cTop = container.scrollTop;
+      const cBottom = cTop + container.clientHeight;
+
+      if (relativeTop < cTop) {
+        container.scrollTop = relativeTop;
+      } else if (relativeBottom > cBottom) {
+        container.scrollTop = relativeBottom - container.clientHeight;
+      }
+    };
+
+    scrollSelectedIntoView();
+    const id = requestAnimationFrame(scrollSelectedIntoView);
+    return () => cancelAnimationFrame(id);
   }, [selectedMove]);
 
   const openingName = data.opening?.name;
@@ -819,8 +831,16 @@ function GameAnalysisPanel({
                         <span className="ml-auto shrink-0 text-[10px] font-semibold text-chess-primary/70 sm:hidden tabular-nums">
                           {move.win_pct_loss.toFixed(1)}%
                         </span>
-                        <p className="hidden sm:block text-[11px] text-chess-primary/80 font-semibold mt-0.5">
-                          엔진 {move.user_move_rank}위 &middot; {move.win_pct_loss.toFixed(1)}% 손실
+                        <p className="hidden sm:block text-[11px] font-semibold mt-0.5">
+                          {move.user_move_rank === 0 ? (
+                            <span className="text-orange-400">
+                              {t("ga.notInTop5").replace("{loss}", move.win_pct_loss.toFixed(1))}
+                            </span>
+                          ) : (
+                            <span className="text-chess-primary/80">
+                              {t("ga.engineRankLine").replace("{rank}", String(move.user_move_rank)).replace("{loss}", move.win_pct_loss.toFixed(1))}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </button>
