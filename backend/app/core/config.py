@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # External APIs
     LICHESS_API_TOKEN: str = ""
     LICHESS_BASE_URL: str = "https://lichess.org/api"
+    # Lichess 권장: 식별 가능한 User-Agent (https://lichess.org/api#section/Introduction/Rate-limiting)
+    LICHESS_USER_AGENT: str = ""
+    # 429 Too Many Requests 시 재시도 횟수 (간격은 Retry-After 또는 지수 백오프)
+    LICHESS_MAX_RETRIES: int = 6
     CHESSDOTCOM_BASE_URL: str = "https://api.chess.com/pub"
 
     class Config:

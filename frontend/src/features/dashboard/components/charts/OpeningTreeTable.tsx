@@ -310,16 +310,16 @@ function OpeningDetailModal({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
 
       <div
-        className="relative w-[900px] h-[600px] flex flex-col
+        className="relative w-full max-w-[900px] h-[90dvh] sm:h-[600px] flex flex-col
                    bg-chess-bg border border-chess-border/60 rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-chess-border">
-          <div>
-            <h2 className="text-xl font-bold text-chess-primary">
+        <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-chess-border">
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-xl font-bold text-chess-primary truncate">
               {side === "white" ? t("chart.whiteOpeningAnalysis") : t("chart.blackOpeningAnalysis")}
             </h2>
-            <p className="text-sm text-chess-muted mt-1">
+            <p className="text-xs sm:text-sm text-chess-muted mt-0.5 sm:mt-1">
               {t("chart.totalOpeningsLines").replace("{n}", String(data.length))}
               <span className="text-chess-primary font-semibold mx-1">{totalGames}</span>{t("chart.totalGames")}
             </p>
@@ -327,7 +327,7 @@ function OpeningDetailModal({
 
           <button
             onClick={onClose}
-            className="text-chess-muted hover:text-chess-primary transition-colors text-2xl leading-none"
+            className="text-chess-muted hover:text-chess-primary transition-colors text-2xl leading-none shrink-0 ml-3"
             aria-label="닫기"
           >
             ✕
@@ -335,7 +335,8 @@ function OpeningDetailModal({
         </div>
 
         <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
-          <div className="w-[320px] flex-shrink-0 p-6 border-b lg:border-b-0 lg:border-r border-chess-border/50 bg-chess-surface/30">
+          {/* 원형차트 패널: 모바일에서 숨김 */}
+          <div className="hidden sm:flex w-[320px] flex-shrink-0 flex-col p-6 border-b lg:border-b-0 lg:border-r border-chess-border/50 bg-chess-surface/30">
             <h3 className="text-sm font-semibold text-chess-primary mb-4 text-center">
               {t("chart.gameRatioByOpening")}
             </h3>
@@ -343,17 +344,17 @@ function OpeningDetailModal({
           </div>
 
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="px-6 py-3 border-b border-chess-border/50 bg-chess-surface/20 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-chess-primary">
-                {t("chart.allOpeningsList")} 
-                <span className="text-chess-muted font-normal ml-1">
+            <div className="px-3 sm:px-6 py-2 sm:py-3 border-b border-chess-border/50 bg-chess-surface/20 flex items-center justify-between gap-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-chess-primary min-w-0 truncate">
+                {t("chart.allOpeningsList")}
+                <span className="hidden sm:inline text-chess-muted font-normal ml-1">
                   {expandedParents.size > 0 
                     ? t("chart.linesVariationsInfo").replace("{lines}", String(data.length)).replace("{showing}", String(allOpenings.length - data.length)).replace("{total}", String(totalVariations))
                     : t("chart.linesVariationsHidden").replace("{lines}", String(data.length)).replace("{total}", String(totalVariations))
                   }
                 </span>
               </h3>
-              <div className="flex gap-2">
+              <div className="flex gap-1 sm:gap-2 shrink-0">
                 <button
                   onClick={expandAll}
                   className="px-2 py-1 text-xs bg-chess-surface hover:bg-chess-border/50 
@@ -371,7 +372,7 @@ function OpeningDetailModal({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0">
+            <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-1 min-h-0">
               {data.map((parentNode) => {
                 const isExpanded = expandedParents.has(parentNode.name);
                 const hasChildren = parentNode.children && parentNode.children.length > 0;
@@ -408,8 +409,9 @@ function OpeningDetailModal({
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3 text-xs shrink-0 ml-2">
-                        <span className="text-chess-muted">{t("chart.gamesCount").replace("{n}", String(parentNode.games))}</span>
+                      <div className="flex items-center gap-2 sm:gap-3 text-xs shrink-0 ml-2">
+                        <span className="hidden sm:inline text-chess-muted">{t("chart.gamesCount").replace("{n}", String(parentNode.games))}</span>
+                        <span className="sm:hidden text-chess-muted/70">{parentNode.games}</span>
                         <div className="hidden sm:flex gap-1">
                           <span className="text-emerald-600">{parentNode.wins}{t("chart.win")}</span>
                           <span className="text-chess-muted/50">/</span>
@@ -468,7 +470,7 @@ function OpeningDetailModal({
           </div>
         </div>
 
-        <div className="px-6 py-3 border-t border-chess-border bg-chess-surface/20 text-center">
+        <div className="px-4 sm:px-6 py-2 sm:py-3 border-t border-chess-border bg-chess-surface/20 text-center">
           <p className="text-xs text-chess-muted">
             {t("chart.clickToViewDetail")}
           </p>
@@ -560,15 +562,16 @@ export default function OpeningTreeTable({ data }: Props) {
           </div>
 
           {/* Stats */}
-          <div className="flex items-center gap-3 text-xs shrink-0 ml-2">
-            <span className="text-chess-muted">{t("chart.gamesCount").replace("{n}", String(node.games))}</span>
-            <div className="flex gap-1">
+          <div className="flex items-center gap-2 sm:gap-3 text-xs shrink-0 ml-2">
+            <span className="hidden sm:inline text-chess-muted">{t("chart.gamesCount").replace("{n}", String(node.games))}</span>
+            <div className="hidden sm:flex gap-1">
               <span className="text-emerald-700">{node.wins}{t("chart.win")}</span>
               <span className="text-chess-muted">/</span>
               <span className="text-chess-muted">{node.draws}{t("chart.draw")}</span>
               <span className="text-chess-muted">/</span>
               <span className="text-red-700">{node.losses}{t("chart.loss")}</span>
             </div>
+            <span className="sm:hidden text-chess-muted/70">{node.games}</span>
             <span className={`font-bold w-10 text-right ${winColor(node.win_rate)}`}>
               {node.win_rate}%
             </span>

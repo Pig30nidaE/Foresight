@@ -391,8 +391,8 @@ export const en: typeof ko = {
   "settings.depthHint": "Higher depth is more accurate but takes longer. (up to 2-5 mins)",
 
   // Main Home
-  "home.desc1": "AI-powered chess game analysis platform for tournament players.",
-  "home.desc2": "Opening Analysis · Opponent Prep · Weakness Detection",
+  "home.desc1": "An analysis platform for chess players.",
+  "home.desc2": "Opening tiers, match history search, and analytics.",
   "home.openingTiers": "Opening Tiers",
   "home.openingTiersDesc": "Opening tiers by rating brackets",
   "home.search": "Match History",

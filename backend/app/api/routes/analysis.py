@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.models.schemas import PerformanceSummary, Platform
 from app.shared.services.chessdotcom import ChessDotComService
-from app.shared.services.lichess import LichessService
+from app.shared.services.lichess import LichessRateLimitedError, LichessService
 from app.features.dashboard.services.analysis import AnalysisService
 
 router = APIRouter()
@@ -26,9 +26,11 @@ async def get_performance_summary(
         if platform == Platform.chessdotcom:
             games = await chessdotcom_svc.get_recent_games(username, max_games)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class)
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, evals=False)
 
         return analysis_svc.get_performance_summary(username, platform, games, time_class)
+    except LichessRateLimitedError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -48,13 +50,15 @@ async def get_opening_stats(
         if platform == Platform.chessdotcom:
             games = await chessdotcom_svc.get_recent_games(username, max_games)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class)
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, evals=False)
 
         rows = analysis_svc.build_rows(games)
         if rows and time_class:
             rows = [r for r in rows if r["time_class"] == time_class]
 
         return analysis_svc.get_opening_stats(rows, top_n)
+    except LichessRateLimitedError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -74,7 +78,7 @@ async def get_opponent_analysis(
         if platform == Platform.chessdotcom:
             games = await chessdotcom_svc.get_recent_games(username, max_games)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class)
+            games = await lichess_svc.get_recent_games(username, max_games, time_class, evals=False)
 
         rows = analysis_svc.build_rows(games)
         if rows and time_class:
@@ -96,5 +100,7 @@ async def get_opponent_analysis(
             "frequent_openings": openings,
             "result_trend": trend[-20:],  # 최근 20게임 트렌드
         }
+    except LichessRateLimitedError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

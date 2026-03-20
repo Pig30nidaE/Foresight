@@ -201,20 +201,20 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
       {/* ── 헤더 ── */}
       <button
         onClick={() => setOpen((p) => !p)}
-        className={`w-full p-4 transition-all duration-200 text-left ${
+        className={`w-full p-3 sm:p-4 transition-all duration-200 text-left ${
           open ? "bg-chess-surface/20" : "hover:bg-chess-surface/50"
         }`}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2.5 sm:gap-4">
           <ResultBadge result={game.result} size="lg" t={t} />
-          
+
           {/* 메인 정보 */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-2">
-              <span className={`text-lg font-bold ${resultColor}`}>{resultLabel}</span>
-                <span className="text-base font-mono opacity-70">{tcIcon[game.time_class] ?? "♟"}</span>
+            <div className="flex items-center gap-2 sm:gap-3 mb-1.5 flex-wrap">
+              <span className={`text-base sm:text-lg font-bold ${resultColor}`}>{resultLabel}</span>
+              <span className="text-sm font-mono opacity-70">{tcIcon[game.time_class] ?? "♟"}</span>
               {ratingDiff !== null && (
-                <span className={`text-sm font-semibold px-2 py-1 rounded-full bg-chess-bg/60 border ${
+                <span className={`text-xs sm:text-sm font-semibold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full bg-chess-bg/60 border ${
                   ratingDiff > 0
                     ? "text-emerald-800 border-emerald-400/50 dark:text-emerald-400 dark:border-emerald-500/30"
                     : "text-red-700 border-red-400/50 dark:text-red-400 dark:border-red-500/30"
@@ -223,38 +223,34 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                 </span>
               )}
             </div>
-            
-            <div className="space-y-1">
-              <p className="text-base font-semibold text-chess-primary truncate leading-tight">
+
+            <div className="space-y-0.5 sm:space-y-1">
+              <p className="text-sm sm:text-base font-semibold text-chess-primary truncate leading-tight">
                 {game.opening_name ?? game.opening_eco ?? t("gh.card.noOpening")}
               </p>
-              <div className="flex items-center gap-3 text-sm text-chess-muted">
+              <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-chess-muted flex-wrap">
                 <span className="flex items-center gap-1">
-                  <span className="text-base">{myIcon}</span>
-                  <span className="font-medium text-chess-primary">{username}</span>
-                  {myRating != null && <span className="text-chess-muted">({myRating})</span>}
+                  <span>{myIcon}</span>
+                  <span className="font-medium text-chess-primary truncate max-w-[80px] sm:max-w-none">{username}</span>
+                  {myRating != null && <span className="text-chess-muted hidden sm:inline">({myRating})</span>}
                 </span>
                 <span className="opacity-40">vs</span>
                 <span className="flex items-center gap-1">
-                  <span className="text-base">{oppIcon}</span>
-                  <span className="font-medium text-chess-primary">{opponent}</span>
-                  {oppRating != null && <span className="text-chess-muted">({oppRating})</span>}
+                  <span>{oppIcon}</span>
+                  <span className="font-medium text-chess-primary truncate max-w-[80px] sm:max-w-none">{opponent}</span>
+                  {oppRating != null && <span className="text-chess-muted hidden sm:inline">({oppRating})</span>}
                 </span>
               </div>
             </div>
           </div>
-          
+
           {/* 우측 정보 */}
-          <div className="flex flex-col items-end gap-2 text-sm">
-            <div className="text-chess-muted font-medium">
-              {dateStr}
-            </div>
-            <div className="text-chess-muted/70 text-xs">
-              {timeStr}
-            </div>
+          <div className="flex flex-col items-end gap-1 sm:gap-2 text-xs sm:text-sm shrink-0">
+            <div className="text-chess-muted font-medium">{dateStr}</div>
+            <div className="text-chess-muted/70 text-[10px] sm:text-xs hidden sm:block">{timeStr}</div>
           </div>
-          
-          <span className={`text-chess-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
+
+          <span className={`text-chess-muted transition-transform duration-200 shrink-0 ${open ? "rotate-180" : ""}`}>
             ▼
           </span>
         </div>
@@ -264,74 +260,74 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
       {open && (
         <div className="border-t border-chess-border/30 bg-chess-surface/30">
           {/* 결과 요약 */}
-          <div className={`px-6 py-4 bg-gradient-to-r ${resultBgGradient}`}>
-            <div className="flex items-center justify-between">
+          <div className={`px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r ${resultBgGradient}`}>
+            <div className="flex items-center justify-between gap-2">
               {/* 나 */}
-              <div className="flex items-center gap-3">
-                <span className={`text-2xl ${isWhite ? "text-chess-primary" : "text-chess-muted"}`}>{myIcon}</span>
-                <div>
-                  <p className="text-base font-bold text-chess-accent">{username}</p>
-                <p className="text-sm text-chess-muted">{myColor} {myRating != null ? `· ${myRating} ${t("utils.ratingPts")}` : ""}</p>
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <span className={`text-xl sm:text-2xl ${isWhite ? "text-chess-primary" : "text-chess-muted"}`}>{myIcon}</span>
+                <div className="min-w-0">
+                  <p className="text-sm sm:text-base font-bold text-chess-accent truncate">{username}</p>
+                  <p className="text-xs sm:text-sm text-chess-muted">{myColor}{myRating != null ? ` · ${myRating}` : ""}</p>
                 </div>
               </div>
 
               {/* 결과 */}
-              <div className="text-center">
-                <span className={`text-2xl font-bold ${resultColor}`}>{resultLabel}</span>
+              <div className="text-center shrink-0">
+                <span className={`text-xl sm:text-2xl font-bold ${resultColor}`}>{resultLabel}</span>
                 {ratingDiff !== null && (
-                  <p className="text-sm text-chess-muted mt-1">
+                  <p className="text-xs sm:text-sm text-chess-muted mt-0.5">
                     {ratingDiff > 0 ? "+" : ""}{ratingDiff} {t("gh.card.diff")}
                   </p>
                 )}
               </div>
 
               {/* 상대 */}
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-base font-bold text-chess-primary">{opponent}</p>
-                  <p className="text-sm text-chess-muted">{isWhite ? t("gh.card.black") : t("gh.card.white")} {oppRating != null ? `· ${oppRating} ${t("utils.ratingPts")}` : ""}</p>
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="text-right min-w-0">
+                  <p className="text-sm sm:text-base font-bold text-chess-primary truncate">{opponent}</p>
+                  <p className="text-xs sm:text-sm text-chess-muted">{isWhite ? t("gh.card.black") : t("gh.card.white")}{oppRating != null ? ` · ${oppRating}` : ""}</p>
                 </div>
-                <span className={`text-2xl ${!isWhite ? "text-chess-primary" : "text-chess-muted"}`}>{oppIcon}</span>
+                <span className={`text-xl sm:text-2xl ${!isWhite ? "text-chess-primary" : "text-chess-muted"}`}>{oppIcon}</span>
               </div>
             </div>
           </div>
 
           {/* 게임 정보 그리드 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 p-3 sm:p-6">
             {terminationKey && (
-              <div className="bg-chess-bg/40 rounded-lg p-3">
+              <div className="bg-chess-bg/40 rounded-lg p-2.5 sm:p-3">
                 <p className="text-xs text-chess-muted mb-1">{t("gh.card.term")}</p>
-                <p className="text-sm font-semibold text-chess-primary">{t(terminationKey)}</p>
+                <p className="text-xs sm:text-sm font-semibold text-chess-primary">{t(terminationKey)}</p>
               </div>
             )}
             {moveCount != null && (
-              <div className="bg-chess-bg/40 rounded-lg p-3">
+              <div className="bg-chess-bg/40 rounded-lg p-2.5 sm:p-3">
                 <p className="text-xs text-chess-muted mb-1">{t("gh.card.movesCount")}</p>
-                <p className="text-sm font-semibold text-chess-primary">{moveCount} {t("gh.card.moves")}</p>
-                {lengthLabel && <p className="text-xs text-chess-muted/70">({lengthLabel})</p>}
+                <p className="text-xs sm:text-sm font-semibold text-chess-primary">{moveCount} {t("gh.card.moves")}</p>
+                {lengthLabel && <p className="text-[10px] sm:text-xs text-chess-muted/70">({lengthLabel})</p>}
               </div>
             )}
             {timeControl && (
-              <div className="bg-chess-bg/40 rounded-lg p-3">
+              <div className="bg-chess-bg/40 rounded-lg p-2.5 sm:p-3">
                 <p className="text-xs text-chess-muted mb-1">{t("gh.card.timeControl")}</p>
-                <p className="text-sm font-semibold text-chess-primary">{timeControl}</p>
+                <p className="text-xs sm:text-sm font-semibold text-chess-primary">{timeControl}</p>
               </div>
             )}
-            <div className="bg-chess-bg/40 rounded-lg p-3">
+            <div className="bg-chess-bg/40 rounded-lg p-2.5 sm:p-3">
               <p className="text-xs text-chess-muted mb-1">{t("gh.card.playTime")}</p>
-              <p className="text-sm font-semibold text-chess-primary">{dateStr}</p>
-              <p className="text-xs text-chess-muted/70">{timeStr}</p>
+              <p className="text-xs sm:text-sm font-semibold text-chess-primary">{dateStr}</p>
+              <p className="text-[10px] sm:text-xs text-chess-muted/70">{timeStr}</p>
             </div>
           </div>
 
           {/* 오프닝 정보 */}
           {game.opening_name && (
-            <div className="px-6 pb-4">
-              <div className="bg-chess-bg/30 rounded-lg p-4">
-                <p className="text-xs text-chess-muted mb-2 font-semibold">{t("gh.card.opening")}</p>
-                <p className="text-base text-chess-primary font-medium">{game.opening_name}</p>
+            <div className="px-3 sm:px-6 pb-3 sm:pb-4">
+              <div className="bg-chess-bg/30 rounded-lg p-3 sm:p-4">
+                <p className="text-xs text-chess-muted mb-1.5 font-semibold">{t("gh.card.opening")}</p>
+                <p className="text-sm sm:text-base text-chess-primary font-medium">{game.opening_name}</p>
                 {game.opening_eco && (
-                  <p className="text-sm text-chess-muted mt-1">{t("gh.card.ecoCode")}: {game.opening_eco}</p>
+                  <p className="text-xs sm:text-sm text-chess-muted mt-1">{t("gh.card.ecoCode")}: {game.opening_eco}</p>
                 )}
               </div>
             </div>
@@ -339,7 +335,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
 
           {/* 외부 링크 */}
           {game.url && (
-            <div className="px-6 pb-4">
+            <div className="px-3 sm:px-6 pb-3 sm:pb-4">
               <a
                 href={toAnalysisUrl(game.url, game.platform, game.game_id) ?? game.url}
                 target="_blank"
@@ -357,12 +353,17 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
             <div className="px-6 pb-4">
               <button
                 onClick={() => {
+                  if (isAnalyzedAtCurrentDepth) {
+                    // 분석이 이미 완료된 경우: 패널 토글
+                    setShowAnalysis((v) => !v);
+                    return;
+                  }
                   setShowAnalysis(true);
-                  if (!isAnalyzedAtCurrentDepth && !analyzeMutation.isPending) {
+                  if (!analyzeMutation.isPending) {
                     analyzeMutation.mutate();
                   }
                 }}
-                disabled={analyzeMutation.isPending || isAnalyzedAtCurrentDepth}
+                disabled={analyzeMutation.isPending}
                 className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-chess-accent/20 to-chess-accent/10 hover:from-chess-accent/30 hover:to-chess-accent/20 text-chess-accent border border-chess-accent/40 hover:border-chess-accent/60 rounded-xl transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {analyzeMutation.isPending ? (
@@ -370,10 +371,15 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                     <span className="animate-spin">⏳</span>
                     <span>{t("gh.btn.analyzing")} (Depth {stockfishDepth})</span>
                   </>
+                ) : isAnalyzedAtCurrentDepth && showAnalysis ? (
+                  <>
+                    <span>✅</span>
+                    <span>분석 닫기</span>
+                  </>
                 ) : isAnalyzedAtCurrentDepth ? (
                   <>
                     <span>✅</span>
-                    <span>분석 완료 (Depth {stockfishDepth})</span>
+                    <span>분석 다시 보기 (Depth {stockfishDepth})</span>
                   </>
                 ) : (
                   <>
@@ -387,7 +393,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
 
           {/* 분석 결과 패널 */}
           {showAnalysis && (
-            <div className="px-6 pb-6">
+            <div className="px-1 sm:px-6 pb-2 sm:pb-6">
               {analyzeMutation.isError && (
                 <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
                   {t("gh.analyze.error")}
@@ -428,13 +434,13 @@ interface GameAnalysisPanelProps {
 
 const TIER_CONFIG: Record<MoveTier, { label: string; color: string; desc: string }> = {
   TH: { label: "이론", color: "#8b5cf6", desc: "오프닝 이론수" },
-  TF: { label: "강제수", color: "#0ea5e9", desc: "합법 수가 1개뿐인 수" },
-  T1: { label: "브릴리언트", color: "#22c55e", desc: "역전/희생급 명수" },
+  TF: { label: "강제", color: "#0ea5e9", desc: "합법 수가 1개뿐인 수" },
+  T1: { label: "정점", color: "#22c55e", desc: "역전/희생급 명수" },
   T2: { label: "최상", color: "#10b981", desc: "최상급 정확수" },
   T3: { label: "우수", color: "#34d399", desc: "우수한 수" },
   T4: { label: "양호", color: "#84cc16", desc: "양호한 수" },
   T5: { label: "보통", color: "#f59e0b", desc: "아쉬운 수" },
-  T6: { label: "실수", color: "#ef4444", desc: "큰 실수" },
+  T6: { label: "폐기", color: "#ef4444", desc: "큰 실수" },
 };
 
 // TIER_CONFIG labels are defined statically – localised labels are looked up
@@ -451,6 +457,7 @@ function GameAnalysisPanel({
   const { t, language } = useTranslation();
   const white: PlayerAnalysis = data.white_analysis;
   const black: PlayerAnalysis = data.black_analysis;
+  const [showTierInfo, setShowTierInfo] = useState(false);
 
   const combinedMoves = useMemo(() => {
     return [...(white.analyzed_moves ?? []), ...(black.analyzed_moves ?? [])].sort(
@@ -464,6 +471,7 @@ function GameAnalysisPanel({
   }, [combinedMoves, selectedTier]);
 
   const moveBtnRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const moveListRef = useRef<HTMLDivElement>(null);
 
   // keyboard navigation (←/→)
   useEffect(() => {
@@ -492,20 +500,46 @@ function GameAnalysisPanel({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [filteredMoves, selectedMove, setSelectedMove]);
 
-  // keep selected move visible in move list
+  // keep selected move visible within the move list container (no page-level scroll)
   useEffect(() => {
     if (!selectedMove) return;
     const el = moveBtnRefs.current[selectedMove.halfmove];
-    if (!el) return;
-    el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const container = moveListRef.current;
+    if (!el || !container) return;
+    const elTop = el.offsetTop;
+    const elBottom = elTop + el.offsetHeight;
+    const cTop = container.scrollTop;
+    const cBottom = cTop + container.clientHeight;
+    if (elTop < cTop) {
+      container.scrollTop = elTop;
+    } else if (elBottom > cBottom) {
+      container.scrollTop = elBottom - container.clientHeight;
+    }
   }, [selectedMove]);
 
   const openingName = data.opening?.name;
   const openingEco = data.opening?.eco;
   const thFullMoves = data.opening?.th_fullmoves;
 
+  // 이전/다음 수 이동 헬퍼
+  const currentIdx = selectedMove
+    ? filteredMoves.findIndex((m) => m.halfmove === selectedMove.halfmove)
+    : -1;
+
+  const goToPrev = () => {
+    if (filteredMoves.length === 0) return;
+    const nextIdx = currentIdx <= 0 ? filteredMoves.length - 1 : currentIdx - 1;
+    setSelectedMove(filteredMoves[nextIdx]);
+  };
+
+  const goToNext = () => {
+    if (filteredMoves.length === 0) return;
+    const nextIdx = currentIdx === -1 || currentIdx >= filteredMoves.length - 1 ? 0 : currentIdx + 1;
+    setSelectedMove(filteredMoves[nextIdx]);
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* 헤더 */}
       <div className="flex items-center justify-between border-b border-chess-border/60 pb-3">
         <h4 className="text-base font-bold text-chess-primary flex items-center gap-2">
@@ -522,15 +556,15 @@ function GameAnalysisPanel({
 
       {/* 오프닝 (TH) */}
       {(openingName || openingEco || thFullMoves != null) && (
-        <div className="rounded-xl border border-chess-border/40 bg-chess-bg/30 px-4 py-3 text-sm">
+        <div className="rounded-xl border border-chess-border/40 bg-chess-bg/30 px-3 sm:px-4 py-2 sm:py-3 text-sm">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-semibold text-chess-primary">{t("ga.opening")}</span>
-            <span className="text-chess-muted">
+            <span className="text-chess-muted truncate">
               {openingName ?? "—"}
               {openingEco ? <span className="ml-2 font-mono text-chess-muted/80">({openingEco})</span> : null}
             </span>
             {thFullMoves != null && (
-              <span className="ml-auto rounded-full bg-chess-accent/12 border border-chess-accent/25 px-2.5 py-1 text-xs font-semibold text-chess-accent">
+              <span className="rounded-full bg-chess-accent/12 border border-chess-accent/25 px-2.5 py-1 text-xs font-semibold text-chess-accent">
                 TH {thFullMoves}
               </span>
             )}
@@ -544,22 +578,22 @@ function GameAnalysisPanel({
       )}
 
       {/* ── 메인 레이아웃 ── */}
-      <div className="space-y-5">
+      <div className="space-y-3 sm:space-y-5">
         {/* ─── 상단: 보드(좌) + 기보(우) ─── */}
-        <div className="flex flex-col xl:flex-row gap-5">
+        <div className="flex flex-col xl:flex-row gap-3 sm:gap-5">
 
           {/* 체스보드 영역 */}
-          <div className="flex flex-col items-center gap-4">
-            {/* 수 정보 헤더 */}
-            <div className="w-full flex items-center justify-between">
-              <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:gap-3 w-full xl:w-auto shrink-0">
+            {/* 수 정보 헤더 + PC용 이전/다음 버튼 */}
+            <div className="w-full flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 {selectedMove ? (
                   <>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-chess-bg text-chess-primary border border-chess-border shadow-sm">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-chess-bg text-chess-primary border border-chess-border shadow-sm truncate max-w-[90px] sm:max-w-none">
                       {selectedMove.move_number}. {selectedMove.san}
                     </span>
                     <span
-                      className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-black text-white shadow-sm"
+                      className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-black text-white shadow-sm shrink-0"
                       style={{ backgroundColor: TIER_CONFIG[selectedMove.tier].color }}
                     >
                       {selectedMove.tier}
@@ -569,23 +603,46 @@ function GameAnalysisPanel({
                   <span className="text-sm text-chess-primary/80 font-semibold">{typeof t === "function" ? t("ga.board") : "체스보드"}</span>
                 )}
               </div>
-              <span className="text-[11px] text-chess-primary/70 border border-chess-border/60 bg-chess-bg rounded px-2 py-0.5 font-mono font-medium">←/→</span>
+              {/* PC 전용 소형 버튼 + 키보드 힌트 */}
+              <div className="hidden sm:flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={goToPrev}
+                  disabled={filteredMoves.length === 0}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-chess-border bg-chess-bg text-chess-primary hover:bg-chess-border/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold"
+                  aria-label="이전 수"
+                >
+                  ◀
+                </button>
+                <button
+                  type="button"
+                  onClick={goToNext}
+                  disabled={filteredMoves.length === 0}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-chess-border bg-chess-bg text-chess-primary hover:bg-chess-border/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold"
+                  aria-label="다음 수"
+                >
+                  ▶
+                </button>
+                <span className="text-[11px] text-chess-primary/70 border border-chess-border/60 bg-chess-bg rounded px-2 py-0.5 font-mono font-medium ml-1">←/→</span>
+              </div>
             </div>
 
             {/* 보드 */}
-            <ChessBoard
-              fen={selectedMove?.fen_after || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
-              size={400}
-              lastMove={selectedMove ? {
-                from: selectedMove.uci.substring(0, 2),
-                to: selectedMove.uci.substring(2, 4),
-              } : undefined}
-              orientation={boardOrientation}
-            />
+            <div className="w-full max-w-[400px] xl:mx-0">
+              <ChessBoard
+                fen={selectedMove?.fen_after || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                size={400}
+                lastMove={selectedMove ? {
+                  from: selectedMove.uci.substring(0, 2),
+                  to: selectedMove.uci.substring(2, 4),
+                } : undefined}
+                orientation={boardOrientation}
+              />
+            </div>
 
             {/* 엔진 평가 바 */}
             {selectedMove && (
-              <div className="w-full flex items-stretch gap-3 rounded-xl bg-chess-surface border border-chess-border/80 shadow-sm p-3">
+              <div className="w-full max-w-[400px] xl:mx-0 flex items-stretch gap-3 rounded-xl bg-chess-surface border border-chess-border/80 shadow-sm p-2 sm:p-3">
                 <div className="flex flex-col justify-center min-w-0">
                   <span className="text-[10px] uppercase tracking-widest text-chess-primary/70 font-bold mb-0.5">{t("ga.eval")}</span>
                   <span className="text-sm font-bold text-chess-primary font-mono whitespace-nowrap">
@@ -612,43 +669,106 @@ function GameAnalysisPanel({
                 </div>
               </div>
             )}
+
+            {/* 모바일 전용 이전/다음 버튼 (보드 아래) */}
+            <div className="flex sm:hidden gap-2 w-full max-w-[400px] mx-auto">
+              <button
+                type="button"
+                onPointerDown={(e) => { e.preventDefault(); goToPrev(); }}
+                disabled={filteredMoves.length === 0}
+                style={{ touchAction: "manipulation" }}
+                className="flex-1 py-3 flex items-center justify-center rounded-xl border-2 border-chess-border bg-chess-bg text-chess-primary active:bg-chess-border/40 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-lg font-bold shadow-sm select-none"
+                aria-label="이전 수"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                onPointerDown={(e) => { e.preventDefault(); goToNext(); }}
+                disabled={filteredMoves.length === 0}
+                style={{ touchAction: "manipulation" }}
+                className="flex-1 py-3 flex items-center justify-center rounded-xl border-2 border-chess-border bg-chess-bg text-chess-primary active:bg-chess-border/40 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-lg font-bold shadow-sm select-none"
+                aria-label="다음 수"
+              >
+                ▶
+              </button>
+            </div>
           </div>
 
           {/* 기보 패널 */}
           <div className="flex-1 flex flex-col min-w-0 bg-chess-bg rounded-2xl border border-chess-border shadow-sm overflow-hidden">
-            {/* 티어 필터 탭 */}
-            <div className="flex flex-wrap gap-1.5 p-3 border-b border-chess-border bg-chess-surface">
-              <button
-                onClick={() => setSelectedTier("all")}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm ${
-                  selectedTier === "all"
-                    ? "bg-chess-primary text-white"
-                    : "bg-chess-bg text-chess-muted hover:bg-chess-border/40 hover:text-chess-primary border border-chess-border/50"
-                }`}
-              >
-                {typeof t === "function" ? t("ga.all") : "전체"}
-                <span className="ml-1.5 font-normal opacity-80">({filteredMoves.length})</span>
-              </button>
-              {(["TH", "TF", "T1", "T2", "T3", "T4", "T5", "T6"] as MoveTier[]).map((tier) => {
-                const sel = selectedTier === tier;
-                const cfg = TIER_CONFIG[tier];
-                return (
-                  <button
-                    key={tier}
-                    onClick={() => setSelectedTier(tier)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all border shadow-sm ${
-                      sel ? "border-transparent text-white" : "bg-chess-bg border-chess-border/50 text-chess-muted hover:bg-chess-border/40 hover:text-chess-primary"
-                    }`}
-                    style={sel ? { backgroundColor: cfg.color } : {}}
-                  >
-                    {tier}
-                  </button>
-                );
-              })}
+            {/* 티어 필터 탭: 모바일=가로 스크롤 1줄, PC=줄바꿈 */}
+            <div className="border-b border-chess-border bg-chess-surface">
+              <div className="flex sm:flex-wrap gap-1.5 p-2 sm:p-3 overflow-x-auto scrollbar-none">
+                <button
+                  onClick={() => setSelectedTier("all")}
+                  className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm ${
+                    selectedTier === "all"
+                      ? "bg-chess-primary text-white"
+                      : "bg-chess-bg text-chess-muted hover:bg-chess-border/40 hover:text-chess-primary border border-chess-border/50"
+                  }`}
+                >
+                  {typeof t === "function" ? t("ga.all") : "전체"}
+                  <span className="ml-1.5 font-normal opacity-80">({filteredMoves.length})</span>
+                </button>
+                {(["TH", "TF", "T1", "T2", "T3", "T4", "T5", "T6"] as MoveTier[]).map((tier) => {
+                  const sel = selectedTier === tier;
+                  const cfg = TIER_CONFIG[tier];
+                  return (
+                    <button
+                      key={tier}
+                      onClick={() => setSelectedTier(tier)}
+                      className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-bold transition-all border shadow-sm ${
+                        sel ? "border-transparent text-white" : "bg-chess-bg border-chess-border/50 text-chess-muted hover:bg-chess-border/40 hover:text-chess-primary"
+                      }`}
+                      style={sel ? { backgroundColor: cfg.color } : {}}
+                    >
+                      {tier}
+                    </button>
+                  );
+                })}
+                {/* 등급 설명 토글 버튼 */}
+                <button
+                  type="button"
+                  onClick={() => setShowTierInfo((v) => !v)}
+                  className={`shrink-0 ml-auto w-7 h-7 flex items-center justify-center rounded-full text-xs font-black border transition-all shadow-sm select-none ${
+                    showTierInfo
+                      ? "bg-chess-accent text-white border-chess-accent"
+                      : "bg-chess-bg text-chess-muted border-chess-border/50 hover:text-chess-primary hover:border-chess-border"
+                  }`}
+                  aria-label="등급 설명 보기"
+                >
+                  ！
+                </button>
+              </div>
             </div>
 
+            {/* 등급 설명 패널 */}
+            {showTierInfo && (
+              <div className="border-b border-chess-border bg-chess-surface/60 px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                {(["TH", "TF", "T1", "T2", "T3", "T4", "T5", "T6"] as MoveTier[]).map((tier) => {
+                  const cfg = TIER_CONFIG[tier];
+                  return (
+                    <div key={tier} className="flex items-center gap-1.5 py-0.5">
+                      <span
+                        className="shrink-0 w-7 text-center rounded text-[10px] font-black text-white py-0.5 leading-none"
+                        style={{ backgroundColor: cfg.color }}
+                      >
+                        {tier}
+                      </span>
+                      <span className="text-[11px] font-semibold text-chess-primary whitespace-nowrap">{cfg.label}</span>
+                      <span className="text-[10px] text-chess-muted truncate hidden sm:inline">— {cfg.desc}</span>
+                    </div>
+                  );
+                })}
+                <p className="col-span-2 text-[10px] text-chess-muted mt-1 sm:hidden">
+                  TH 이론 · TF 강제 · T1 정점 · T2 최상 · T3 우수 · T4 양호 · T5 보통 · T6 폐기
+                </p>
+              </div>
+            )}
+
             {/* 기보 목록 */}
-            <div className="flex-1 overflow-y-auto divide-y divide-chess-border/40" style={{ maxHeight: 480 }}>
+            <div ref={moveListRef} className="overflow-y-auto divide-y divide-chess-border/40 max-h-[200px] sm:max-h-[480px]">
               {filteredMoves.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-chess-primary/70 text-sm gap-3">
                   <span className="text-4xl opacity-50">📭</span>
@@ -663,13 +783,13 @@ function GameAnalysisPanel({
                       key={move.halfmove}
                       ref={(el) => { moveBtnRefs.current[move.halfmove] = el; }}
                       onClick={() => setSelectedMove(move)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 sm:py-3 text-left transition-colors ${
                         isSelected ? "bg-chess-accent/10 border-l-4 border-l-chess-accent" : "hover:bg-chess-surface/60 border-l-4 border-l-transparent"
                       }`}
                     >
                       {/* 색 인디케이터 */}
                       <div
-                        className={`w-6 h-6 rounded flex items-center justify-center text-[10px] shrink-0 font-bold border shadow-sm ${
+                        className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[9px] sm:text-[10px] shrink-0 font-bold border shadow-sm ${
                           move.color === "white"
                             ? "bg-white text-gray-800 border-gray-200"
                             : "bg-gray-800 text-white border-gray-900"
@@ -679,24 +799,27 @@ function GameAnalysisPanel({
                       </div>
                       {/* 티어 뱃지 */}
                       <span
-                        className="w-8 text-center shrink-0 rounded text-[10px] font-black py-0.5 text-white shadow-sm"
+                        className="w-7 sm:w-8 text-center shrink-0 rounded text-[9px] sm:text-[10px] font-black py-0.5 text-white shadow-sm"
                         style={{ backgroundColor: cfg.color }}
                       >
                         {move.tier}
                       </span>
                       {/* SAN + 통계 */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                          <span className={`text-sm font-bold ${isSelected ? "text-chess-primary" : "text-chess-primary/80"}`}>
-                            {move.move_number}. {move.san}
+                      <div className="flex-1 min-w-0 flex items-center sm:block gap-1.5">
+                        {/* 모바일: 한 줄 (수 이름 + 유일해 뱃지) */}
+                        <span className={`text-xs sm:text-sm font-bold truncate ${isSelected ? "text-chess-primary" : "text-chess-primary/80"}`}>
+                          {move.move_number}. {move.san}
+                        </span>
+                        {move.is_only_best && (
+                          <span className="shrink-0 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold whitespace-nowrap">
+                            {t("ga.onlyBest")}
                           </span>
-                          {move.is_only_best && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold whitespace-nowrap">
-                              {t("ga.onlyBest")}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-chess-primary/80 font-semibold">
+                        )}
+                        {/* 손실% - 모바일: 오른쪽 끝에 작게, PC: 두 번째 줄 */}
+                        <span className="ml-auto shrink-0 text-[10px] font-semibold text-chess-primary/70 sm:hidden tabular-nums">
+                          {move.win_pct_loss.toFixed(1)}%
+                        </span>
+                        <p className="hidden sm:block text-[11px] text-chess-primary/80 font-semibold mt-0.5">
                           엔진 {move.user_move_rank}위 &middot; {move.win_pct_loss.toFixed(1)}% 손실
                         </p>
                       </div>
@@ -708,31 +831,54 @@ function GameAnalysisPanel({
           </div>
         </div>
 
-        {/* ─── 하단: 양 플레이어 차트 ─── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* ─── 하단: 양 플레이어 정확도 + 차트 ─── */}
+        {/* 모바일: 정확도 요약 바만 표시. PC: 도넛 차트 포함 전체 표시 */}
+
+        {/* 모바일 전용: 정확도 요약 (세로 2줄) */}
+        <div className="flex sm:hidden flex-col gap-2">
+          {/* 백 */}
+          <div className="rounded-xl border border-chess-border bg-chess-bg shadow-sm px-3 py-2.5 flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded bg-chess-surface flex items-center justify-center border border-chess-border shrink-0 text-base leading-none">
+              ♔
+            </div>
+            <span className="text-xs font-bold text-chess-primary truncate flex-1 min-w-0">{data.white_player}</span>
+            <span className="text-[10px] text-chess-primary/60 uppercase shrink-0">{t("ga.white")}</span>
+            <span className="text-base font-black text-chess-accent shrink-0 tabular-nums">{white.accuracy.toFixed(1)}%</span>
+          </div>
+          {/* 흑 */}
+          <div className="rounded-xl border border-chess-border bg-chess-bg shadow-sm px-3 py-2.5 flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded bg-chess-primary flex items-center justify-center border border-chess-primary/80 shrink-0 text-base leading-none text-white">
+              ♚
+            </div>
+            <span className="text-xs font-bold text-chess-primary truncate flex-1 min-w-0">{data.black_player}</span>
+            <span className="text-[10px] text-chess-primary/60 uppercase shrink-0">{t("ga.black")}</span>
+            <span className="text-base font-black text-chess-accent shrink-0 tabular-nums">{black.accuracy.toFixed(1)}%</span>
+          </div>
+        </div>
+
+        {/* PC 전용: 도넛 차트 포함 전체 카드 */}
+        <div className="hidden sm:grid sm:grid-cols-2 gap-4">
           {/* 백 */}
           <div className="rounded-2xl border border-chess-border bg-chess-bg shadow-sm p-6 flex flex-col items-center">
             <div className="flex items-center gap-3 w-full mb-6">
               <div className="w-10 h-10 rounded bg-chess-surface flex items-center justify-center shadow-sm shrink-0 border border-chess-border">
                 <span className="text-chess-primary text-xl leading-none">♔</span>
               </div>
-              <div>
-                <p className="text-base font-bold text-chess-primary">{data.white_player}</p>
+              <div className="min-w-0">
+                <p className="text-base font-bold text-chess-primary truncate">{data.white_player}</p>
                 <p className="text-xs text-chess-primary/70 font-bold uppercase tracking-wider">{t("ga.white")}</p>
               </div>
-              <div className="ml-auto text-right">
+              <div className="ml-auto text-right shrink-0">
                 <p className="text-2xl font-black text-chess-accent">{white.accuracy.toFixed(1)}%</p>
                 <p className="text-[10px] text-chess-primary/70 font-bold uppercase tracking-widest">{t("ga.accuracy")}</p>
               </div>
             </div>
-            {/* The Donut chart colors can remain whatever they internally use, 
-                just passing the correct sizing */}
             <TierDonutChart
               tierPercentages={white.tier_percentages}
               tierCounts={white.tier_counts}
               accuracy={white.accuracy}
-              size={220}
-              strokeWidth={20}
+              size={200}
+              strokeWidth={18}
             />
           </div>
 
@@ -742,11 +888,11 @@ function GameAnalysisPanel({
               <div className="w-10 h-10 rounded bg-chess-primary flex items-center justify-center shadow-sm shrink-0 border border-chess-primary/80">
                 <span className="text-white text-xl leading-none">♚</span>
               </div>
-              <div>
-                <p className="text-base font-bold text-chess-primary">{data.black_player}</p>
+              <div className="min-w-0">
+                <p className="text-base font-bold text-chess-primary truncate">{data.black_player}</p>
                 <p className="text-xs text-chess-primary/70 font-bold uppercase tracking-wider">{t("ga.black")}</p>
               </div>
-              <div className="ml-auto text-right">
+              <div className="ml-auto text-right shrink-0">
                 <p className="text-2xl font-black text-chess-accent">{black.accuracy.toFixed(1)}%</p>
                 <p className="text-[10px] text-chess-primary/70 font-bold uppercase tracking-widest">{t("ga.accuracy")}</p>
               </div>
@@ -755,8 +901,8 @@ function GameAnalysisPanel({
               tierPercentages={black.tier_percentages}
               tierCounts={black.tier_counts}
               accuracy={black.accuracy}
-              size={220}
-              strokeWidth={20}
+              size={200}
+              strokeWidth={18}
             />
           </div>
         </div>
@@ -866,40 +1012,40 @@ export default function GameHistorySection({
   const losses = games.filter(g => g.result === "loss").length;
 
   return (
-    <div className="space-y-6">
-      {/* 결과 요약 헤더 - 더 시각적으로 개선 */}
-      <div className="bg-gradient-to-r from-chess-surface/80 to-chess-surface/60 border border-chess-border/50 rounded-2xl p-6 shadow-lg">
-        <div className="flex flex-col sm:flex-row items-start justify-between gap-5">
+    <div className="space-y-4 sm:space-y-6">
+      {/* 결과 요약 헤더 */}
+      <div className="bg-gradient-to-r from-chess-surface/80 to-chess-surface/60 border border-chess-border/50 rounded-2xl p-4 sm:p-6 shadow-lg">
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-4 sm:gap-5">
           <div>
-            <h3 className="text-lg font-bold text-chess-primary mb-2">{t("gh.summary.title")}</h3>
-              <div className="flex flex-wrap items-center gap-6 text-sm">
-              <div className="flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold text-chess-primary mb-2">{t("gh.summary.title")}</h3>
+            <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <span className="text-chess-muted">{t("gh.summary.total")}</span>
-                <span className="text-xl font-bold text-chess-primary">{games.length}</span>
+                <span className="text-lg sm:text-xl font-bold text-chess-primary">{games.length}</span>
                 <span className="text-chess-muted">{t("gh.summary.game")}</span>
               </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <div className="flex items-center gap-1 min-w-fit">
-                    <span className="text-lg font-bold text-emerald-800 dark:text-emerald-400">{wins}</span>
-                    <span className="text-sm text-emerald-700/90 dark:text-emerald-400/75">{t("gh.summary.win")}</span>
-                  </div>
-                  <div className="flex items-center gap-1 min-w-fit">
-                    <span className="text-lg font-bold text-amber-900 dark:text-amber-400">{draws}</span>
-                    <span className="text-sm text-amber-800/90 dark:text-amber-400/75">{t("gh.summary.draw")}</span>
-                  </div>
-                  <div className="flex items-center gap-1 min-w-fit">
-                    <span className="text-lg font-bold text-red-700 dark:text-red-400">{losses}</span>
-                    <span className="text-sm text-red-700/90 dark:text-red-400/75">{t("gh.summary.loss")}</span>
-                  </div>
+              <div className="flex items-center gap-x-3 sm:gap-x-4 gap-y-2 flex-wrap">
+                <div className="flex items-center gap-1 min-w-fit">
+                  <span className="text-base sm:text-lg font-bold text-emerald-800 dark:text-emerald-400">{wins}</span>
+                  <span className="text-xs sm:text-sm text-emerald-700/90 dark:text-emerald-400/75">{t("gh.summary.win")}</span>
                 </div>
+                <div className="flex items-center gap-1 min-w-fit">
+                  <span className="text-base sm:text-lg font-bold text-amber-900 dark:text-amber-400">{draws}</span>
+                  <span className="text-xs sm:text-sm text-amber-800/90 dark:text-amber-400/75">{t("gh.summary.draw")}</span>
+                </div>
+                <div className="flex items-center gap-1 min-w-fit">
+                  <span className="text-base sm:text-lg font-bold text-red-700 dark:text-red-400">{losses}</span>
+                  <span className="text-xs sm:text-sm text-red-700/90 dark:text-red-400/75">{t("gh.summary.loss")}</span>
+                </div>
+              </div>
             </div>
           </div>
-          
+
           {/* 승률 바와 퍼센트 */}
           <div className="text-right w-full sm:w-auto">
-            <div className="text-sm text-chess-muted mb-2">{t("gh.summary.winRate")}</div>
+            <div className="text-xs sm:text-sm text-chess-muted mb-1.5 sm:mb-2">{t("gh.summary.winRate")}</div>
             <div className="flex items-center gap-3">
-              <div className="w-36 sm:w-48 h-3 rounded-full overflow-hidden bg-chess-border/30 shadow-inner">
+              <div className="flex-1 sm:flex-none sm:w-48 h-3 rounded-full overflow-hidden bg-chess-border/30 shadow-inner">
                 {wins > 0  && <div style={{ width: `${wins  / games.length * 100}%` }} className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500" />}
                 {draws > 0 && <div style={{ width: `${draws / games.length * 100}%` }} className="h-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-500" />}
                 {losses > 0 && <div style={{ width: `${losses / games.length * 100}%` }} className="h-full bg-gradient-to-r from-red-500 to-red-400 transition-all duration-500" />}
