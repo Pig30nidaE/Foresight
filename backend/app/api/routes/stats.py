@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.models.schemas import Platform
 from app.shared.services.chessdotcom import ChessDotComService
-from app.shared.services.lichess import LichessService
+from app.shared.services.lichess import LichessRateLimitedError, LichessService
 from app.features.dashboard.services.analysis import AnalysisService
 from app.shared.services.pgn_parser import parse_games_bulk
 
@@ -42,12 +42,23 @@ async def get_first_move_stats(
             until_ts = until_ms // 1000 if until_ms else None
             games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
+            games = await lichess_svc.get_recent_games(
+                username, max_games, time_class, since_ms=since_ms, until_ms=until_ms, evals=False
+            )
 
         logger.info(f"  → API returned {len(games)} games")
         
         # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         # → GameSummary의 time_class 필드가 일관되게 설정됨
+        # #region agent log
+        import time as _t, json as _j
+        try:
+            _pgn_count = sum(1 for g in games if getattr(g, "pgn", None))
+            with open("/app/debug-ce40e3.log","a") as _f:
+                _f.write(_j.dumps({"sessionId":"ce40e3","timestamp":int(_t.time()*1000),"location":"stats.py:get_first_move_stats","message":"games PGN availability","hypothesisId":"A","data":{"total_games":len(games),"games_with_pgn":_pgn_count,"platform":str(platform),"username":username}})+"\n")
+        except Exception:
+            pass
+        # #endregion
         rows = analysis_svc.build_rows(games)
         logger.info(f"  → Rows: {len(rows)}")
 
@@ -59,6 +70,8 @@ async def get_first_move_stats(
         result = analysis_svc.get_first_move_stats(rows, username.lower())
         logger.info(f"  → Result: white={len(result['white'])}, black={len(result['black'])}, total_games={result.get('total_games', 'N/A')}")
         return result
+    except LichessRateLimitedError:
+        raise
     except Exception as e:
         logger.error(f"  → ERROR: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -82,10 +95,12 @@ async def get_opening_tree(
     try:
         if platform == Platform.chessdotcom:
             since_ts = since_ms // 1000 if since_ms else None
-            until_ts = until_ts // 1000 if until_ms else None
+            until_ts = until_ms // 1000 if until_ms else None
             games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
+            games = await lichess_svc.get_recent_games(
+                username, max_games, time_class, since_ms=since_ms, until_ms=until_ms, evals=False
+            )
 
         # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         rows = analysis_svc.build_rows(games)
@@ -97,6 +112,8 @@ async def get_opening_tree(
                 rows = [r for r in rows if r.get("black") and r["black"].lower() == uname_lower]
 
         return analysis_svc.get_opening_tree(rows, depth)
+    except LichessRateLimitedError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -120,11 +137,15 @@ async def get_best_worst_openings(
             until_ts = until_ms // 1000 if until_ms else None
             games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
+            games = await lichess_svc.get_recent_games(
+                username, max_games, time_class, since_ms=since_ms, until_ms=until_ms, evals=False
+            )
 
         # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         rows = analysis_svc.build_rows(games)
         return analysis_svc.get_best_worst_openings(rows, min_games)
+    except LichessRateLimitedError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -152,10 +173,29 @@ async def get_time_pressure(
             until_ts = until_ms // 1000 if until_ms else None
             games = await chessdotcom_svc.get_recent_games(username, max_games, since_ts=since_ts, until_ts=until_ts, time_class=time_class)
         else:
-            games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
+            games = await lichess_svc.get_recent_games(
+                username,
+                max_games,
+                time_class,
+                since_ms=since_ms,
+                until_ms=until_ms,
+                clocks=True,
+                evals=False,
+            )
 
+        # #region agent log
+        import time as _t, json as _j
+        try:
+            _pgn_count2 = sum(1 for g in games if getattr(g, "pgn", None))
+            with open("/app/debug-ce40e3.log","a") as _f:
+                _f.write(_j.dumps({"sessionId":"ce40e3","timestamp":int(_t.time()*1000),"location":"stats.py:get_time_pressure","message":"time-pressure games PGN availability","hypothesisId":"A-C","data":{"total_games":len(games),"games_with_pgn":_pgn_count2,"platform":str(platform),"username":username}})+"\n")
+        except Exception:
+            pass
+        # #endregion
         # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         parsed = parse_games_bulk(games, pressure_threshold=pressure_threshold)
         return analysis_svc.get_time_pressure_stats(parsed, username)
+    except LichessRateLimitedError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

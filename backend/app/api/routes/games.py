@@ -1,8 +1,9 @@
+import httpx
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from app.models.schemas import GameSummary, Platform
 from app.shared.services.chessdotcom import ChessDotComService
-from app.shared.services.lichess import LichessService
+from app.shared.services.lichess import LichessRateLimitedError, LichessService
 
 router = APIRouter()
 chessdotcom_svc = ChessDotComService()
@@ -40,8 +41,13 @@ async def get_recent_games(
                 username, max_games,
                 perf_type=time_class,
                 since_ms=since_ms, until_ms=until_ms,
+                evals=False,
             )
 
         return games
+    except LichessRateLimitedError:
+        raise
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Upstream API error: {e.response.status_code}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
