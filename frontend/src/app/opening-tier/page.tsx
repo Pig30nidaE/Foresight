@@ -62,11 +62,10 @@ export default function OpeningTierPage() {
   const showLoading = isLoading || isFetching;
 
   return (
-    <main className="min-h-screen bg-chess-bg text-chess-primary p-8">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold mb-1">{t("tier.title")}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1">{t("tier.title")}</h1>
           <p className="text-chess-muted text-sm">
             {t("tier.subtitle")}
           </p>
@@ -143,13 +142,11 @@ export default function OpeningTierPage() {
             </div>
           )
         )}
-      </div>
-
       <OpeningMovesModal
         entry={selectedOpening}
         onClose={() => setSelectedOpening(null)}
         color={color}
       />
-    </main>
+    </div>
   );
 }

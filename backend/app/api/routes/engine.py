@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.models.schemas import Platform
 from app.shared.services.chessdotcom import ChessDotComService
-from app.shared.services.lichess import LichessService
+from app.shared.services.lichess import LichessRateLimitedError, LichessService
 from app.ml.move_classifier import analyze_games_sync
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ async def get_move_quality(
         if platform == Platform.chessdotcom:
             games = await chessdotcom_svc.get_recent_games(username, fetch_limit)
         else:
-            games = await lichess_svc.get_recent_games(username, fetch_limit, time_class)
+            games = await lichess_svc.get_recent_games(username, fetch_limit, time_class, evals=False)
 
         # time_class 필터 + PGN 있는 게임만
         filtered = [g for g in games if g.time_class == time_class and g.pgn]
@@ -113,6 +113,8 @@ async def get_move_quality(
         }
 
     except HTTPException:
+        raise
+    except LichessRateLimitedError:
         raise
     except Exception as exc:
         logger.exception(f"[{username}] move-quality 분석 실패: {exc}")

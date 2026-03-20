@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.shared.services.lichess import LichessRateLimitedError
 from app.api.routes import player, games, analysis, stats, engine, opening_tier, community, game_analysis
 from app.shared.services import opening_db
 
@@ -73,6 +75,15 @@ app.include_router(stats.router, prefix="/api/v1/stats", tags=["Stats"])
 app.include_router(engine.router, prefix="/api/v1/engine", tags=["Engine"])
 app.include_router(opening_tier.router, prefix="/api/v1/opening-tier", tags=["Opening Tier"])
 app.include_router(community.router, prefix="/api/v1/community", tags=["Community"])
+
+
+@app.exception_handler(LichessRateLimitedError)
+async def lichess_rate_limit_handler(_request, exc: LichessRateLimitedError):
+    """Lichess 429 → 클라이언트에 503과 안내 메시지 (내부 500 방지)."""
+    return JSONResponse(
+        status_code=503,
+        content={"detail": str(exc)},
+    )
 
 
 @app.get("/health", tags=["Health"])

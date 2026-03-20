@@ -27,7 +27,7 @@ export default function ChessBoard({
   }, [lastMove, orientation]);
 
   return (
-    <div style={{ width: size }}>
+    <div style={{ width: "100%", maxWidth: size }}>
       <Chessboard
         options={{
           position: fen,
