@@ -56,11 +56,11 @@ T6_MAX_CP_LOSS = 140
 T6_MAX_WIN_PCT_LOSS = 22.0
 
 # Brilliant 후보 임계
-BRILLIANT_SWING_CP = 120          # 평가가 큰 폭 개선
-BRILLIANT_SWING_WIN_PCT = 12.0    # 승률이 큰 폭 개선
-BRILLIANT_COMEBACK_BEFORE_CP = -80  # 불리한 상태에서
-BRILLIANT_COMEBACK_AFTER_CP = 20    # 유리/균형으로 전환
-BRILLIANT_SACRIFICE_CP_IMPROVE = 70 # 희생 후 평가 개선
+BRILLIANT_SWING_CP = 60           # comeback: -60→0 스윙이면 충분 (기존 120은 불가능한 요구값)
+BRILLIANT_SWING_WIN_PCT = 7.0     # 승률 7% 개선 (기존 12.0 → 완화)
+BRILLIANT_COMEBACK_BEFORE_CP = -60  # 불리한 상태 기준 완화 (기존 -80)
+BRILLIANT_COMEBACK_AFTER_CP = 0     # 균형화로도 충분 (기존 20)
+BRILLIANT_SACRIFICE_CP_IMPROVE = 25 # 희생 후 0.25폰 개선으로도 인정 (기존 70)
 
 
 def _compute_accuracy(analyzed_moves: list) -> float:
@@ -494,11 +494,18 @@ def _is_brilliant_candidate(
     material_after: int,
 ) -> bool:
     """
-    T2 후보 중에서 Brilliant(T1) 승급 판단.
-    - 불리했던 평가를 크게 회복/역전했거나
-    - 희생(기물 손실) 이후 평가가 유의미하게 개선된 경우
+    T1 Brilliant 승급 판단.
+
+    comeback (T2만 해당):
+      - 불리한 상태(cp_before ≤ BRILLIANT_COMEBACK_BEFORE_CP)에서
+        균형/역전(cp_after ≥ BRILLIANT_COMEBACK_AFTER_CP)으로 전환
+      - cp 개선 또는 승률 개선이 임계 이상
+
+    sacrifice_brilliant (T2 또는 T3):
+      - 기물을 희생한 뒤 평가가 유의미하게 개선된 경우
+      - Stockfish 낮은 깊이에서 희생수가 2위로 평가될 수 있어 T3도 허용
     """
-    if base_tier != MoveTier.T2:
+    if base_tier not in (MoveTier.T2, MoveTier.T3):
         return False
 
     before = cp_before if cp_before is not None else 0
@@ -507,11 +514,14 @@ def _is_brilliant_candidate(
     win_swing = win_pct_after - win_pct_before
     sacrificed = material_after < material_before
 
+    # comeback: 정밀한 수만 해당 (T2 전용)
     comeback = (
-        before <= BRILLIANT_COMEBACK_BEFORE_CP
+        base_tier == MoveTier.T2
+        and before <= BRILLIANT_COMEBACK_BEFORE_CP
         and after >= BRILLIANT_COMEBACK_AFTER_CP
         and (cp_swing >= BRILLIANT_SWING_CP or win_swing >= BRILLIANT_SWING_WIN_PCT)
     )
+    # 희생 브릴리언트: T2 또는 T3 (낮은 깊이 분석에서 희생수가 2위로 평가될 수 있음)
     sacrifice_brilliant = sacrificed and (cp_swing >= BRILLIANT_SACRIFICE_CP_IMPROVE or win_swing >= BRILLIANT_SWING_WIN_PCT)
     return comeback or sacrifice_brilliant
 

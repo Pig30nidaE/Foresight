@@ -94,6 +94,7 @@ export const ko = {
   "ga.white": "백 (White)",
   "ga.black": "흑 (Black)",
   "ga.engineRankLine": "엔진 {rank}위 · {loss}% 손실",
+  "ga.notInTop5": "추천 외 · {loss}% 손실",
 
   // AnalysisSection
   "as.gameCount": "분석 게임 수",
@@ -372,6 +373,10 @@ export const ko = {
   "tier.tableWinRate": "승률",
   "tier.tableTotalGames": "총 게임",
   "tier.count": "({n}개)",
+
+  // Lichess coming soon
+  "lichess.comingSoon.title": "리체스는 아직 구현 중입니다.",
+  "lichess.comingSoon.desc": "현재 Chess.com만 지원됩니다. 빠른 시일 내에 리체스 지원을 추가할 예정입니다.",
 };
 
 export const en: typeof ko = {
@@ -391,8 +396,8 @@ export const en: typeof ko = {
   "settings.depthHint": "Higher depth is more accurate but takes longer. (up to 2-5 mins)",
 
   // Main Home
-  "home.desc1": "AI-powered chess game analysis platform for tournament players.",
-  "home.desc2": "Opening Analysis · Opponent Prep · Weakness Detection",
+  "home.desc1": "An analysis platform for chess players.",
+  "home.desc2": "Opening tiers, match history search, and analytics.",
   "home.openingTiers": "Opening Tiers",
   "home.openingTiersDesc": "Opening tiers by rating brackets",
   "home.search": "Match History",
@@ -466,6 +471,7 @@ export const en: typeof ko = {
   "ga.white": "White",
   "ga.black": "Black",
   "ga.engineRankLine": "Engine #{rank} · {loss}% loss",
+  "ga.notInTop5": "Not in top 5 · {loss}% loss",
 
   // AnalysisSection
   "as.gameCount": "Analysis Game Count",
@@ -744,6 +750,10 @@ export const en: typeof ko = {
   "tier.tableWinRate": "Win Rate",
   "tier.tableTotalGames": "Total Games",
   "tier.count": "({n})",
+
+  // Lichess coming soon
+  "lichess.comingSoon.title": "Lichess is under construction.",
+  "lichess.comingSoon.desc": "Only Chess.com is currently supported. Lichess support is coming soon.",
 };
 
 
