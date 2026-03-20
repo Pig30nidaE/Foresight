@@ -41,6 +41,7 @@ async def get_recent_games(
                 username, max_games,
                 perf_type=time_class,
                 since_ms=since_ms, until_ms=until_ms,
+                evals=False,
             )
 
         return games
