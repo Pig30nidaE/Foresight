@@ -98,23 +98,24 @@ export default function AnalysisSection({
   const section3Progress = loadingTP ? 0 : timePressureLoaded ? 100 : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* 게임 횟수 선택 UI */}
-      <div className="flex items-center gap-2 rounded-lg border border-chess-border px-3 py-2 bg-chess-surface/50">
-        <span className="text-xs font-medium text-chess-muted">{t("as.gameCount")}</span>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-lg border border-chess-border px-3 py-2 bg-chess-surface/50">
+        <span className="text-xs font-medium text-chess-muted shrink-0">{t("as.gameCount")}</span>
         <div className="flex rounded-md overflow-hidden border border-chess-border">
           {GAME_COUNT_PRESETS.map((size) => (
             <button
               key={size}
               type="button"
               onClick={() => setPendingMaxGames(size)}
-              className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`px-2 sm:px-2.5 py-1 text-xs font-medium transition-colors ${
                 pendingMaxGames === size
                   ? "bg-chess-accent text-white"
                   : "bg-chess-surface text-chess-muted hover:text-chess-primary"
               }`}
             >
-              {size} {t("as.games")}
+              <span className="sm:hidden">{size}</span>
+              <span className="hidden sm:inline">{size} {t("as.games")}</span>
             </button>
           ))}
         </div>
@@ -122,7 +123,7 @@ export default function AnalysisSection({
           type="button"
           onClick={() => setMaxGames(pendingMaxGames)}
           disabled={pendingMaxGames === maxGames}
-          className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+          className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors shrink-0 ${
             pendingMaxGames === maxGames
               ? "bg-chess-border/60 text-chess-muted cursor-not-allowed"
               : "bg-chess-primary text-white hover:bg-chess-primary/85"
@@ -130,7 +131,7 @@ export default function AnalysisSection({
         >
           {t("as.apply")}
         </button>
-        <span className="text-xs text-chess-muted ml-2">
+        <span className="hidden sm:inline text-xs text-chess-muted">
           {t("as.currentInfo").replace("{n}", String(maxGames))}
         </span>
       </div>
@@ -151,7 +152,7 @@ export default function AnalysisSection({
       )}
 
       {/* ── Section 1 ── */}
-      <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+      <section className={`bg-chess-surface border border-chess-border rounded-2xl p-4 sm:p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
         {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
         <SectionHeader
           title={t("as.section1Title")}
@@ -170,8 +171,8 @@ export default function AnalysisSection({
       </section>
 
       {/* ── Section 2 ── */}
-      <section className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
-        <div className="lg:col-span-2 bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
+      <section className={`grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+        <div className="lg:col-span-2 bg-chess-surface border border-chess-border rounded-2xl p-4 sm:p-8 relative">
           {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
           <SectionHeader
             title={t("as.section2Title")}
@@ -206,7 +207,7 @@ export default function AnalysisSection({
             />
           )}
         </div>
-        <div className="bg-chess-surface border border-chess-border rounded-2xl p-8 relative">
+        <div className="bg-chess-surface border border-chess-border rounded-2xl p-4 sm:p-8 relative">
           {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
           <SectionHeader
             title={t("as.section2b.title")}
@@ -225,7 +226,7 @@ export default function AnalysisSection({
       </section>
 
       {/* ── Section 3 – 시간 압박 블런더 비율 ── */}
-      <section className={`bg-chess-surface border border-chess-border rounded-2xl p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
+      <section className={`bg-chess-surface border border-chess-border rounded-2xl p-4 sm:p-8 relative ${insufficientData ? "opacity-40 pointer-events-none select-none" : ""}`}>
         {insufficientData && <div className="absolute inset-0 rounded-2xl backdrop-blur-sm z-10" />}
         <SectionHeader
           title={t("as.section3Title")}

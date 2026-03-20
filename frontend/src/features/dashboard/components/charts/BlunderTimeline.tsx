@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useState, useEffect } from "react";
 import type { TimePressureStats } from "@/types";
 import { useTranslation } from "@/shared/lib/i18n";
 
@@ -65,6 +66,14 @@ function pressureTone(pct: number, t: any) {
 
 export default function BlunderTimeline({ data }: Props) {
   const { t } = useTranslation();
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
   const hasClock = data && data.games_with_clock > 0;
   const isMock = !hasClock;
 
@@ -184,70 +193,79 @@ export default function BlunderTimeline({ data }: Props) {
           <p className="text-xs tracking-wide text-chess-muted mb-2">
             {t("chart.pressureByMove")}{isMock ? t("chart.mockSuffix") : ""}
           </p>
-          <ResponsiveContainer width="100%" height={245}>
-            <ComposedChart data={moveData} margin={{ left: -10, right: 8, top: 4, bottom: 0 }}>
-              <defs>
-                <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#C8CBC5" />
-              <XAxis
-                dataKey="move_number"
-                tickFormatter={(v) => t("chart.moveN").replace("{n}", String(v))}
-                tick={{ fill: "#5C5755", fontSize: 11 }}
-              />
-              <YAxis
-                yAxisId="pressure"
-                tickFormatter={(v) => `${v}%`}
-                tick={{ fill: "#5C5755", fontSize: 11 }}
-                domain={[0, 100]}
-              />
-              <YAxis
-                yAxisId="time"
-                orientation="right"
-                tickFormatter={(v) => `${v}s`}
-                tick={{ fill: "#64748b", fontSize: 11 }}
-                domain={[0, Math.ceil(maxAvgThinkTime * 1.25)]}
-              />
-              <Tooltip
-                formatter={(v, name) => [
-                  `${v}${name === "pressure_pct" ? "%" : "s"}`,
-                  name === "pressure_pct" ? t("chart.pressure") : t("chart.think"),
-                ]}
-                labelFormatter={(v) => t("chart.moveN").replace("{n}", String(v))}
-                contentStyle={{ background: "#FBFBF2", border: "1px solid #C8CBC5", borderRadius: 8, fontSize: 12 }}
-              />
-              <Area
-                yAxisId="pressure"
-                type="monotone"
-                dataKey="pressure_pct"
-                stroke="#ea580c"
-                strokeWidth={2.5}
-                fill="url(#pressureGrad)"
-                dot={{ r: 2, strokeWidth: 0, fill: "#ea580c" }}
-                activeDot={{ r: 4, fill: "#b91c1c", stroke: "#fff", strokeWidth: 1 }}
-              />
-              <Line
-                yAxisId="time"
-                type="monotone"
-                dataKey="avg_time_spent"
-                connectNulls
-                stroke="#2563eb"
-                strokeWidth={2}
-                dot={{ r: 2, strokeWidth: 0, fill: "#2563eb" }}
-                activeDot={{ r: 4, fill: "#1d4ed8", stroke: "#fff", strokeWidth: 1 }}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <div className="h-40 sm:h-[245px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={moveData} margin={{ left: -10, right: isMobile ? -10 : 8, top: 4, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#C8CBC5" />
+                <XAxis
+                  dataKey="move_number"
+                  tickFormatter={(v) => t("chart.moveN").replace("{n}", String(v))}
+                  tick={{ fill: "#5C5755", fontSize: 10 }}
+                />
+                <YAxis
+                  yAxisId="pressure"
+                  tickFormatter={(v) => `${v}%`}
+                  tick={{ fill: "#5C5755", fontSize: 10 }}
+                  domain={[0, 100]}
+                  width={32}
+                />
+                <YAxis
+                  yAxisId="time"
+                  orientation="right"
+                  tickFormatter={(v) => `${v}s`}
+                  tick={{ fill: "#64748b", fontSize: 10 }}
+                  domain={[0, Math.ceil(maxAvgThinkTime * 1.25)]}
+                  hide={isMobile}
+                  width={isMobile ? 0 : 32}
+                />
+                <Tooltip
+                  formatter={(v, name) => [
+                    `${v}${name === "pressure_pct" ? "%" : "s"}`,
+                    name === "pressure_pct" ? t("chart.pressure") : t("chart.think"),
+                  ]}
+                  labelFormatter={(v) => t("chart.moveN").replace("{n}", String(v))}
+                  contentStyle={{ background: "#FBFBF2", border: "1px solid #C8CBC5", borderRadius: 8, fontSize: 12 }}
+                />
+                <Area
+                  yAxisId="pressure"
+                  type="monotone"
+                  dataKey="pressure_pct"
+                  stroke="#ea580c"
+                  strokeWidth={2.5}
+                  fill="url(#pressureGrad)"
+                  dot={{ r: 2, strokeWidth: 0, fill: "#ea580c" }}
+                  activeDot={{ r: 4, fill: "#b91c1c", stroke: "#fff", strokeWidth: 1 }}
+                />
+                {!isMobile && (
+                  <Line
+                    yAxisId="time"
+                    type="monotone"
+                    dataKey="avg_time_spent"
+                    connectNulls
+                    stroke="#2563eb"
+                    strokeWidth={2}
+                    dot={{ r: 2, strokeWidth: 0, fill: "#2563eb" }}
+                    activeDot={{ r: 4, fill: "#1d4ed8", stroke: "#fff", strokeWidth: 1 }}
+                  />
+                )}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
           <div className="mt-2 flex items-center gap-4 text-[11px] text-chess-muted">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-orange-600" /> {t("chart.pressureRatePct")}
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-blue-600" /> {t("chart.avgThinkSec")}
-            </span>
+            {!isMobile && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-blue-600" /> {t("chart.avgThinkSec")}
+              </span>
+            )}
           </div>
         </div>
       </div>
