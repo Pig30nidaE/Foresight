@@ -662,7 +662,11 @@ class OpeningTierService:
         try:
             # explorer.lichess.org/lichess 는 인증이 필요한 엔드포인트입니다.
             # (Lichess 정책 변경으로 익명 요청도 401 반환)
-            headers = {"Accept": "application/json"}
+            ua = (
+                settings.LICHESS_USER_AGENT.strip()
+                or f"{settings.PROJECT_NAME}/1.0 (lichess opening explorer)"
+            )
+            headers = {"Accept": "application/json", "User-Agent": ua}
             if settings.LICHESS_API_TOKEN:
                 headers["Authorization"] = f"Bearer {settings.LICHESS_API_TOKEN}"
             async with httpx.AsyncClient(timeout=10.0) as client:
