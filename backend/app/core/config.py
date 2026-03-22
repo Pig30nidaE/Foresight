@@ -1,3 +1,4 @@
+from pydantic import computed_field
 from pydantic_settings import BaseSettings
 from typing import List
 from pathlib import Path
@@ -11,11 +12,31 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Foresight"
 
-    # CORS
-    ALLOWED_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "https://foresight.vercel.app",
-    ]
+    # CORS: 비어 있으면 기본(로컬 + 레거시 Vercel). Azure 등 배포 시 콤마로 구분해 전부 나열.
+    # 예: https://foresight-frontend.azurestaticapps.net,https://www.yourdomain.com,http://localhost:3000
+    FORESIGHT_CORS_ORIGINS: str = ""
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ALLOWED_ORIGINS(self) -> List[str]:
+        if self.FORESIGHT_CORS_ORIGINS.strip():
+            return [
+                x.strip()
+                for x in self.FORESIGHT_CORS_ORIGINS.split(",")
+                if x.strip()
+            ]
+        return [
+            "http://localhost:3000",
+            "https://foresight.vercel.app",
+        ]
+
+    # Stockfish 리소스 (Azure Container Apps 등 제한 환경에서 조정)
+    # Threads: 컨테이너 1 CPU → 1, 로컬 멀티코어 → 2 이상
+    # Hash: 컨테이너 2Gi 기준 → 128, 로컬 → 256
+    # Concurrent: 동시 분석 허용 개수 (Semaphore). 컨테이너 1 CPU → 1
+    STOCKFISH_THREADS: int = 1
+    STOCKFISH_HASH_MB: int = 128
+    STOCKFISH_CONCURRENT: int = 1
 
     # External APIs
     LICHESS_API_TOKEN: str = ""

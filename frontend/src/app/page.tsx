@@ -7,12 +7,12 @@ import { useTranslation } from "@/shared/lib/i18n";
 export default function Home() {
   const { t } = useTranslation();
   return (
-    <div className="relative flex flex-col items-center justify-center min-h-[70vh] sm:min-h-[80vh] gap-8 sm:gap-12 text-center overflow-hidden">
+    <div className="relative flex flex-col items-center justify-start sm:justify-center min-h-[70vh] sm:min-h-[80vh] gap-8 sm:gap-12 text-center overflow-x-hidden pb-10 sm:pb-0">
       {/* Dot-grid background */}
       <div className="absolute inset-0 dot-grid opacity-[0.15] pointer-events-none" />
 
-      {/* Hero */}
-      <div className="flex flex-col items-center gap-3 sm:gap-4 animate-fade-in relative z-10">
+      {/* Hero — shrink 방지: 모바일에서 세로 중앙 정렬 시 콘텐츠가 겹칠 수 있음 */}
+      <div className="flex flex-col items-center gap-3 sm:gap-4 animate-fade-in relative z-10 w-full shrink-0 pt-2 sm:pt-0">
         <span className="text-5xl sm:text-7xl select-none">♟️</span>
         <h1 className="text-3xl sm:text-5xl font-bold tracking-tight">
           <span className="text-chess-primary">Fore</span>
@@ -26,12 +26,12 @@ export default function Home() {
       </div>
 
       {/* Search */}
-      <div className="relative z-10 w-full flex justify-center px-1">
+      <div className="relative z-10 w-full max-w-2xl mx-auto flex justify-center px-1 shrink-0">
         <SearchForm />
       </div>
 
       {/* Feature Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-2xl mt-2 sm:mt-4 relative z-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-2xl mt-2 sm:mt-4 relative z-10 shrink-0">
         <Link
           href="/opening-tier"
           className="bg-chess-surface/80 backdrop-blur-sm border border-chess-border rounded-xl p-4 sm:p-5 text-left hover:border-chess-accent/60 hover:bg-chess-border/60 transition-all group"

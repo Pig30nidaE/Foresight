@@ -1,216 +1,256 @@
 """
-개별 게임 분석 엔드포인트 (양쪽 플레이어)
+개별 게임 분석 엔드포인트 — SSE 스트리밍 방식
 ────────────────────────────────────────────────────
 Stockfish 기반 T1~T6 수 품질 분석 (흑/백 모두 분석)
+수 하나가 분석될 때마다 SSE 이벤트로 실시간 전송합니다.
 
-POST /api/v1/game-analysis/game
-  → 단일 게임의 PGN을 받아 양쪽 플레이어를 T1~T6 등급으로 분석
-  → 각 등급별 수 목록 포함 (클릭시 체스보드에 표시용 FEN 포함)
+동일 (game_id, depth) 재요청 시 LRU+TTL 캐시에서 즉시 재생 (Stockfish 미실행).
+
+POST /api/v1/game-analysis/game/stream
+  → PGN을 받아 수별 분석 결과를 SSE로 스트리밍
 """
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
+import queue as thread_queue
+import threading
+import time
+from collections import OrderedDict
 from functools import partial
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException, Body
-from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from fastapi import APIRouter, Body
+from pydantic import BaseModel
+from starlette.responses import StreamingResponse
 
+from app.core.config import settings
 from app.ml.game_analyzer import (
-    analyze_both_players_sync,
-    MoveTier,
+    analyze_game_streaming,
     PlayerAnalysisResult,
-    AnalyzedMove,
-)
-from app.models.schemas import (
-    MoveTier as MoveTierSchema,
-    TopMoveInfo,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-class AnalyzedMoveDetail(BaseModel):
-    """개별 수 분석 상세"""
-    halfmove: int
-    move_number: int
-    color: str
-    san: str
-    uci: str
-    fen_before: str  # 수 전 FEN (체스보드 표시용)
-    fen_after: str  # 수 후 FEN
-    cp_before: Optional[int]
-    cp_after: Optional[int]
-    cp_loss: int
-    win_pct_before: float
-    win_pct_after: float
-    win_pct_loss: float
-    tier: MoveTierSchema
-    top_moves: List[TopMoveInfo]
-    user_move_rank: int
-    is_only_best: bool
+# Azure Container Apps 등 제한 환경: 기본 1. 로컬 or 고사양이면 STOCKFISH_CONCURRENT=2 이상.
+_analysis_semaphore = asyncio.Semaphore(settings.STOCKFISH_CONCURRENT)
+
+# ── SSE 완료 결과 캐시 (동일 게임·동일 depth 재요청 시 재사용) ─────────────
+_CACHE_MAXSIZE = 50
+_CACHE_TTL_SEC = 3600
+
+_cache_lock = threading.Lock()
+_analysis_stream_cache: "OrderedDict[Tuple[str, Optional[int]], _StreamCacheEntry]" = OrderedDict()
 
 
-class PlayerAnalysisData(BaseModel):
-    """개별 플레이어 분석 데이터"""
-    username: str
-    color: str  # "white" | "black"
-    total_moves: int
-    analyzed_moves: List[AnalyzedMoveDetail]
-    
-    # 등급별 통계
-    tier_counts: Dict[str, int]
-    tier_percentages: Dict[str, float]
-    avg_cp_loss: float
-    accuracy: float
-    
-    # 등급별 수 목록 (필터링용)
-    moves_by_tier: Dict[str, List[AnalyzedMoveDetail]] = Field(
-        default_factory=dict,
-        description="T1~T6별 수 목록. 예: {'T1': [...], 'T2': [...]}"
-    )
+class _StreamCacheEntry:
+    __slots__ = ("init_event", "move_events", "complete_event", "ts")
+
+    def __init__(self, init_event: dict, move_events: List[dict], complete_event: dict) -> None:
+        self.init_event = init_event
+        self.move_events = move_events
+        self.complete_event = complete_event
+        self.ts = time.monotonic()
+
+    def fresh(self) -> bool:
+        return time.monotonic() - self.ts < _CACHE_TTL_SEC
 
 
-class BothPlayersAnalysisResponse(BaseModel):
-    """양쪽 플레이어 분석 응답"""
-    game_id: str
-    white_player: str
-    black_player: str
-    white_analysis: PlayerAnalysisData
-    black_analysis: PlayerAnalysisData
-    opening: Dict[str, object] = Field(
-        default_factory=dict,
-        description="오프닝 라인 및 이론수(TH). 예: {eco,name,th_plies,th_fullmoves}"
-    )
+def _cache_key(game_id: str, pgn: str, depth: Optional[int]) -> Tuple[str, Optional[int]]:
+    uid = game_id.strip() or hashlib.sha1(pgn.encode()).hexdigest()[:16]
+    return (uid, depth)
+
+
+def _cache_get(key: Tuple[str, Optional[int]]) -> Optional[_StreamCacheEntry]:
+    with _cache_lock:
+        ent = _analysis_stream_cache.get(key)
+        if ent is None:
+            return None
+        if not ent.fresh():
+            del _analysis_stream_cache[key]
+            return None
+        _analysis_stream_cache.move_to_end(key)
+        return ent
+
+
+def _cache_set(key: Tuple[str, Optional[int]], entry: _StreamCacheEntry) -> None:
+    with _cache_lock:
+        _analysis_stream_cache[key] = entry
+        _analysis_stream_cache.move_to_end(key)
+        while len(_analysis_stream_cache) > _CACHE_MAXSIZE:
+            _analysis_stream_cache.popitem(last=False)
 
 
 class GameAnalysisRequest(BaseModel):
     """게임 분석 요청"""
     pgn: str
     game_id: str = ""
-    time_per_move: float = 0.15  # 기본 분석 시간 (초)
     stockfish_depth: Optional[int] = None
 
 
-def _convert_move_to_schema(move: AnalyzedMove) -> AnalyzedMoveDetail:
-    """AnalyzedMove를 스키마로 변환"""
-    return AnalyzedMoveDetail(
-        halfmove=move.halfmove,
-        move_number=move.move_number,
-        color=move.color,
-        san=move.san,
-        uci=move.uci,
-        fen_before=move.fen_before,
-        fen_after=move.fen_after,
-        cp_before=move.cp_before,
-        cp_after=move.cp_after,
-        cp_loss=move.cp_loss,
-        win_pct_before=move.win_pct_before,
-        win_pct_after=move.win_pct_after,
-        win_pct_loss=move.win_pct_loss,
-        tier=MoveTierSchema(move.tier.value),
-        top_moves=[TopMoveInfo(**m) for m in move.top_moves],
-        user_move_rank=move.user_move_rank,
-        is_only_best=move.is_only_best,
-    )
-
-
-def _convert_player_analysis(result: PlayerAnalysisResult) -> PlayerAnalysisData:
-    """PlayerAnalysisResult를 API 응답 스키마로 변환"""
-    analyzed_moves = [_convert_move_to_schema(m) for m in result.analyzed_moves]
-    
-    # 등급별 수 목록 변환
-    moves_by_tier = {
-        tier: [_convert_move_to_schema(m) for m in moves]
-        for tier, moves in result.moves_by_tier.items()
+def _summary_from_result(result: PlayerAnalysisResult) -> dict:
+    """PlayerAnalysisResult → 요약 통계 dict"""
+    return {
+        "username": result.username,
+        "color": result.color,
+        "total_moves": result.total_moves,
+        "accuracy": result.accuracy,
+        "avg_cp_loss": result.avg_cp_loss,
+        "tier_counts": result.tier_counts,
+        "tier_percentages": result.tier_percentages,
     }
-    
-    return PlayerAnalysisData(
-        username=result.username,
-        color=result.color,
-        total_moves=result.total_moves,
-        analyzed_moves=analyzed_moves,
-        tier_counts=result.tier_counts,
-        tier_percentages=result.tier_percentages,
-        avg_cp_loss=result.avg_cp_loss,
-        accuracy=result.accuracy,
-        moves_by_tier=moves_by_tier,
-    )
 
 
-@router.post("/game", response_model=BothPlayersAnalysisResponse)
-async def analyze_game_both_players(
-    request: GameAnalysisRequest = Body(...),
-):
-    """
-    **양쪽 플레이어 T1~T6 분석**
-    
-    PGN을 받아 Stockfish로 분석하고 **흑/백 양쪽 플레이어**의 수를 T1~T6 등급으로 분류합니다.
-    
-    **등급 기준:**
-    - **T1 (브릴리언트)**: 불리한 상황 역전/희생 등 전술적 고품질 수
-    - **T2 (최상)**: 최상급 정확수
-    - **T3 (우수)**: 우수한 수
-    - **T4 (양호)**: 양호한 수
-    - **T5 (보통)**: 아쉬운 수
-    - **T6 (실수)**: 평가 손실이 큰 실수
-    
-    **응답:**
-    - 양쪽 플레이어 분석 데이터 (`white_analysis`, `black_analysis`)
-    - 각 플레이어의 전체 수 품질 통계 (`tier_counts`, `tier_percentages`)
-    - 등급별 수 목록 (`moves_by_tier`) - T1~T6 탭 필터링용
-    - 수별 FEN (`fen_before`, `fen_after`) - 체스보드 표시용
-    - Chess.com 방식 정확도 (`accuracy`)
-    """
-    if not request.pgn or not request.pgn.strip():
-        raise HTTPException(status_code=400, detail="PGN이 필요합니다.")
-    
+def _run_analysis(
+    q: thread_queue.Queue,
+    pgn: str,
+    game_id: str,
+    depth: Optional[int],
+    cache_key: Tuple[str, Optional[int]],
+) -> None:
+    """동기 스레드에서 실행. 분석 이벤트를 큐에 넣고, 성공 시 캐시에 저장합니다."""
+    init_data: Dict[str, Any] = {}
+    move_events: List[dict] = []
+
+    def on_init(data: dict) -> None:
+        init_data.update(data)
+        q.put({"type": "init", **data})
+
+    def on_move(data: dict) -> None:
+        move_events.append({"type": "move", "data": data})
+        q.put({"type": "move", "data": data})
+
     try:
-        logger.info(
-            f"[Game Analysis - Both Players] {request.game_id} "
-            f"(time_per_move: {request.time_per_move}s)"
+        result = analyze_game_streaming(
+            pgn_str=pgn,
+            game_id=game_id,
+            stockfish_depth=depth,
+            on_init=on_init,
+            on_move=on_move,
         )
-        
-        # 스레드 풀에서 동기 분석 실행
-        loop = asyncio.get_event_loop()
-        fn = partial(
-            analyze_both_players_sync,
-            pgn_str=request.pgn,
-            game_id=request.game_id,
-            time_per_move=request.time_per_move,
-            time_per_multi=request.time_per_move * 0.8,
-            stockfish_depth=request.stockfish_depth,
-        )
-        result = await loop.run_in_executor(None, fn)
-        
+
         if result is None:
-            raise HTTPException(
-                status_code=500,
-                detail="게임 분석에 실패했습니다. PGN 형식을 확인하거나 Stockfish 설정을 확인하세요."
-            )
-        
-        # 양쪽 플레이어 변환
-        white_data = _convert_player_analysis(result.white_analysis)
-        black_data = _convert_player_analysis(result.black_analysis)
-        
-        logger.info(
-            f"[Game Analysis Complete] White({white_data.username}): {white_data.accuracy}%, "
-            f"Black({black_data.username}): {black_data.accuracy}%"
+            q.put({"type": "error", "message": "PGN 파싱 실패 또는 Stockfish를 찾을 수 없습니다."})
+            return
+
+        complete_evt = {
+            "type": "complete",
+            "game_id": result.game_id,
+            "white": _summary_from_result(result.white_analysis),
+            "black": _summary_from_result(result.black_analysis),
+            "opening": result.opening or {},
+        }
+        q.put(complete_evt)
+
+        init_evt = {"type": "init", **init_data}
+        _cache_set(
+            cache_key,
+            _StreamCacheEntry(
+                init_evt,
+                list(move_events),
+                dict(complete_evt),
+            ),
         )
-        
-        return BothPlayersAnalysisResponse(
-            game_id=result.game_id,
-            white_player=result.white_player,
-            black_player=result.black_player,
-            white_analysis=white_data,
-            black_analysis=black_data,
-            opening=result.opening or {},
-        )
-        
-    except HTTPException:
-        raise
     except Exception as exc:
         logger.exception(f"[Game Analysis Error] {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        q.put({"type": "error", "message": str(exc)})
+    finally:
+        q.put(None)
+
+
+@router.post("/game/stream")
+async def analyze_game_stream(request: GameAnalysisRequest = Body(...)):
+    """
+    **SSE 스트리밍 게임 분석**
+
+    수 하나가 분석될 때마다 SSE 이벤트로 전송합니다.
+    동일 (game_id, stockfish_depth)는 캐시에서 즉시 재생합니다.
+    동시 Stockfish 프로세스는 최대 2개로 제한합니다.
+
+    이벤트 타입:
+    - queued: Semaphore 대기 중 (캐시 히트 시에도 동일 시퀀스 유지)
+    - init: PGN 파싱 완료, 총 수/플레이어/오프닝 정보
+    - move: 수 1개 분석 완료 (AnalyzedMove)
+    - complete: 전체 분석 완료 (요약 통계)
+    - error: 오류 발생
+    """
+    if not request.pgn or not request.pgn.strip():
+        async def error_gen():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'PGN이 필요합니다.'}, ensure_ascii=False)}\n\n"
+        return StreamingResponse(error_gen(), media_type="text/event-stream")
+
+    ck = _cache_key(request.game_id, request.pgn, request.stockfish_depth)
+    cached = _cache_get(ck)
+    if cached is not None:
+        logger.info(f"[Game Analysis SSE Cache HIT] key={ck[0]} depth={ck[1]}")
+
+        async def replay_cached():
+            yield f"data: {json.dumps({'type': 'queued'})}\n\n"
+            yield f"data: {json.dumps(cached.init_event, ensure_ascii=False)}\n\n"
+            for mv in cached.move_events:
+                yield f"data: {json.dumps(mv, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(cached.complete_event, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            replay_cached(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
+
+    async def event_generator():
+        yield f"data: {json.dumps({'type': 'queued'})}\n\n"
+
+        async with _analysis_semaphore:
+            q: thread_queue.Queue = thread_queue.Queue()
+            loop = asyncio.get_event_loop()
+
+            logger.info(
+                f"[Game Analysis SSE Start] game_id={request.game_id!r} "
+                f"depth={request.stockfish_depth}"
+            )
+
+            future = loop.run_in_executor(
+                None,
+                partial(
+                    _run_analysis,
+                    q,
+                    request.pgn,
+                    request.game_id,
+                    request.stockfish_depth,
+                    ck,
+                ),
+            )
+
+            while True:
+                try:
+                    event = await loop.run_in_executor(
+                        None, lambda: q.get(timeout=0.5)
+                    )
+                except thread_queue.Empty:
+                    yield ": keepalive\n\n"
+                    continue
+
+                if event is None:
+                    break
+
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+            await future
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
