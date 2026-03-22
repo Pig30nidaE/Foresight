@@ -25,7 +25,7 @@ const SESSION_SETTINGS_KEY = "foresight.session.settings";
 const DEFAULT_SETTINGS: Settings = {
   language: "ko",
   theme: "light",
-  stockfishDepth: 18,
+  stockfishDepth: 12,
 };
 
 /**
