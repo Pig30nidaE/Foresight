@@ -252,11 +252,10 @@ def _compute_opening_theory(pgn_str: str) -> dict:
     """
     오프닝 라인(변형) 및 이론수(TH)를 계산.
 
-    정의(간단/안전):
-    - 시작 포지션에서부터 게임 수순을 한 수씩 진행하며, 해당 포지션(EPD)이 오프닝 DB에 존재하는 동안만 '이론수'로 간주.
-    - 첫 미스매치가 나오면 중단. (연속 구간)
-    - PGN 헤더의 ECO가 있으면, TH/오프닝 이름은 그 ECO를 기준으로 맞춥니다.
-    - 마지막으로 매칭된 엔트리의 name/eco를 '오프닝 라인'으로 반환.
+    - PGN **메인 변형**을 따라가며, 각 포지션(EPD)이 lichess 오프닝 DB에 있으면 이론수로 카운트.
+    - ECO 코드가 수순마다 바뀌는 **바리에이션/서브라인**도 DB에 포지션이 있으면 끊지 않고 포함
+      (이전에는 동일 ECO 연속 또는 헤더 ECO 강제 매칭으로 일찍 종료될 수 있었음).
+    - 표시용 eco/name: PGN [ECO]/[Opening] 헤더 우선, 없으면 마지막 매칭 엔트리·ECO 조회.
     """
     try:
         if not opening_db.is_loaded():
@@ -266,103 +265,36 @@ def _compute_opening_theory(pgn_str: str) -> dict:
         if game is None:
             return {}
 
-        # chess.com 등 외부에서 제공하는 ECO가 있다면 그걸 기준으로 오프닝명을 통일합니다.
-        # (EPD 매칭만으로는 같은 포지션이라도 다른 변형명이 매칭될 수 있음)
         eco_header = (game.headers.get("ECO") or "").strip().upper() or None
         opening_header = (game.headers.get("Opening") or "").strip() or None
-        canonical_eco = eco_header
-
-        # 오프닝 이름 우선순위: PGN [Opening] 헤더(플랫폼 제공명) > ECO DB 이름
-        # 전적 검색에서 표시하는 이름(플랫폼 API 제공)과 동일하게 맞추기 위해 헤더 우선.
-        canonical_name = opening_header or (
-            opening_db.get_name_by_eco(canonical_eco)
-            if canonical_eco
-            else None
-        )
 
         def key4(b: chess.Board) -> str:
-            # Use FEN 4-field key to match lichess openings EPD keys robustly
             return " ".join(b.fen().split()[:4])
 
-        def walk(require_eco: Optional[str]) -> tuple[int, Optional[dict]]:
-            """
-            th_plies와 마지막 매칭 엔트리를 반환합니다.
+        board = game.board()
+        node = game
+        th_plies = 0
+        last_entry: Optional[dict] = None
 
-            - require_eco가 있으면, entry.eco가 require_eco와 다르면 즉시 중단
-            - require_eco가 없으면, 첫 매칭 엔트리의 eco를 current_eco로 두고 동일 eco 내부에서만 확장
-            """
-            board = game.board()
-            node = game
-            th_plies_local = 0
-            last_entry_local: Optional[dict] = None
-            current_eco_local: Optional[str] = None
+        while node.variations:
+            next_node = node.variations[0]
+            move = next_node.move
+            board.push(move)
+            entry = opening_db.get_entry_by_epd(key4(board))
+            if not entry:
+                break
+            th_plies += 1
+            last_entry = entry
+            node = next_node
 
-            while node.variations:
-                next_node = node.variations[0]
-                move = next_node.move
-                board.push(move)
-                entry = opening_db.get_entry_by_epd(key4(board))
-                if not entry:
-                    break
-
-                if require_eco is not None:
-                    if entry.get("eco") != require_eco:
-                        break
-                else:
-                    if current_eco_local is None:
-                        current_eco_local = entry.get("eco")
-                    elif entry.get("eco") != current_eco_local:
-                        break
-
-                th_plies_local += 1
-                last_entry_local = entry
-                node = next_node
-
-            return th_plies_local, last_entry_local
-
-        # 1) ECO 헤더 기반(강제) 시도
-        if canonical_eco:
-            th_plies, last_entry = walk(canonical_eco)
-            if last_entry and th_plies > 0:
-                th_fullmoves = (th_plies + 1) // 2
-                return {
-                    "eco": canonical_eco,
-                    "name": canonical_name or last_entry.get("name"),
-                    "th_plies": th_plies,
-                    "th_fullmoves": th_fullmoves,
-                }
-
-            # 2) 실패 시 기존 방식으로 TH 유지 (이름만 ECO에 맞춰 교정)
-            th_plies, last_entry = walk(None)
-            if not last_entry or th_plies == 0:
-                return {}
-
-            eco_out = last_entry.get("eco")
-            # 표시용 오프닝명: PGN [Opening] 헤더(플랫폼명) > ECO DB 이름
-            name_out = (
-                canonical_name
-                or (opening_db.get_name_by_eco(eco_out) if eco_out else None)
-                or last_entry.get("name")
-            )
-
-            th_fullmoves = (th_plies + 1) // 2
-            return {
-                "eco": eco_out,
-                "name": name_out,
-                "th_plies": th_plies,
-                "th_fullmoves": th_fullmoves,
-            }
-
-        # ECO 헤더가 없는 경우: 기존 방식만 사용
-        th_plies, last_entry = walk(None)
         if not last_entry or th_plies == 0:
             return {}
 
-        eco_out = last_entry.get("eco")
-        # PGN [Opening] 헤더 우선, 없으면 DB 이름
+        eco_out = eco_header or last_entry.get("eco")
         name_out = (
             opening_header
-            or (opening_db.get_name_by_eco(eco_out) if eco_out else None)
+            or (opening_db.get_name_by_eco(eco_header) if eco_header else None)
+            or (opening_db.get_name_by_eco(last_entry.get("eco")) if last_entry.get("eco") else None)
             or last_entry.get("name")
         )
 
@@ -726,20 +658,10 @@ def _analyze_single_move_with_fen(
     halfmove: int,
     time_per_move: float = 0.15,
     stockfish_depth: Optional[int] = None,
-    opening_eco: Optional[str] = None,
     prev_multipv: Optional[List[chess.engine.InfoDict]] = None,
 ) -> Tuple[Optional[AnalyzedMove], List[chess.engine.InfoDict]]:
     """
-    단일 수 분석 (FEN 포함)
-
-    ── 핵심 최적화: analyse_after(multipv=3) 결과를 다음 수의 analyse_before로 재사용 ──
-    원래 수당 엔진 호출 2회(analyse_after + 별도 MultiPV)에서 1회로 절감.
-
-    prev_multipv: 직전 수의 analyse_after(multipv=3) 결과 리스트.
-                  이 포지션 = 현재 수의 before 포지션이므로:
-                    - [0]["score"].pov(moving_color) → cp_before
-                    - [i]["pv"][0] → top moves for ranking
-    Returns: (AnalyzedMove | None, after_multipv: List[InfoDict])
+    단일 수 분석 (FEN 포함) - 극한의 실무 최적화 적용 버전
     """
     moving_color = board.turn
     color_str = "white" if moving_color == chess.WHITE else "black"
@@ -747,7 +669,7 @@ def _analyze_single_move_with_fen(
     fen_before = board.fen()
     material_before = _material_score(board, moving_color)
 
-    # TF 판정
+    # 1. TF 판정 (강제수)
     is_forced = False
     try:
         legal_moves = list(board.legal_moves)
@@ -774,13 +696,13 @@ def _analyze_single_move_with_fen(
     except Exception:
         is_forced = False
 
-    limit = chess.engine.Limit(depth=stockfish_depth, time=time_per_move)
-
-    # ① Before 포지션: prev_multipv 재사용 or 최초 수면 직접 분석
+    # ① Before 포지션 정보 추출
     if prev_multipv:
         before_pv = prev_multipv
     else:
-        before_pv = engine.analyse(board, limit, multipv=3)
+        # 최초 1수 째는 얕은 깊이로 빠르게 초기화 (어차피 오프닝 구간)
+        init_limit = chess.engine.Limit(depth=10, time=time_per_move)
+        before_pv = engine.analyse(board, init_limit, multipv=3)
 
     cp_before: Optional[int] = None
     try:
@@ -788,31 +710,62 @@ def _analyze_single_move_with_fen(
     except Exception:
         pass
 
+    # 🚀 최적화 A: 가비지 타임 다이어트
+    # 이미 승패가 700 센티폰(폰 7개) 이상 차이로 완벽하게 기울었다면, 깊게 볼 필요가 없습니다.
+    is_garbage_time = cp_before is not None and abs(cp_before) >= 700
+
+    target_depth = stockfish_depth
+    if target_depth is not None:
+        if is_forced:
+            target_depth = min(10, target_depth)  # 강제수는 깊게 연산할 필요 없음
+        elif is_garbage_time:
+            target_depth = max(12, target_depth - 6)  # 승패가 기운 곳은 얕게 연산
+
+    limit = chess.engine.Limit(depth=target_depth, time=time_per_move)
+
     user_san = board.san(move)
     user_uci = move.uci()
 
-    # ② After 포지션: multipv=3으로 분석 (다음 수의 before로 재사용)
+    # ② After 포지션 세팅
     board.push(move)
     fen_after = board.fen()
     material_after = _material_score(board, moving_color)
     epd_after = " ".join(fen_after.split()[:4])
 
-    # TH 조기 종료: 이론수가 확실하면 cheap depth로 충분 (cp 표시용만)
+    # TH 조기 종료
     is_th = False
     try:
         if opening_db.is_loaded():
             entry = opening_db.get_entry_by_epd(epd_after)
-            if entry and (opening_eco is None or entry.get("eco") == opening_eco):
+            if entry:
                 is_th = True
     except Exception:
         pass
 
+    # 🚀 최적화 B & C: 메인 라인과 MultiPV의 완벽한 분리(Decoupling)
+# 🚀 최적화 B & C: 메인 라인과 MultiPV의 완벽한 분리(Decoupling)
     if is_th and not is_forced:
-        # TH: cp 표시용 최소 분석 + multipv=3 (다음 수 재사용용)
         th_limit = chess.engine.Limit(depth=8, time=0.03)
         after_pv = engine.analyse(board, th_limit, multipv=3)
     else:
-        after_pv = engine.analyse(board, limit, multipv=3)
+        # 지정된 Depth가 14 이상일 때만 분리 연산 발동
+        if target_depth and target_depth >= 14:
+            # 1. 점수 계산용 메인 라인: 깊고 정확하게 딱 1개만 찾음
+            exact_info = engine.analyse(board, limit)
+            
+            # 2. UI 추천 수용 서브 라인: 깊이를 4 깎아서 얕고 넓게 찾음
+            # 🚨 에러 해결: time_per_move가 None일 때의 방어 로직 추가
+            shallow_time = time_per_move * 0.7 if time_per_move is not None else None
+            shallow_limit = chess.engine.Limit(depth=target_depth - 4, time=shallow_time)
+            
+            after_pv = engine.analyse(board, shallow_limit, multipv=3)
+
+            # 3. 마법의 트릭: 얕게 찾은 점수를 정확한 점수로 덮어쓰기
+            if after_pv and "score" in exact_info:
+                after_pv[0]["score"] = exact_info["score"]
+        else:
+            # 기존 방식 (얕은 깊이)
+            after_pv = engine.analyse(board, limit, multipv=3)
 
     cp_after: Optional[int] = None
     try:
@@ -820,7 +773,7 @@ def _analyze_single_move_with_fen(
     except Exception:
         pass
 
-    board.pop()  # before 포지션으로 복원 (SAN 계산용)
+    board.pop()  # before 포지션으로 복원
 
     # 손실 계산
     cp_loss = max(0, (cp_before or 0) - (cp_after or 0))
@@ -828,8 +781,7 @@ def _analyze_single_move_with_fen(
     win_pct_after = _cp_to_win_pct(cp_after)
     win_pct_loss = max(0.0, win_pct_before - win_pct_after)
 
-    # ③ 순위: before_pv (현재 before 포지션의 multipv 결과) 에서 추출
-    #    별도 엔진 호출 없이 재사용
+    # ③ 순위: before_pv 에서 추출 (별도 엔진 호출 없음)
     top_moves_raw: List[Tuple[str, str, int, int]] = []
     for rank, pv_info in enumerate(before_pv, 1):
         try:
@@ -879,7 +831,7 @@ def _analyze_single_move_with_fen(
         for _, san, cp, rank in top_moves_raw[:3]
     ]
 
-    board.push(move)  # after 포지션으로 복원 (호출자와 상태 동기화)
+    board.push(move)  # 호출자와 상태 동기화
 
     analyzed_move = AnalyzedMove(
         halfmove=halfmove,
@@ -936,7 +888,6 @@ def analyze_game_streaming(
     black_player = game.headers.get("Black", "Black")
 
     opening_info = _compute_opening_theory(pgn_str)
-    opening_eco = opening_info.get("eco") if isinstance(opening_info, dict) else None
 
     # 총 수 계산
     total_moves = 0
@@ -980,7 +931,6 @@ def analyze_game_streaming(
                     halfmove,
                     time_per_move,
                     stockfish_depth,
-                    opening_eco=opening_eco,
                     prev_multipv=prev_multipv,
                 )
 
