@@ -169,7 +169,8 @@ async def analyze_game_stream(request: GameAnalysisRequest = Body(...)):
 
     수 하나가 분석될 때마다 SSE 이벤트로 전송합니다.
     동일 (game_id, stockfish_depth)는 캐시에서 즉시 재생합니다.
-    동시 Stockfish 프로세스는 최대 2개로 제한합니다.
+    동시 분석 개수는 환경 변수 STOCKFISH_CONCURRENT(기본 1)로 제한됩니다.
+    Container Apps 레플리카가 N개면 최대 약 N×STOCKFISH_CONCURRENT 개가 병렬로 돌 수 있습니다.
 
     이벤트 타입:
     - queued: Semaphore 대기 중 (캐시 히트 시에도 동일 시퀀스 유지)
