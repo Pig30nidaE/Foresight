@@ -30,7 +30,7 @@ function DashboardContent() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    if (!username.trim() || platform === "lichess") return;
     setSubmitted(username.trim());
     setSubmittedPlatform(platform);
     router.replace(`/dashboard?platform=${platform}&username=${username.trim()}`);
@@ -78,36 +78,27 @@ function DashboardContent() {
     }
   };
 
+  const lichessBanner = platform === "lichess" && (
+    <div
+      className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-xl bg-chess-surface border border-amber-500/40 text-left shadow-sm"
+      role="status"
+    >
+      <span className="text-2xl shrink-0 select-none sm:self-start">🚧</span>
+      <div className="min-w-0 flex-1 space-y-1">
+        <h3 className="text-sm font-bold text-chess-primary">{t("lichess.comingSoon.title")}</h3>
+        <p className="text-xs sm:text-sm text-chess-muted leading-relaxed">{t("lichess.comingSoon.desc")}</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="relative space-y-5 sm:space-y-8">
-
-      {/* ── Lichess Coming Soon Overlay ── */}
-      {platform === "lichess" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-chess-bg/60">
-          <div className="flex flex-col items-center gap-3 px-8 py-10 rounded-2xl bg-chess-surface/90 border border-chess-border shadow-2xl text-center max-w-sm mx-4">
-            <span className="text-5xl select-none">🚧</span>
-            <h3 className="text-lg font-bold text-chess-primary">
-              {t("lichess.comingSoon.title")}
-            </h3>
-            <p className="text-sm text-chess-muted leading-relaxed">
-              {t("lichess.comingSoon.desc")}
-            </p>
-            <button
-              type="button"
-              onClick={() => setPlatform("chess.com")}
-              className="mt-2 px-5 py-2 rounded-lg bg-chess-accent hover:bg-chess-accent/80 text-white text-sm font-semibold transition-colors"
-            >
-              Chess.com →
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ── Search Bar ── */}
       <form
         onSubmit={handleSearch}
         className="flex flex-col gap-3 bg-chess-surface/60 border border-chess-border rounded-2xl p-4 sm:p-5"
       >
+        {lichessBanner}
         {/* 모바일: 기존(세로) 검색 필터 */}
         <div className="md:hidden flex flex-col gap-3 w-full">
           {/* 플랫폼 + 타임클래스 토글 */}
@@ -164,7 +155,8 @@ function DashboardContent() {
             />
             <button
               type="submit"
-              className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-4 py-2.5 rounded-lg transition-colors shrink-0 text-sm"
+              disabled={platform === "lichess"}
+              className="bg-chess-accent hover:bg-chess-accent/80 disabled:opacity-50 disabled:pointer-events-none text-white font-semibold px-4 py-2.5 rounded-lg transition-colors shrink-0 text-sm"
             >
               {t("dh.startAnalysis")}
             </button>
@@ -225,7 +217,8 @@ function DashboardContent() {
             />
             <button
               type="submit"
-              className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors shrink-0 text-sm"
+              disabled={platform === "lichess"}
+              className="bg-chess-accent hover:bg-chess-accent/80 disabled:opacity-50 disabled:pointer-events-none text-white font-semibold px-6 py-2.5 rounded-lg transition-colors shrink-0 text-sm"
             >
               {t("dh.startAnalysis")}
             </button>
