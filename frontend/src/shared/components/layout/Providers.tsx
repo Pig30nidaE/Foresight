@@ -3,8 +3,20 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { SettingsProvider } from "../settings/SettingsContext";
+import { setApiRuntimeBaseUrl } from "@/shared/lib/api";
 
-export default function Providers({ children }: { children: React.ReactNode }) {
+export default function Providers({
+  children,
+  apiBaseUrl,
+}: {
+  children: React.ReactNode;
+  /** 서버(layout)에서 읽은 API 베이스 — 클라이언트 번들의 localhost fallback 을 덮어씀 */
+  apiBaseUrl: string;
+}) {
+  if (typeof window !== "undefined") {
+    setApiRuntimeBaseUrl(apiBaseUrl);
+  }
+
   const [queryClient] = useState(
     () =>
       new QueryClient({
