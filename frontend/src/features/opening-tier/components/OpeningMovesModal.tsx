@@ -8,6 +8,7 @@ import type { OpeningTierEntry, OpeningDetail } from "../types";
 import { getOpeningDetail } from "../api";
 import { getOpeningDescription } from "../openingDescriptions";
 import { useTranslation } from "@/shared/lib/i18n";
+import { useBodyScrollLock } from "@/shared/lib/useBodyScrollLock";
 
 interface Props {
   entry: OpeningTierEntry | null;
@@ -22,6 +23,7 @@ interface Position {
 
 export default function OpeningMovesModal({ entry, onClose, color = "white" }: Props) {
   const { t } = useTranslation();
+  useBodyScrollLock(!!entry);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [detail, setDetail] = useState<OpeningDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -75,10 +77,8 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
         setCurrentIndex((i) => Math.max(i - 1, 0));
       }
     };
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = "";
       window.removeEventListener("keydown", onKey);
     };
   }, [entry, onClose, positions]);
@@ -93,15 +93,15 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
 
   const modal = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-hidden overscroll-none bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-chess-bg border border-chess-border/60 rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-2xl h-[90dvh] max-h-[90vh] min-h-0 flex flex-col bg-chess-bg border border-chess-border/60 rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-chess-border">
+        <div className="shrink-0 flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-chess-border">
           <div className="flex-1 min-w-0">
             <span className="text-xs font-mono font-bold text-chess-accent mb-1 block">
               {entry.eco}
@@ -119,113 +119,122 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
           </button>
         </div>
 
-        {/* Body */}
-        {!entry.moves ? (
-          <div className="flex items-center justify-center py-16 text-chess-muted text-sm">
-            {t("tier.noMoves")}
-          </div>
-        ) : (
-          <div className="flex flex-col md:flex-row gap-5 p-5 overflow-y-auto">
-            {/* 체스보드 + 네비게이션 */}
-            <div className="shrink-0 flex flex-col items-center">
-              <div className="w-64 md:w-72">
-                <Chessboard
-                  options={{
-                    position: currentFen,
-                    allowDragging: false,
-                    animationDurationInMs: 200,
-                    showAnimations: true,
-                    boardOrientation: color === "black" ? "black" : "white",
-                    boardStyle: { width: "100%", aspectRatio: "1" },
-                  }}
-                />
-              </div>
-              {/* 네비게이션 버튼 */}
-              <div className="flex items-center gap-1 mt-3">
-                <button
-                  onClick={() => setCurrentIndex(0)}
-                  disabled={currentIndex === 0}
-                  className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
-                >
-                  |◀
-                </button>
-                <button
-                  onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
-                  disabled={currentIndex === 0}
-                  className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
-                >
-                  ◀
-                </button>
-                <span className="text-xs text-chess-muted tabular-nums w-14 text-center">
-                  {currentIndex} / {maxIndex}
-                </span>
-                <button
-                  onClick={() =>
-                    setCurrentIndex((i) => Math.min(i + 1, maxIndex))
-                  }
-                  disabled={currentIndex === maxIndex}
-                  className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
-                >
-                  ▶
-                </button>
-                <button
-                  onClick={() => setCurrentIndex(maxIndex)}
-                  disabled={currentIndex === maxIndex}
-                  className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
-                >
-                  ▶|
-                </button>
-              </div>
+        <div
+          data-modal-scroll="true"
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
+          {/* Body */}
+          {!entry.moves ? (
+            <div className="flex items-center justify-center py-16 text-chess-muted text-sm">
+              {t("tier.noMoves")}
             </div>
-
-            {/* 수 순서 목록 + 메인 아이디어 */}
-            <div className="flex-1 min-w-0 flex flex-col gap-4">
-              <div>
-                <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
-                  {t("tier.moveSeq")}
-                </p>
-                <div className="flex flex-wrap gap-1 content-start">
-                  {positions?.slice(1).map((pos, i) => {
-                    const moveNum = Math.floor(i / 2) + 1;
-                    const isWhiteMove = i % 2 === 0;
-                    const isActive = currentIndex === i + 1;
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => setCurrentIndex(i + 1)}
-                        className={`px-2 py-0.5 rounded text-xs font-mono transition-colors ${
-                          isActive
-                            ? "bg-chess-accent/30 text-chess-accent border border-chess-accent/40"
-                            : "text-chess-muted hover:text-chess-primary hover:bg-chess-border"
-                        }`}
-                      >
-                        {isWhiteMove && (
-                          <span className="text-chess-border mr-0.5">{moveNum}.</span>
-                        )}
-                        {pos.san}
-                      </button>
-                    );
-                  })}
+          ) : (
+            <div className="flex flex-col md:flex-row gap-5 p-5">
+              {/* 체스보드 + 네비게이션 */}
+              <div className="shrink-0 flex flex-col items-center">
+                <div className="w-64 md:w-72">
+                  <Chessboard
+                    options={{
+                      position: currentFen,
+                      allowDragging: false,
+                      animationDurationInMs: 200,
+                      showAnimations: true,
+                      boardOrientation: color === "black" ? "black" : "white",
+                      boardStyle: { width: "100%", aspectRatio: "1" },
+                    }}
+                  />
+                </div>
+                {/* 네비게이션 버튼 */}
+                <div className="flex items-center gap-1 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentIndex(0)}
+                    disabled={currentIndex === 0}
+                    className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
+                  >
+                    |◀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
+                    disabled={currentIndex === 0}
+                    className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
+                  >
+                    ◀
+                  </button>
+                  <span className="text-xs text-chess-muted tabular-nums w-14 text-center">
+                    {currentIndex} / {maxIndex}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCurrentIndex((i) => Math.min(i + 1, maxIndex))
+                    }
+                    disabled={currentIndex === maxIndex}
+                    className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
+                  >
+                    ▶
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentIndex(maxIndex)}
+                    disabled={currentIndex === maxIndex}
+                    className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
+                  >
+                    ▶|
+                  </button>
                 </div>
               </div>
 
-              {/* 메인 아이디어 */}
-              {description && (
-                <div className="rounded-lg bg-chess-accent/5 border border-chess-accent/20 px-3 py-2.5">
-                  <p className="text-xs text-chess-muted mb-1 font-medium uppercase tracking-wide">
-                    {t("tier.mainIdea")}
+              {/* 수 순서 목록 + 메인 아이디어 */}
+              <div className="flex-1 min-w-0 flex flex-col gap-4">
+                <div>
+                  <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
+                    {t("tier.moveSeq")}
                   </p>
-                  <p className="text-sm text-chess-primary leading-relaxed">
-                    {description}
-                  </p>
+                  <div className="flex flex-wrap gap-1 content-start">
+                    {positions?.slice(1).map((pos, i) => {
+                      const moveNum = Math.floor(i / 2) + 1;
+                      const isWhiteMove = i % 2 === 0;
+                      const isActive = currentIndex === i + 1;
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setCurrentIndex(i + 1)}
+                          className={`px-2 py-0.5 rounded text-xs font-mono transition-colors ${
+                            isActive
+                              ? "bg-chess-accent/30 text-chess-accent border border-chess-accent/40"
+                              : "text-chess-muted hover:text-chess-primary hover:bg-chess-border"
+                          }`}
+                        >
+                          {isWhiteMove && (
+                            <span className="text-chess-border mr-0.5">{moveNum}.</span>
+                          )}
+                          {pos.san}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
-        )}
 
-        {/* 핵심 포인트 & YouTube 링크 */}
-        <div className="px-5 pb-4 border-t border-chess-border pt-4">
+                {description && (
+                  <div className="rounded-lg bg-chess-accent/5 border border-chess-accent/20 px-3 py-2.5">
+                    <p className="text-xs text-chess-muted mb-1 font-medium uppercase tracking-wide">
+                      {t("tier.mainIdea")}
+                    </p>
+                    <p className="text-sm text-chess-primary leading-relaxed">
+                      {description}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 핵심 포인트 & YouTube 링크 */}
+          <div className="px-5 pb-4 border-t border-chess-border pt-4 shrink-0">
           {/* 핵심 포인트 — 접기/펼치기 */}
           <div>
             <button
@@ -323,9 +332,10 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
             )}
           </div>
         </div>
+        </div>
 
         {/* Footer */}
-        <div className="px-6 py-2.5 border-t border-chess-border text-center">
+        <div className="shrink-0 px-6 py-2.5 border-t border-chess-border text-center">
           <p className="text-xs text-chess-muted">
             {t("tier.modalHelp")}
           </p>

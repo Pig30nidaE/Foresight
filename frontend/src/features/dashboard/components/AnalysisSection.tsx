@@ -100,9 +100,10 @@ export default function AnalysisSection({
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 게임 횟수 선택 UI */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-lg border border-chess-border px-3 py-2 bg-chess-surface/50">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-lg border border-chess-border px-3 py-2 bg-chess-surface/50 min-w-0">
         <span className="text-xs font-medium text-chess-muted shrink-0">{t("as.gameCount")}</span>
-        <div className="flex rounded-md overflow-hidden border border-chess-border">
+        <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain [scrollbar-width:thin]">
+        <div className="inline-flex rounded-md overflow-hidden border border-chess-border">
           {GAME_COUNT_PRESETS.map((size) => (
             <button
               key={size}
@@ -118,6 +119,7 @@ export default function AnalysisSection({
               <span className="hidden sm:inline">{size} {t("as.games")}</span>
             </button>
           ))}
+        </div>
         </div>
         <button
           type="button"
