@@ -130,3 +130,36 @@ export interface SingleGameAnalysis {
   avg_cp_loss: number;
   accuracy: number;
 }
+
+// ─────────────────────────────────────────────
+// SSE 스트리밍 분석 이벤트 타입
+// ─────────────────────────────────────────────
+
+export interface AnalysisSummary {
+  username: string;
+  color: "white" | "black";
+  total_moves: number;
+  accuracy: number;
+  avg_cp_loss: number;
+  tier_counts: Record<string, number>;
+  tier_percentages: Record<string, number>;
+}
+
+export type AnalysisSSEEvent =
+  | { type: "queued" }
+  | {
+      type: "init";
+      total_moves: number;
+      white_player: string;
+      black_player: string;
+      opening?: Record<string, unknown>;
+    }
+  | { type: "move"; data: AnalyzedMove }
+  | {
+      type: "complete";
+      game_id: string;
+      white: AnalysisSummary;
+      black: AnalysisSummary;
+      opening?: Record<string, unknown>;
+    }
+  | { type: "error"; message: string };

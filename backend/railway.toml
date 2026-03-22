@@ -1,3 +1,4 @@
+# Legacy: Railway. Azure: docs/azure-deployment.md
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"

@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import shutil
 import logging
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, Dict
+from typing import Callable, List, Optional, Tuple, Dict
 from enum import Enum
 
 import chess
@@ -26,15 +27,34 @@ import chess.pgn
 import chess.engine
 
 from app.shared.services import opening_db
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-STOCKFISH_PATH: str = (
-    shutil.which("stockfish")
-    or "/opt/homebrew/bin/stockfish"
-    or "/usr/local/bin/stockfish"
-    or "/usr/bin/stockfish"
-)
+
+def _find_stockfish() -> str:
+    """
+    Stockfish 실행 파일 경로를 탐색합니다.
+
+    shutil.which 는 PATH 에 있는 경우만 찾습니다. Debian/Ubuntu apt 패키지는
+    /usr/games/stockfish 에 설치되는데 PATH 에 없을 수 있으므로, 실제 파일
+    존재 여부를 순서대로 확인합니다.
+    """
+    by_which = shutil.which("stockfish")
+    if by_which:
+        return by_which
+    for candidate in (
+        "/usr/games/stockfish",      # Debian apt 기본 위치 (Docker 컨테이너)
+        "/usr/bin/stockfish",
+        "/usr/local/bin/stockfish",
+        "/opt/homebrew/bin/stockfish",  # macOS Homebrew
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+    return "stockfish"  # 최후 fallback — 실행 시 FileNotFoundError
+
+
+STOCKFISH_PATH: str = _find_stockfish()
 
 MATE_SCORE = 10_000
 
@@ -389,12 +409,14 @@ def _get_top_moves(
     
     Returns: [(uci, san, cp_score, rank), ...]
     """
-    # 멀티 PV 모드로 설정
+    # depth 지정 시 time을 제거하여 기기 성능과 무관하게 동일한 결과 보장
+    limit = (
+        chess.engine.Limit(depth=depth)
+        if depth
+        else chess.engine.Limit(time=time_limit)
+    )
+
     try:
-        # limit 정보를 설정
-        limit = chess.engine.Limit(time=time_limit, depth=depth) if depth else chess.engine.Limit(time=time_limit)
-        
-        # 분석 실행 (MultiPV를 이용해 여러 수 분석)
         info = engine.analyse(board, limit, multipv=top_n)
         
         results = []
@@ -413,13 +435,10 @@ def _get_top_moves(
         return results
     except Exception as e:
         logger.warning(f"MultiPV analysis failed: {e}")
-        # 폴백: 단일 분석
         try:
-            fallback_limit = chess.engine.Limit(time=time_limit, depth=depth) if depth else chess.engine.Limit(time=time_limit)
-            info = engine.analyse(board, fallback_limit)
+            info = engine.analyse(board, limit)
             score = _get_score_pov(info, color)
             if score is not None:
-                # best move 정보 가져오기
                 best_move = info.get("pv", [None])[0] if "pv" in info else None
                 if best_move:
                     return [(best_move.uci(), board.san(best_move), score, 1)]
@@ -714,9 +733,13 @@ def _analyze_single_move_with_fen(
     time_per_multi: float = 0.10,
     stockfish_depth: Optional[int] = None,
     opening_eco: Optional[str] = None,
-) -> Optional[AnalyzedMove]:
+    prev_info_after: Optional[chess.engine.InfoDict] = None,
+) -> Tuple[Optional[AnalyzedMove], Optional[chess.engine.InfoDict]]:
     """
     단일 수 분석 (FEN 포함) - 보드 상태를 수정하지 않음
+
+    prev_info_after: 직전 수의 info_after. 같은 포지션이므로 재사용하면 engine.analyse 1회 절약.
+    Returns: (AnalyzedMove, info_after) 튜플
     """
     moving_color = board.turn
     color_str = "white" if moving_color == chess.WHITE else "black"
@@ -758,13 +781,18 @@ def _analyze_single_move_with_fen(
         # TF 판정은 보조 지표이므로 실패 시 안전하게 False
         is_forced = False
     
-    # 수 전 평가
-    info_before = engine.analyse(
-        board,
-        chess.engine.Limit(time=time_per_move, depth=stockfish_depth)
+    # depth 지정 시 time을 제거하여 기기 성능과 무관하게 동일한 결과 보장
+    limit = (
+        chess.engine.Limit(depth=stockfish_depth)
         if stockfish_depth
-        else chess.engine.Limit(time=time_per_move),
+        else chess.engine.Limit(time=time_per_move)
     )
+
+    # 수 전 평가 — 직전 수의 info_after와 동일 포지션이므로 재사용 (엔진 호출 절약)
+    if prev_info_after is not None:
+        info_before = prev_info_after
+    else:
+        info_before = engine.analyse(board, limit)
     cp_before = _get_score_pov(info_before, moving_color)
     
     # 사용자가 둔 수 정보
@@ -776,12 +804,7 @@ def _analyze_single_move_with_fen(
     fen_after = board.fen()
     material_after = _material_score(board, moving_color)
     epd_after = " ".join(fen_after.split()[:4])
-    info_after = engine.analyse(
-        board,
-        chess.engine.Limit(time=time_per_move, depth=stockfish_depth)
-        if stockfish_depth
-        else chess.engine.Limit(time=time_per_move),
-    )
+    info_after = engine.analyse(board, limit)
     cp_after = _get_score_pov(info_after, moving_color)
     
     # 손실 계산
@@ -791,9 +814,11 @@ def _analyze_single_move_with_fen(
     win_pct_loss = max(0.0, win_pct_before - win_pct_after)
     
     # 상위 수 분석 (MultiPV) - 보드 복원 후 분석
+    # 순위 판별은 낮은 depth로도 충분하므로 max(10, depth-6)으로 축소해 속도 개선
     board.pop()
+    multi_depth = max(10, stockfish_depth - 6) if stockfish_depth else None
     top_moves_raw = _get_top_moves(
-        engine, board, moving_color, time_per_multi, top_n=5, depth=stockfish_depth
+        engine, board, moving_color, time_per_multi, top_n=3, depth=multi_depth
     )
     
     # 사용자 수의 순위 확인
@@ -849,11 +874,11 @@ def _analyze_single_move_with_fen(
     # 상위 수 정보 정리
     top_moves_info = [
         {"san": san, "cp": cp, "rank": rank}
-        for uci, san, cp, rank in top_moves_raw[:5]
+        for uci, san, cp, rank in top_moves_raw[:3]
     ]
     
     # 보드 상태를 원래대로 유지 (호출자가 push/pop 관리)
-    return AnalyzedMove(
+    analyzed_move = AnalyzedMove(
         halfmove=halfmove,
         move_number=halfmove // 2 + 1,
         color=color_str,
@@ -872,56 +897,80 @@ def _analyze_single_move_with_fen(
         user_move_rank=user_rank,
         is_only_best=is_only_best,
     )
+    return analyzed_move, info_after
 
 
-def analyze_both_players_sync(
+def analyze_game_streaming(
     pgn_str: str,
     game_id: str = "",
-    time_per_move: float = 0.15,
-    time_per_multi: float = 0.10,
     stockfish_depth: Optional[int] = None,
+    on_init: Optional[Callable] = None,
+    on_move: Optional[Callable] = None,
 ) -> Optional[BothPlayersAnalysisResult]:
     """
-    양쪽 플레이어 모두 T1~T5 등급으로 분석
-    
+    SSE 스트리밍용 게임 분석. 수 하나 분석 완료 시마다 on_move 콜백을 호출하여
+    실시간으로 프론트엔드에 결과를 전달합니다.
+
     Args:
         pgn_str: 게임 PGN 문자열
         game_id: 게임 ID
-        time_per_move: 수별 기본 분석 시간
-        time_per_multi: 멀티PV 분석 시간 (상위 수 분석용)
-    
+        stockfish_depth: Stockfish 분석 깊이 (None이면 시간 기반)
+        on_init: 초기 정보 콜백 (total_moves, players, opening)
+        on_move: 수 분석 완료 콜백 (AnalyzedMove dict)
+
     Returns:
-        BothPlayersAnalysisResult 또는 None (분석 실패 시)
+        BothPlayersAnalysisResult (요약 통계 포함)
     """
+    time_per_move = 0.15
+    time_per_multi = 0.12
+
     game = chess.pgn.read_game(io.StringIO(pgn_str))
     if game is None:
         logger.warning("Invalid PGN")
         return None
-    
-    # 플레이어 이름 추출
+
     white_player = game.headers.get("White", "White")
     black_player = game.headers.get("Black", "Black")
-    
-    white_moves: List[AnalyzedMove] = []
-    black_moves: List[AnalyzedMove] = []
-    
-    # 오프닝(이름 + TH 범위) 계산은 엔진 분석 전 한 번 수행
+
     opening_info = _compute_opening_theory(pgn_str)
     opening_eco = opening_info.get("eco") if isinstance(opening_info, dict) else None
 
+    # 총 수 계산
+    total_moves = 0
+    tmp_node = game
+    while tmp_node.variations:
+        total_moves += 1
+        tmp_node = tmp_node.variations[0]
+
+    if on_init:
+        on_init({
+            "total_moves": total_moves,
+            "white_player": white_player,
+            "black_player": black_player,
+            "opening": opening_info or {},
+        })
+
+    white_moves: List[AnalyzedMove] = []
+    black_moves: List[AnalyzedMove] = []
+
     try:
         with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
+            engine.configure({
+                "Threads": settings.STOCKFISH_THREADS,
+                "Hash": settings.STOCKFISH_HASH_MB,
+            })
+
             board = game.board()
             node = game
             halfmove = 0
-            
+            prev_info_after: Optional[chess.engine.InfoDict] = None
+
             while node.variations:
                 next_node = node.variations[0]
                 move = next_node.move
                 moving_color = board.turn
-                
-                # 모든 수 분석 (양쪽 모두)
-                analyzed = _analyze_single_move_with_fen(
+
+                analyzed, prev_info_after = _analyze_single_move_with_fen(
                     engine,
                     board,
                     move,
@@ -930,40 +979,43 @@ def analyze_both_players_sync(
                     time_per_multi,
                     stockfish_depth,
                     opening_eco=opening_eco,
+                    prev_info_after=prev_info_after,
                 )
-                
+
                 if analyzed:
                     if moving_color == chess.WHITE:
                         white_moves.append(analyzed)
                     else:
                         black_moves.append(analyzed)
-                
+
+                    if on_move:
+                        on_move(_analyzed_move_to_dict(analyzed))
+
                 board.push(move)
                 node = next_node
                 halfmove += 1
-    
+
     except FileNotFoundError:
         logger.error(f"Stockfish not found: {STOCKFISH_PATH}")
         return None
     except Exception as exc:
         logger.exception(f"Game analysis error: {exc}")
-        return None
-    
-    # 결과 생성
+        raise
+
     white_analysis = PlayerAnalysisResult(
         username=white_player,
         color="white",
         total_moves=len(white_moves),
         analyzed_moves=white_moves,
     )
-    
+
     black_analysis = PlayerAnalysisResult(
         username=black_player,
         color="black",
         total_moves=len(black_moves),
         analyzed_moves=black_moves,
     )
-    
+
     return BothPlayersAnalysisResult(
         game_id=game_id,
         white_player=white_player,
@@ -972,3 +1024,26 @@ def analyze_both_players_sync(
         black_analysis=black_analysis,
         opening=opening_info or {},
     )
+
+
+def _analyzed_move_to_dict(m: AnalyzedMove) -> dict:
+    """AnalyzedMove dataclass → JSON-safe dict"""
+    return {
+        "halfmove": m.halfmove,
+        "move_number": m.move_number,
+        "color": m.color,
+        "san": m.san,
+        "uci": m.uci,
+        "fen_before": m.fen_before,
+        "fen_after": m.fen_after,
+        "cp_before": m.cp_before,
+        "cp_after": m.cp_after,
+        "cp_loss": m.cp_loss,
+        "win_pct_before": m.win_pct_before,
+        "win_pct_after": m.win_pct_after,
+        "win_pct_loss": m.win_pct_loss,
+        "tier": m.tier.value,
+        "top_moves": m.top_moves,
+        "user_move_rank": m.user_move_rank,
+        "is_only_best": m.is_only_best,
+    }
