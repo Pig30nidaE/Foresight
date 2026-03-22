@@ -217,7 +217,7 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
 }
 
 function useAnalysisStream(
-  pgn: string | undefined,
+  pgn: string | null | undefined,
   gameId: string,
   depth: number,
 ) {
