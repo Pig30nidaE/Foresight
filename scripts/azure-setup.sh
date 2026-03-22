@@ -17,6 +17,10 @@ export AZ_API_APP="${AZ_API_APP:-foresight-api}"
 export AZ_ACR="${AZ_ACR:-foresightacr2720}"
 # Vercel 프로덕션 URL (CORS). 변경 시: VERCEL_ORIGIN=https://my-app.vercel.app ./scripts/azure-setup.sh
 export VERCEL_ORIGIN="${VERCEL_ORIGIN:-https://foresight.vercel.app}"
+# 동시 게임 분석(SSE) 분산: 레플리카당 동시 HTTP가 이 값을 넘기 전 스케일아웃 (낮을수록 더 빨리 인스턴스 추가)
+export AZ_HTTP_CONCURRENCY="${AZ_HTTP_CONCURRENCY:-2}"
+# 최대 레플리카 수 (비용 상한). 예: AZ_MAX_REPLICAS=15 ./scripts/azure-setup.sh
+export AZ_MAX_REPLICAS="${AZ_MAX_REPLICAS:-10}"
 
 echo "=== Azure 로그인 확인 ==="
 az account show >/dev/null 2>&1 || { echo "❌ az login 필요"; exit 1; }
@@ -99,7 +103,7 @@ else
   # Stockfish 리소스: 1 CPU 컨테이너 기준
   #   STOCKFISH_THREADS=1  → CPU 초과 방지
   #   STOCKFISH_HASH_MB=128 → 메모리 절약
-  #   STOCKFISH_CONCURRENT=1 → 동시 분석 1개
+  #   STOCKFISH_CONCURRENT=1 → 레플리카당 동시 분석 1개 (여러 사용자는 HTTP 스케일로 레플리카 증설)
   az containerapp create \
     -g "$AZ_RG" -n "$AZ_API_APP" \
     --environment "$AZ_CA_ENV" \
@@ -110,7 +114,7 @@ else
     --target-port 8000 \
     --ingress external \
   --min-replicas 0 \
-  --max-replicas 3 \
+  --max-replicas "$AZ_MAX_REPLICAS" \
   --cpu 1.0 --memory 2.0Gi \
     --env-vars \
       "FORESIGHT_CORS_ORIGINS=${VERCEL_ORIGIN},http://localhost:3000" \
@@ -126,17 +130,19 @@ echo ""
 
 echo "=== 9. HTTP 스케일링 규칙 적용 ==="
 # min-replicas=0: 유휴 시 비용 $0 (Scale to Zero)
-# 동시 연결 3개당 replica +1, 최대 3개
-# → 분석 없으면 $0, 분석 중에만 과금 → $100 크레딧으로 1년+ 사용 가능
+# http-concurrency: 레플리카당 동시 HTTP 요청(SSE 포함)이 이 값을 넘기 전에 스케일아웃
+#   기본 2 → 3번째 동시 사용자부터 새 레플리카로 분산하기 쉬움 (기존 3은 한 대에 몰림)
+# max-replicas: AZ_MAX_REPLICAS 로 덮어쓰기 가능 (기본 10)
+# → 비용은 트래픽에 비례. 기존 앱은 아래 update 만으로도 규칙 갱신됨.
 az containerapp update \
   -g "$AZ_RG" -n "$AZ_API_APP" \
   --scale-rule-name http-scaler \
   --scale-rule-type http \
-  --scale-rule-http-concurrency 3 \
+  --scale-rule-http-concurrency "$AZ_HTTP_CONCURRENCY" \
   --min-replicas 0 \
-  --max-replicas 3 \
+  --max-replicas "$AZ_MAX_REPLICAS" \
   --output none
-echo "✓ 스케일링 규칙 적용 (min=0 Scale-to-Zero, 동시 3 연결 → 새 replica)"
+echo "✓ 스케일링 규칙 적용 (min=0, http-concurrency=$AZ_HTTP_CONCURRENCY, max=$AZ_MAX_REPLICAS)"
 echo ""
 
 FQDN=$(az containerapp show -g "$AZ_RG" -n "$AZ_API_APP" \
