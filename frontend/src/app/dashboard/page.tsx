@@ -11,6 +11,22 @@ import { useTranslation } from "@/shared/lib/i18n";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
 
+type TimeClassLabelKey =
+  | "dh.tc.bullet"
+  | "dh.tc.blitz"
+  | "dh.tc.rapid"
+  | "dh.tc.classical";
+
+const TIME_CLASS_META: Record<
+  TimeClass,
+  { emoji: string; key: TimeClassLabelKey }
+> = {
+  bullet:    { emoji: "🔫", key: "dh.tc.bullet" },
+  blitz:     { emoji: "⚡", key: "dh.tc.blitz" },
+  rapid:     { emoji: "⏱", key: "dh.tc.rapid" },
+  classical: { emoji: "📚", key: "dh.tc.classical" },
+};
+
 function DashboardContent() {
   const params = useSearchParams();
   const router = useRouter();
@@ -25,18 +41,34 @@ function DashboardContent() {
   const [submittedPlatform, setSubmittedPlatform] = useState<Platform>(initPlatform);
   const [activeTab, setActiveTab] = useState<"games" | "analysis">("games");
 
+  // 모바일 필터 시트 상태 (드래프트 값: 아직 적용 전)
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [draftPlatform, setDraftPlatform] = useState<Platform>(initPlatform);
+  const [draftTimeClass, setDraftTimeClass] = useState<TimeClass>("blitz");
+
   const sinceMs = undefined;
   const untilMs = undefined;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    if (!username.trim() || platform === "lichess") return;
     setSubmitted(username.trim());
     setSubmittedPlatform(platform);
     router.replace(`/dashboard?platform=${platform}&username=${username.trim()}`);
   };
 
-  // Navbar 등 외부에서 URL params 변경 시(같은 페이지 재탐색) submitted 동기화
+  const openFilter = () => {
+    setDraftPlatform(platform);
+    setDraftTimeClass(timeClass);
+    setFilterOpen(true);
+  };
+
+  const applyFilter = () => {
+    setPlatform(draftPlatform);
+    setTimeClass(draftTimeClass);
+    setFilterOpen(false);
+  };
+
   useEffect(() => {
     const urlUsername = params.get("username") || "";
     if (urlUsername && urlUsername !== submitted) {
@@ -46,7 +78,6 @@ function DashboardContent() {
       setSubmitted(urlUsername);
       setSubmittedPlatform(urlPlatform);
     }
-  // params 객체 자체가 URL 변경마다 업데이트됨
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
@@ -61,7 +92,6 @@ function DashboardContent() {
     refetchOnWindowFocus: false,
   });
 
-  // 프로필이 로드되면 플레이어가 가장 많이 플레이한 타임클래스로 자동 전환
   useEffect(() => {
     if (profile?.preferred_time_class) {
       setTimeClass(profile.preferred_time_class as TimeClass);
@@ -71,57 +101,127 @@ function DashboardContent() {
   const tcGameCount = (tc: TimeClass): number | undefined => {
     if (!profile) return undefined;
     switch (tc) {
-      case "bullet": return profile.games_bullet;
-      case "blitz": return profile.games_blitz;
-      case "rapid": return profile.games_rapid;
+      case "bullet":    return profile.games_bullet;
+      case "blitz":     return profile.games_blitz;
+      case "rapid":     return profile.games_rapid;
       case "classical": return profile.games_classical;
     }
   };
 
+  // ── 현재 적용된 필터 칩 요약 (모바일 검색창 아래 표시)
+  const appliedFilterSummary = (
+    <div className="md:hidden flex items-center gap-2 px-1 mt-2">
+      <span className="text-[11px] text-chess-muted">
+        {platform === "chess.com" ? "Chess.com" : "Lichess"}
+      </span>
+      <span className="text-chess-muted/40 text-xs">·</span>
+      <span className="text-[11px] text-chess-muted">
+        {TIME_CLASS_META[timeClass].emoji} {t(TIME_CLASS_META[timeClass].key)}
+        {tcGameCount(timeClass) != null ? ` (${tcGameCount(timeClass)})` : ""}
+      </span>
+    </div>
+  );
+
   return (
     <div className="relative space-y-5 sm:space-y-8">
 
-      {/* ── Lichess Coming Soon Overlay ── */}
+      {/* Lichess 배너 */}
       {platform === "lichess" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-chess-bg/60">
-          <div className="flex flex-col items-center gap-3 px-8 py-10 rounded-2xl bg-chess-surface/90 border border-chess-border shadow-2xl text-center max-w-sm mx-4">
-            <span className="text-5xl select-none">🚧</span>
-            <h3 className="text-lg font-bold text-chess-primary">
-              {t("lichess.comingSoon.title")}
-            </h3>
-            <p className="text-sm text-chess-muted leading-relaxed">
-              {t("lichess.comingSoon.desc")}
-            </p>
-            <button
-              type="button"
-              onClick={() => setPlatform("chess.com")}
-              className="mt-2 px-5 py-2 rounded-lg bg-chess-accent hover:bg-chess-accent/80 text-white text-sm font-semibold transition-colors"
-            >
-              Chess.com →
-            </button>
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-chess-surface border border-amber-500/40">
+          <span className="text-xl shrink-0 select-none">🚧</span>
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-bold text-chess-primary">{t("lichess.comingSoon.title")}</p>
+            <p className="text-xs text-chess-muted leading-relaxed">{t("lichess.comingSoon.desc")}</p>
           </div>
         </div>
       )}
 
-      {/* ── Search Bar ── */}
-      <form
-        onSubmit={handleSearch}
-        className="flex flex-col gap-3 bg-chess-surface/60 border border-chess-border rounded-2xl p-4 sm:p-5"
-      >
-        {/* 모바일: 기존(세로) 검색 필터 */}
-        <div className="md:hidden flex flex-col gap-3 w-full">
-          {/* 플랫폼 + 타임클래스 토글 */}
+      {/* ── Search Card ── */}
+      <div className="bg-chess-bg border border-chess-border/50 rounded-2xl shadow-sm overflow-hidden">
+
+        {/* 모바일: 검색 + 필터 버튼 한 줄 */}
+        <div className="md:hidden flex gap-2 p-4">
+          <div className="relative flex-1 min-w-0">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-chess-muted pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSearch(e as unknown as React.FormEvent); }}
+              placeholder={t("dh.searchPlaceholder")}
+              className="w-full pl-9 pr-3 py-2.5 bg-chess-surface border border-chess-border rounded-xl text-sm text-chess-primary placeholder-chess-muted focus:outline-none focus:ring-2 focus:ring-chess-accent/30 focus:border-chess-accent transition-all"
+            />
+          </div>
+          {/* 필터 버튼 */}
+          <button
+            type="button"
+            onClick={openFilter}
+            className="flex items-center justify-center w-11 h-11 rounded-xl border border-chess-border bg-chess-surface text-chess-muted hover:text-chess-primary hover:border-chess-primary/40 transition-all shrink-0"
+            aria-label="필터"
+          >
+            <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <line x1="4" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="11" y1="18" x2="13" y2="18" />
+            </svg>
+          </button>
+          {/* 검색 버튼 */}
+          <button
+            type="button"
+            onClick={handleSearch}
+            disabled={platform === "lichess"}
+            className="px-4 py-2.5 bg-chess-primary hover:bg-chess-primary/85 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
+          >
+            {t("dh.startAnalysis")}
+          </button>
+        </div>
+
+        {/* 현재 적용된 필터 요약 (모바일) */}
+        <div className="md:hidden px-4 pb-3">
+          {appliedFilterSummary}
+        </div>
+
+        {/* PC: 검색창 + 인라인 필터 */}
+        <form onSubmit={handleSearch} className="hidden md:block p-5 space-y-4">
+          {/* 검색 행 */}
           <div className="flex gap-2">
-            <div className="flex rounded-lg overflow-hidden border border-chess-border">
+            <div className="relative flex-1">
+              <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-chess-muted pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder={t("dh.searchPlaceholder")}
+                className="w-full pl-10 pr-4 py-2.5 bg-chess-surface border border-chess-border rounded-xl text-sm text-chess-primary placeholder-chess-muted focus:outline-none focus:ring-2 focus:ring-chess-accent/30 focus:border-chess-accent transition-all"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={platform === "lichess"}
+              className="px-6 py-2.5 bg-chess-primary hover:bg-chess-primary/85 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
+            >
+              {t("dh.startAnalysis")}
+            </button>
+          </div>
+
+          {/* 구분선 */}
+          <div className="border-t border-chess-border/60" />
+
+          {/* Platform */}
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-bold text-chess-primary/60 uppercase tracking-widest w-24 shrink-0">
+              {t("dh.filter.platform")}
+            </span>
+            <div className="flex gap-2">
               {(["chess.com", "lichess"] as Platform[]).map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => setPlatform(p)}
-                  className={`px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all border-2 ${
                     platform === p
-                      ? "bg-chess-accent text-white"
-                      : "bg-chess-surface text-chess-muted hover:text-chess-primary"
+                      ? "border-chess-accent bg-chess-accent text-white shadow-sm"
+                      : "border-chess-border bg-transparent text-chess-muted hover:border-chess-accent/50 hover:text-chess-primary"
                   }`}
                 >
                   {p === "chess.com" ? "Chess.com" : "Lichess"}
@@ -130,108 +230,129 @@ function DashboardContent() {
             </div>
           </div>
 
-          {/* 타임클래스 토글 (전체 너비) */}
-          <div className="flex rounded-lg overflow-hidden border border-chess-border w-full">
-            {TIME_CLASSES.map((tc) => {
-              const count = tcGameCount(tc);
-              return (
-                <button
-                  key={tc}
-                  type="button"
-                  onClick={() => setTimeClass(tc)}
-                  className={`flex-1 py-2 text-xs capitalize transition-colors ${
-                    timeClass === tc
-                      ? "bg-chess-primary text-white"
-                      : "bg-chess-surface text-chess-muted hover:text-chess-primary"
-                  }`}
-                >
-                  {tc}
-                  {count != null && (
-                    <span className="hidden sm:inline ml-1 text-xs opacity-70">({count})</span>
-                  )}
-                </button>
-              );
-            })}
+          {/* Game Type */}
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-bold text-chess-primary/60 uppercase tracking-widest w-24 shrink-0">
+              {t("dh.filter.timeClass")}
+            </span>
+            <div className="flex gap-2 flex-wrap">
+              {TIME_CLASSES.map((tc) => {
+                const count = tcGameCount(tc);
+                const meta = TIME_CLASS_META[tc];
+                const active = timeClass === tc;
+                return (
+                  <button
+                    key={tc}
+                    type="button"
+                    onClick={() => setTimeClass(tc)}
+                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full border-2 text-sm font-medium transition-all ${
+                      active
+                        ? "border-chess-primary bg-chess-primary text-white shadow-sm"
+                        : "border-chess-border bg-transparent text-chess-muted hover:border-chess-primary/40 hover:text-chess-primary"
+                    }`}
+                  >
+                    <span>{meta.emoji}</span>
+                    <span>{t(meta.key)}</span>
+                    {count != null && (
+                      <span className={`text-xs font-normal ${active ? "text-white/75" : "text-chess-muted/70"}`}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+        </form>
+      </div>
 
-          {/* 유저명 입력 + 제출 버튼 */}
-          <div className="flex gap-2">
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder={t("dh.searchPlaceholder")}
-              className="flex-1 w-full bg-chess-surface border border-chess-border rounded-lg px-4 py-2.5 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors text-sm"
-            />
-            <button
-              type="submit"
-              className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-4 py-2.5 rounded-lg transition-colors shrink-0 text-sm"
-            >
-              {t("dh.startAnalysis")}
-            </button>
-          </div>
-        </div>
+      {/* ── 모바일 필터 바텀시트 ── */}
+      {filterOpen && (
+        <>
+          {/* 백드롭 */}
+          <div
+            className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            onClick={() => setFilterOpen(false)}
+          />
+          {/* 시트 */}
+          <div className="md:hidden fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-chess-bg border-t border-chess-border shadow-2xl">
+            {/* 핸들 */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-chess-border" />
+            </div>
 
-        {/* PC: 기존(가로) 검색 필터 */}
-        <div className="hidden md:flex items-center gap-3 w-full">
-          {/* 플랫폼 토글 */}
-          <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
-            {(["chess.com", "lichess"] as Platform[]).map((p) => (
+            <div className="px-5 pb-6 pt-3 space-y-5">
+              <h2 className="text-base font-bold text-chess-primary">필터</h2>
+
+              {/* Platform */}
+              <div className="space-y-2.5">
+                <p className="text-xs font-bold text-chess-primary/60 uppercase tracking-widest">
+                  {t("dh.filter.platform")}
+                </p>
+                <div className="flex gap-2">
+                  {(["chess.com", "lichess"] as Platform[]).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setDraftPlatform(p)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all border-2 ${
+                        draftPlatform === p
+                          ? "border-chess-accent bg-chess-accent text-white"
+                          : "border-chess-border bg-transparent text-chess-muted"
+                      }`}
+                    >
+                      {p === "chess.com" ? "Chess.com" : "Lichess"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Game Type */}
+              <div className="space-y-2.5">
+                <p className="text-xs font-bold text-chess-primary/60 uppercase tracking-widest">
+                  {t("dh.filter.timeClass")}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {TIME_CLASSES.map((tc) => {
+                    const count = tcGameCount(tc);
+                    const meta = TIME_CLASS_META[tc];
+                    const active = draftTimeClass === tc;
+                    return (
+                      <button
+                        key={tc}
+                        type="button"
+                        onClick={() => setDraftTimeClass(tc)}
+                        className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
+                          active
+                            ? "border-chess-primary bg-chess-primary text-white"
+                            : "border-chess-border bg-transparent text-chess-muted"
+                        }`}
+                      >
+                        <span className="text-base">{meta.emoji}</span>
+                        <span className="flex-1 text-left">{t(meta.key)}</span>
+                        {count != null && (
+                          <span className={`text-xs font-normal ${active ? "text-white/75" : "text-chess-muted/60"}`}>
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 적용 버튼 */}
               <button
-                key={p}
                 type="button"
-                onClick={() => setPlatform(p)}
-                className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
-                  platform === p
-                    ? "bg-chess-accent text-white"
-                    : "bg-chess-surface text-chess-muted hover:text-chess-primary"
-                }`}
+                onClick={applyFilter}
+                className="w-full py-3 bg-chess-primary text-white font-semibold rounded-xl text-sm transition-colors hover:bg-chess-primary/85"
               >
-                {p === "chess.com" ? "Chess.com" : "Lichess"}
+                적용하기
               </button>
-            ))}
+            </div>
           </div>
-
-          {/* 타임클래스 토글 */}
-          <div className="flex rounded-lg overflow-hidden border border-chess-border flex-1 min-w-0">
-            {TIME_CLASSES.map((tc) => {
-              const count = tcGameCount(tc);
-              return (
-                <button
-                  key={tc}
-                  type="button"
-                  onClick={() => setTimeClass(tc)}
-                  className={`flex-1 py-2 text-sm capitalize transition-colors ${
-                    timeClass === tc
-                      ? "bg-chess-primary text-white"
-                      : "bg-chess-surface text-chess-muted hover:text-chess-primary"
-                  }`}
-                >
-                  {tc}
-                  {count != null && (
-                    <span className="ml-2 text-xs opacity-70">({count})</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 유저명 입력 + 제출 버튼 */}
-          <div className="flex items-center gap-2 shrink-0">
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder={t("dh.searchPlaceholder")}
-              className="w-56 bg-chess-surface border border-chess-border rounded-lg px-4 py-2.5 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors text-sm"
-            />
-            <button
-              type="submit"
-              className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors shrink-0 text-sm"
-            >
-              {t("dh.startAnalysis")}
-            </button>
-          </div>
-        </div>
-      </form>
+        </>
+      )}
 
       {!submitted && (
         <div className="flex flex-col items-center py-16 sm:py-24 gap-3 text-chess-muted">
@@ -242,7 +363,6 @@ function DashboardContent() {
 
       {submitted && (
         <>
-          {/* Profile Header */}
           {profile && (
             <div className="flex items-center gap-3 sm:gap-5 px-1 animate-fade-in">
               {profile.avatar_url && (
@@ -287,7 +407,6 @@ function DashboardContent() {
             </div>
           )}
 
-          {/* ── 인페이지 탭 네비게이션 ── */}
           <div className="flex gap-1 border-b border-chess-border">
             {([
               { value: "games",    label: t("dh.tab.games") },
@@ -307,7 +426,6 @@ function DashboardContent() {
             ))}
           </div>
 
-          {/* 두 탭을 동시에 마운트해 탭 전환 시 React Query 캐시가 즉시 표시되도록 함 */}
           <section
             className={`bg-chess-surface border border-chess-border rounded-2xl p-3 sm:p-6 ${
               activeTab !== "games" ? "hidden" : ""

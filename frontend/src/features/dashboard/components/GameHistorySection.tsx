@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useReducer, useRef, useEffect, useMemo, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { getRecentGamesList } from "../api";
-import { analyzeGameBothPlayers } from "@/shared/lib/api";
+import { streamGameAnalysis } from "@/shared/lib/api";
 import type { GameSummaryItem } from "../types";
-import type { Platform, TimeClass, BothPlayersAnalysis, PlayerAnalysis, MoveTier, AnalyzedMove } from "@/shared/types";
+import type { Platform, TimeClass, BothPlayersAnalysis, PlayerAnalysis, MoveTier, AnalyzedMove, AnalysisSSEEvent } from "@/shared/types";
 
 // 도넛 차트 컴포넌트 import
 import TierDonutChart from "./charts/TierDonutChart";
@@ -122,34 +122,203 @@ function toAnalysisUrl(url: string | null, platform: string, gameId: string): st
 }
 
 // ─────────────────────────────────────────────
+// SSE 스트리밍 분석 훅
+// ─────────────────────────────────────────────
+
+type StreamStatus = "idle" | "queued" | "streaming" | "complete" | "error";
+
+interface StreamState {
+  status: StreamStatus;
+  totalMoves: number;
+  currentMove: number;
+  moves: AnalyzedMove[];
+  result: BothPlayersAnalysis | null;
+  error: string | null;
+}
+
+type StreamAction =
+  | { type: "START" }
+  | { type: "QUEUED" }
+  | { type: "INIT"; payload: { total_moves: number; white_player: string; black_player: string; opening?: Record<string, unknown> } }
+  | { type: "MOVE"; payload: AnalyzedMove }
+  | { type: "COMPLETE"; payload: AnalysisSSEEvent & { type: "complete" } }
+  | { type: "ERROR"; payload: string }
+  | { type: "RESET" };
+
+const streamInitialState: StreamState = {
+  status: "idle",
+  totalMoves: 0,
+  currentMove: 0,
+  moves: [],
+  result: null,
+  error: null,
+};
+
+function buildAnalysisResult(
+  state: { moves: AnalyzedMove[] },
+  completeEvent: AnalysisSSEEvent & { type: "complete" },
+): BothPlayersAnalysis {
+  const whiteMoves = state.moves.filter((m) => m.color === "white");
+  const blackMoves = state.moves.filter((m) => m.color === "black");
+
+  const buildPlayer = (
+    summary: { username: string; color: string; total_moves: number; accuracy: number; avg_cp_loss: number; tier_counts: Record<string, number>; tier_percentages: Record<string, number> },
+    moves: AnalyzedMove[],
+  ): PlayerAnalysis => {
+    const movesByTier: Record<MoveTier, AnalyzedMove[]> = {} as Record<MoveTier, AnalyzedMove[]>;
+    for (const m of moves) {
+      if (!movesByTier[m.tier]) movesByTier[m.tier] = [];
+      movesByTier[m.tier].push(m);
+    }
+    return {
+      username: summary.username,
+      color: summary.color as "white" | "black",
+      total_moves: summary.total_moves,
+      analyzed_moves: moves,
+      tier_counts: summary.tier_counts as Record<MoveTier, number>,
+      tier_percentages: summary.tier_percentages as Record<MoveTier, number>,
+      avg_cp_loss: summary.avg_cp_loss,
+      accuracy: summary.accuracy,
+      moves_by_tier: movesByTier,
+    };
+  };
+
+  return {
+    game_id: completeEvent.game_id,
+    white_player: completeEvent.white.username,
+    black_player: completeEvent.black.username,
+    white_analysis: buildPlayer(completeEvent.white, whiteMoves),
+    black_analysis: buildPlayer(completeEvent.black, blackMoves),
+    opening: completeEvent.opening as BothPlayersAnalysis["opening"],
+  };
+}
+
+function streamReducer(state: StreamState, action: StreamAction): StreamState {
+  switch (action.type) {
+    case "START":
+      return { ...streamInitialState, status: "queued" };
+    case "QUEUED":
+      return { ...state, status: "queued" };
+    case "INIT":
+      return { ...state, status: "streaming", totalMoves: action.payload.total_moves, currentMove: 0, moves: [] };
+    case "MOVE":
+      return { ...state, currentMove: state.currentMove + 1, moves: [...state.moves, action.payload] };
+    case "COMPLETE": {
+      const result = buildAnalysisResult(state, action.payload);
+      return { ...state, status: "complete", result };
+    }
+    case "ERROR":
+      return { ...state, status: "error", error: action.payload };
+    case "RESET":
+      return streamInitialState;
+    default:
+      return state;
+  }
+}
+
+function useAnalysisStream(
+  pgn: string | undefined,
+  gameId: string,
+  depth: number,
+) {
+  const [state, dispatch] = useReducer(streamReducer, streamInitialState);
+  const abortRef = useRef<AbortController | null>(null);
+  const prevDepthRef = useRef<number | null>(null);
+
+  // 설정에서 Depth가 바뀌면 이전 분석 결과는 무효 → 중단 후 초기화
+  useEffect(() => {
+    if (prevDepthRef.current === null) {
+      prevDepthRef.current = depth;
+      return;
+    }
+    if (prevDepthRef.current !== depth) {
+      prevDepthRef.current = depth;
+      abortRef.current?.abort();
+      dispatch({ type: "RESET" });
+    }
+  }, [depth]);
+
+  const start = useCallback(() => {
+    if (!pgn) return;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    dispatch({ type: "START" });
+
+    (async () => {
+      try {
+        for await (const event of streamGameAnalysis(pgn, gameId, depth, ctrl.signal)) {
+          if (ctrl.signal.aborted) break;
+          switch (event.type) {
+            case "queued":
+              dispatch({ type: "QUEUED" });
+              break;
+            case "init":
+              dispatch({ type: "INIT", payload: event });
+              break;
+            case "move":
+              dispatch({ type: "MOVE", payload: event.data });
+              break;
+            case "complete":
+              dispatch({ type: "COMPLETE", payload: event });
+              break;
+            case "error":
+              dispatch({ type: "ERROR", payload: event.message });
+              break;
+          }
+        }
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        dispatch({ type: "ERROR", payload: String(err) });
+      }
+    })();
+  }, [pgn, gameId, depth]);
+
+  const abort = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
+
+  return { ...state, start, abort };
+}
+
+// ─────────────────────────────────────────────
 // 게임 카드 - 시각적으로 개선 + 게임 분석 기능
 // ─────────────────────────────────────────────
 function GameCard({ game, username }: { game: GameSummaryItem; username: string }) {
-  // GameCard uses t from useTranslation so we keep it as hook-aware component
   const { t, language } = useTranslation();
   const { stockfishDepth } = useSettings();
   const [open, setOpen] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
-  const [analysisData, setAnalysisData] = useState<BothPlayersAnalysis | null>(null);
-  const [analyzedDepth, setAnalyzedDepth] = useState<number | null>(null);
   const [selectedTier, setSelectedTier] = useState<MoveTier | "all">("all");
   const [selectedMove, setSelectedMove] = useState<AnalyzedMove | null>(null);
 
-  // 게임 분석 mutation (양쪽 플레이어 모두)
-  const analyzeMutation = useMutation({
-    mutationFn: async () => {
-      if (!game.pgn) throw new Error("PGN 데이터가 없습니다");
-      return analyzeGameBothPlayers(game.pgn, game.game_id, 0.15, stockfishDepth);
-    },
-    onSuccess: (data: BothPlayersAnalysis) => {
-      setAnalysisData(data);
-      setAnalyzedDepth(stockfishDepth);
-      const combined = [...(data.white_analysis.analyzed_moves ?? []), ...(data.black_analysis.analyzed_moves ?? [])]
-        .sort((a, b) => a.halfmove - b.halfmove);
-      if (combined.length > 0) setSelectedMove(combined[0]);
-    },
-  });
-  const isAnalyzedAtCurrentDepth = !!analysisData && analyzedDepth === stockfishDepth;
+  const stream = useAnalysisStream(game.pgn, game.game_id, stockfishDepth);
+  const analysisData = stream.result;
+  const isAnalyzing = stream.status === "queued" || stream.status === "streaming";
+  const isAnalysisError = stream.status === "error";
+  const isAnalyzedAtCurrentDepth = stream.status === "complete" && !!analysisData;
+
+  const prevDepthUi = useRef(stockfishDepth);
+  useEffect(() => {
+    if (prevDepthUi.current !== stockfishDepth) {
+      prevDepthUi.current = stockfishDepth;
+      setSelectedMove(null);
+      setSelectedTier("all");
+    }
+  }, [stockfishDepth]);
+
+  useEffect(() => {
+    if (!analysisData || selectedMove) return;
+    const combined = [
+      ...(analysisData.white_analysis.analyzed_moves ?? []),
+      ...(analysisData.black_analysis.analyzed_moves ?? []),
+    ].sort((a, b) => a.halfmove - b.halfmove);
+    if (combined.length > 0) setSelectedMove(combined[0]);
+  }, [analysisData, selectedMove]);
 
   const isWhite = game.white.toLowerCase() === username.toLowerCase();
   const myColor  = isWhite ? t("gh.card.white") : t("gh.card.black");
@@ -350,26 +519,23 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
 
           {/* 게임 분석 버튼 */}
           {game.pgn && (
-            <div className="px-6 pb-4">
+            <div className="px-3 sm:px-6 pb-4 flex flex-col gap-2">
               <button
                 onClick={() => {
                   if (isAnalyzedAtCurrentDepth) {
-                    // 분석이 이미 완료된 경우: 패널 토글
                     setShowAnalysis((v) => !v);
                     return;
                   }
                   setShowAnalysis(true);
-                  if (!analyzeMutation.isPending) {
-                    analyzeMutation.mutate();
-                  }
+                  stream.start();
                 }}
-                disabled={analyzeMutation.isPending}
+                disabled={isAnalyzing}
                 className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-chess-accent/20 to-chess-accent/10 hover:from-chess-accent/30 hover:to-chess-accent/20 text-chess-accent border border-chess-accent/40 hover:border-chess-accent/60 rounded-xl transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {analyzeMutation.isPending ? (
+                {isAnalyzing ? (
                   <>
                     <span className="animate-spin">⏳</span>
-                    <span>{t("gh.btn.analyzing")} (Depth {stockfishDepth})</span>
+                    <span>{t("gh.btn.analyzing")}</span>
                   </>
                 ) : isAnalyzedAtCurrentDepth && showAnalysis ? (
                   <>
@@ -379,12 +545,12 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                 ) : isAnalyzedAtCurrentDepth ? (
                   <>
                     <span>✅</span>
-                    <span>분석 다시 보기 (Depth {stockfishDepth})</span>
+                    <span>{t("gh.btn.reviewAnalysis")}</span>
                   </>
                 ) : (
                   <>
                     <span>🎯</span>
-                    <span>{t("gh.btn.analyze")} (Depth {stockfishDepth})</span>
+                    <span>{t("gh.btn.analyze")}</span>
                   </>
                 )}
               </button>
@@ -394,9 +560,40 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
           {/* 분석 결과 패널 */}
           {showAnalysis && (
             <div className="px-1 sm:px-6 pb-2 sm:pb-6">
-              {analyzeMutation.isError && (
+              {!isAnalyzing && !isAnalysisError && !analysisData && game.pgn && (
+                <div className="mb-4 p-3 rounded-xl border border-chess-accent/30 bg-chess-accent/5 text-sm text-chess-primary">
+                  {t("gh.analyze.depthChangedHint")}
+                </div>
+              )}
+              {isAnalyzing && (
+                <div className="mb-4 p-4 rounded-xl border border-chess-border bg-chess-surface/80 dark:bg-chess-surface/40">
+                  <p className="text-sm font-semibold text-chess-primary">
+                    {stream.status === "queued" ? t("gh.analyze.queued") : t("gh.analyze.progressTitle")}
+                  </p>
+                  {stream.status === "streaming" && stream.totalMoves > 0 ? (
+                    <>
+                      <div className="mt-3 h-2 w-full rounded-full bg-chess-border overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-chess-accent transition-all duration-300 ease-out"
+                          style={{ width: `${Math.round((stream.currentMove / stream.totalMoves) * 100)}%` }}
+                        />
+                      </div>
+                      <p className="mt-2 text-xs text-chess-muted leading-relaxed">
+                        {t("gh.analyze.streaming")
+                          .replace("{current}", String(stream.currentMove))
+                          .replace("{total}", String(stream.totalMoves))}
+                      </p>
+                    </>
+                  ) : (
+                    <div className="mt-3 h-2 w-full rounded-full bg-chess-border overflow-hidden">
+                      <div className="h-full w-1/3 rounded-full bg-chess-accent animate-loading-slide will-change-transform" />
+                    </div>
+                  )}
+                </div>
+              )}
+              {isAnalysisError && (
                 <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
-                  {t("gh.analyze.error")}
+                  {stream.error || t("gh.analyze.error")}
                 </div>
               )}
               
@@ -822,7 +1019,7 @@ function GameAnalysisPanel({
                         <span className={`text-xs sm:text-sm font-bold truncate ${isSelected ? "text-chess-primary" : "text-chess-primary/80"}`}>
                           {move.move_number}. {move.san}
                         </span>
-                        {move.is_only_best && (
+                        {move.is_only_best && move.tier !== "TH" && (
                           <span className="shrink-0 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold whitespace-nowrap">
                             {t("ga.onlyBest")}
                           </span>
@@ -832,7 +1029,11 @@ function GameAnalysisPanel({
                           {move.win_pct_loss.toFixed(1)}%
                         </span>
                         <p className="hidden sm:block text-[11px] font-semibold mt-0.5">
-                          {move.user_move_rank === 0 ? (
+                          {move.tier === "TH" ? (
+                            <span className="text-emerald-600/90 dark:text-emerald-400/90">
+                              {t("ga.theoryMoveNote")}
+                            </span>
+                          ) : move.user_move_rank === 0 ? (
                             <span className="text-orange-400">
                               {t("ga.notInTop5").replace("{loss}", move.win_pct_loss.toFixed(1))}
                             </span>

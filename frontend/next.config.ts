@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Azure Container Apps / Docker 등 Node 러너 배포용 (frontend/Dockerfile)
+  output: "standalone",
   async rewrites() {
     return [
       {
