@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { OpeningTreeNode } from "@/types";
 import OpeningGameListModal from "@/features/dashboard/components/modals/OpeningGameListModal";
 import { useTranslation } from "@/shared/lib/i18n";
+import { useBodyScrollLock } from "@/shared/lib/useBodyScrollLock";
 
 interface Props {
   data: OpeningTreeNode[];
@@ -30,20 +31,29 @@ function flatten(nodes: OpeningTreeNode[], expanded: Set<string>): RowMeta[] {
 const winColor = (r: number) =>
   r >= 55 ? "text-emerald-700" : r >= 45 ? "text-amber-700" : "text-red-700";
 
-// 원형 그래프 (Pie Chart) 컴포넌트 - 개선된 디자인
-function OpeningPieChart({ data }: { data: OpeningTreeNode[] }) {
+/** 파이 조각·우측 목록 색 띠 동일 순서 (data 인덱스와 일치) */
+const OPENING_PIE_SEGMENT_COLORS = [
+  "#94a3b8", "#a3b4c5", "#b0c0d0", "#8b9aae", "#7d8fa3",
+  "#9ca8b8", "#aab8c8", "#8896a8", "#7a8898", "#b8c4d0",
+  "#a0aeb8", "#9aa6b0", "#8c98a8", "#95a0b0", "#a8b4c0",
+];
+
+// 원형 그래프 (Pie Chart)
+function OpeningPieChart({
+  data,
+  showLegend = true,
+  chartSize = "md",
+}: {
+  data: OpeningTreeNode[];
+  showLegend?: boolean;
+  chartSize?: "md" | "lg";
+}) {
   const { t } = useTranslation();
   const totalGames = data.reduce((sum, node) => sum + node.games, 0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const segments = useMemo(() => {
     let currentAngle = 0;
-    // 흐릿한 파스텔 톤 색상
-    const mutedColors = [
-      "#94a3b8", "#a3b4c5", "#b0c0d0", "#8b9aae", "#7d8fa3",
-      "#9ca8b8", "#aab8c8", "#8896a8", "#7a8898", "#b8c4d0",
-      "#a0aeb8", "#9aa6b0", "#8c98a8", "#95a0b0", "#a8b4c0",
-    ];
 
     return data.map((node, index) => {
       const percentage = (node.games / totalGames) * 100;
@@ -80,7 +90,7 @@ function OpeningPieChart({ data }: { data: OpeningTreeNode[] }) {
         percentage,
         angle,
         startAngle,
-        color: mutedColors[index % mutedColors.length],
+        color: OPENING_PIE_SEGMENT_COLORS[index % OPENING_PIE_SEGMENT_COLORS.length],
         path,
         midAngle: startAngle + angle / 2,
         popOutX,
@@ -103,10 +113,16 @@ function OpeningPieChart({ data }: { data: OpeningTreeNode[] }) {
     };
   }, [hoveredIndex, segments]);
 
+  const maxLegendItems = 12;
+  const legendSegments = segments.slice(0, maxLegendItems);
+
+  const svgClass =
+    chartSize === "lg" ? "w-[min(22rem,100%)] h-[min(22rem,100%)] max-w-full" : "w-56 h-56";
+
   return (
     <div className="flex flex-col items-center">
-      <div className="relative">
-        <svg viewBox="0 0 240 240" className="w-56 h-56">
+      <div className="relative shrink-0">
+        <svg viewBox="0 0 240 240" className={svgClass}>
           {/* 배경 원 - 흐릿한 느낌 */}
           <circle cx="120" cy="120" r="95" fill="#1f2937" opacity="0.15" />
 
@@ -204,36 +220,47 @@ function OpeningPieChart({ data }: { data: OpeningTreeNode[] }) {
         )}
       </div>
 
-      {/* 범례 - 흐릿한 디자인 */}
-      <div className="mt-4 space-y-1.5 max-h-44 overflow-y-auto w-full px-2">
-        {segments.slice(0, 12).map((seg, i) => (
-          <div
-            key={i}
-            className={`flex items-center gap-3 text-xs px-2 py-1.5 rounded-lg transition-all duration-200 cursor-pointer
-              ${hoveredIndex === i ? 'bg-chess-surface/50' : 'hover:bg-chess-surface/30'}`}
-            onMouseEnter={() => setHoveredIndex(i)}
-            onMouseLeave={() => setHoveredIndex(null)}
-          >
-            <span
-              className="w-3 h-3 rounded-full shrink-0"
-              style={{ 
-                backgroundColor: seg.color, 
-                opacity: hoveredIndex === i ? 1 : 0.7,
-                boxShadow: hoveredIndex === i ? `0 0 6px ${seg.color}` : 'none'
-              }}
-            />
-            <span className={`truncate flex-1 ${hoveredIndex === i ? 'text-chess-primary' : 'text-chess-muted'}`}>
-              {seg.node.name}
-            </span>
-            <div className="flex items-center gap-2">
-              <span className={`font-semibold ${hoveredIndex === i ? 'text-chess-primary' : 'text-chess-muted/80'}`}>
-                {seg.percentage.toFixed(1)}%
-              </span>
-              <span className="text-chess-muted/50 text-xs">({t("chart.gamesCount").replace("{n}", String(seg.node.games))})</span>
-            </div>
+      {showLegend && (
+        <div className="mt-4 space-y-1.5 max-h-44 overflow-y-auto w-full px-2">
+          <div className="flex flex-col gap-1.5 w-full">
+            {legendSegments.map((seg, i) => (
+              <div
+                key={i}
+                className={`flex items-center gap-2 rounded-md transition-all duration-200 cursor-pointer min-w-0 text-xs px-2 py-1.5
+                  ${hoveredIndex === i ? "bg-chess-surface/50" : "hover:bg-chess-surface/30"}`}
+                onMouseEnter={() => setHoveredIndex(i)}
+                onMouseLeave={() => setHoveredIndex(null)}
+              >
+                <span
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{
+                    backgroundColor: seg.color,
+                    opacity: hoveredIndex === i ? 1 : 0.7,
+                    boxShadow: hoveredIndex === i ? `0 0 4px ${seg.color}` : "none",
+                  }}
+                />
+                <span
+                  className={`truncate min-w-0 flex-1 ${hoveredIndex === i ? "text-chess-primary" : "text-chess-muted"}`}
+                >
+                  {seg.node.name}
+                </span>
+                <div className="flex items-center shrink-0 tabular-nums gap-2">
+                  <span
+                    className={
+                      hoveredIndex === i ? "text-chess-primary font-semibold" : "text-chess-muted/80 font-medium"
+                    }
+                  >
+                    {seg.percentage.toFixed(1)}%
+                  </span>
+                  <span className="text-chess-muted/50 text-xs">
+                    ({t("chart.gamesCount").replace("{n}", String(seg.node.games))})
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -249,6 +276,7 @@ function OpeningDetailModal({
   side: "white" | "black";
 }) {
   const { t } = useTranslation();
+  useBodyScrollLock(true);
   // 각 부모 오프닝별 바리에이션(자식) 접기/펼치기 상태
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
 
@@ -304,17 +332,19 @@ function OpeningDetailModal({
 
   const modal = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-hidden overscroll-none"
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
 
       <div
-        className="relative w-full max-w-[900px] h-[90dvh] sm:h-[600px] flex flex-col
+        className="relative w-full max-w-[min(1100px,96vw)] min-h-0 flex flex-col
+                   h-[90dvh] max-h-[90dvh]
+                   lg:h-[600px] lg:max-h-[min(600px,90dvh)]
                    bg-chess-bg border border-chess-border/60 rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-chess-border">
+        <div className="shrink-0 flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-chess-border">
           <div className="min-w-0">
             <h2 className="text-base sm:text-xl font-bold text-chess-primary truncate">
               {side === "white" ? t("chart.whiteOpeningAnalysis") : t("chart.blackOpeningAnalysis")}
@@ -334,26 +364,34 @@ function OpeningDetailModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
-          {/* 원형차트 패널: 모바일에서 숨김 */}
-          <div className="hidden sm:flex w-[320px] flex-shrink-0 flex-col p-6 border-b lg:border-b-0 lg:border-r border-chess-border/50 bg-chess-surface/30">
-            <h3 className="text-sm font-semibold text-chess-primary mb-4 text-center">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col lg:flex-row">
+          {/* 원형 그래프만 (범례는 우측 목록과 통합, 색 띠로 대응) */}
+          <div className="hidden lg:flex min-w-[360px] w-[40%] max-w-[480px] flex-shrink-0 flex-col min-h-0 overflow-hidden px-5 py-6 lg:border-r border-chess-border/50 bg-chess-surface/30">
+            <h3 className="shrink-0 text-sm font-semibold text-chess-primary mb-4 text-center leading-tight">
               {t("chart.gameRatioByOpening")}
             </h3>
-            <OpeningPieChart data={data} />
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+              <OpeningPieChart data={data} showLegend={false} chartSize="lg" />
+            </div>
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0">
-            <div className="px-3 sm:px-6 py-2 sm:py-3 border-b border-chess-border/50 bg-chess-surface/20 flex items-center justify-between gap-2">
-              <h3 className="text-xs sm:text-sm font-semibold text-chess-primary min-w-0 truncate">
-                {t("chart.allOpeningsList")}
-                <span className="hidden sm:inline text-chess-muted font-normal ml-1">
-                  {expandedParents.size > 0 
-                    ? t("chart.linesVariationsInfo").replace("{lines}", String(data.length)).replace("{showing}", String(allOpenings.length - data.length)).replace("{total}", String(totalVariations))
-                    : t("chart.linesVariationsHidden").replace("{lines}", String(data.length)).replace("{total}", String(totalVariations))
-                  }
-                </span>
-              </h3>
+          <div className="flex-1 min-h-0 flex flex-col min-w-0">
+            <div className="px-3 sm:px-6 py-2 sm:py-3 border-b border-chess-border/50 bg-chess-surface/20 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-xs sm:text-sm font-semibold text-chess-primary truncate">
+                  {t("chart.allOpeningsList")}
+                  <span className="hidden sm:inline text-chess-muted font-normal ml-1">
+                    {expandedParents.size > 0 
+                      ? t("chart.linesVariationsInfo").replace("{lines}", String(data.length)).replace("{showing}", String(allOpenings.length - data.length)).replace("{total}", String(totalVariations))
+                      : t("chart.linesVariationsHidden").replace("{lines}", String(data.length)).replace("{total}", String(totalVariations))
+                    }
+                  </span>
+                </h3>
+                <p className="hidden lg:block text-[10px] text-chess-muted/90 mt-0.5 leading-snug">
+                  {t("chart.pieListUnifiedHint")}
+                </p>
+              </div>
               <div className="flex gap-1 sm:gap-2 shrink-0">
                 <button
                   onClick={expandAll}
@@ -370,10 +408,15 @@ function OpeningDetailModal({
                   {t("chart.collapseAll")}
                 </button>
               </div>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-1 min-h-0">
-              {data.map((parentNode) => {
+            <div
+              data-modal-scroll="true"
+              className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 sm:p-4 space-y-1"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
+              {data.map((parentNode, parentIndex) => {
                 const isExpanded = expandedParents.has(parentNode.name);
                 const hasChildren = parentNode.children && parentNode.children.length > 0;
                 const childCount = parentNode.children?.length || 0;
@@ -382,17 +425,24 @@ function OpeningDetailModal({
                   : parentNode.win_rate >= 45
                     ? "text-amber-400"
                     : "text-red-400";
+                const pieStripe =
+                  OPENING_PIE_SEGMENT_COLORS[parentIndex % OPENING_PIE_SEGMENT_COLORS.length];
 
                 return (
                   <div key={parentNode.name} className="space-y-1">
-                    {/* 부모 오프닝 (메인 계열) */}
+                    {/* 부모 오프닝 (메인 계열) — 좌측 색 띠 = 파이 조각과 동일 */}
                     <div
-                      className={`flex items-center justify-between py-2.5 px-3 rounded-lg
+                      className={`flex items-stretch justify-between gap-2 py-2.5 pl-2 pr-3 rounded-lg
                         bg-chess-surface/70 hover:bg-chess-surface border border-chess-border/40
                         transition-colors cursor-pointer group`}
                       onClick={() => hasChildren && toggleParent(parentNode.name)}
                     >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span
+                        className="hidden lg:block w-1.5 shrink-0 rounded-full self-center min-h-[2.25rem]"
+                        style={{ backgroundColor: pieStripe }}
+                        aria-hidden
+                      />
+                      <div className="flex items-center gap-2 min-w-0 flex-1 lg:pl-0 pl-1">
                         {hasChildren && (
                           <span className={`text-chess-muted text-xs w-4 shrink-0 transition-transform duration-200
                             ${isExpanded ? 'rotate-90' : ''}`}>
@@ -410,7 +460,14 @@ function OpeningDetailModal({
                       </div>
 
                       <div className="flex items-center gap-2 sm:gap-3 text-xs shrink-0 ml-2">
-                        <span className="hidden sm:inline text-chess-muted">{t("chart.gamesCount").replace("{n}", String(parentNode.games))}</span>
+                        <span className="hidden sm:inline text-chess-muted">
+                          {t("chart.gamesCount").replace("{n}", String(parentNode.games))}
+                          {totalGames > 0 && (
+                            <span className="hidden lg:inline text-chess-muted/70 tabular-nums ml-1">
+                              ({((100 * parentNode.games) / totalGames).toFixed(0)}%)
+                            </span>
+                          )}
+                        </span>
                         <span className="sm:hidden text-chess-muted/70">{parentNode.games}</span>
                         <div className="hidden sm:flex gap-1">
                           <span className="text-emerald-600">{parentNode.wins}{t("chart.win")}</span>
@@ -470,7 +527,7 @@ function OpeningDetailModal({
           </div>
         </div>
 
-        <div className="px-4 sm:px-6 py-2 sm:py-3 border-t border-chess-border bg-chess-surface/20 text-center">
+        <div className="shrink-0 px-4 sm:px-6 py-2 sm:py-3 border-t border-chess-border bg-chess-surface/20 text-center">
           <p className="text-xs text-chess-muted">
             {t("chart.clickToViewDetail")}
           </p>

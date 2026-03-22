@@ -1,0 +1,45 @@
+# Azure: API 이미지만 빌드·배포 (프론트는 Vercel에서 별도 배포)
+# workflow_dispatch — 수동 실행
+#
+# Secrets:
+#   AZURE_CREDENTIALS, AZURE_RESOURCE_GROUP, AZURE_ACR_NAME, AZURE_API_APP_NAME
+#
+# docs/azure-deployment.md 참고
+
+name: Azure API (Container Apps)
+
+on:
+  workflow_dispatch:
+
+env:
+  IMAGE_API: foresight-api
+
+jobs:
+  build-and-deploy-api:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: ACR build (API)
+        run: |
+          az acr build \
+            -r "${{ secrets.AZURE_ACR_NAME }}" \
+            -t "${{ env.IMAGE_API }}:${{ github.sha }}" \
+            -t "${{ env.IMAGE_API }}:latest" \
+            -f Dockerfile \
+            .
+
+      - name: Update Container App revision
+        run: |
+          az containerapp update \
+            -g "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            -n "${{ secrets.AZURE_API_APP_NAME }}" \
+            --image "${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_API }}:${{ github.sha }}"
