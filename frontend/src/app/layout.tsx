@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers from "@/shared/components/layout/Providers";
 import Navbar from "@/shared/components/layout/Navbar";
 import { Analytics } from "@vercel/analytics/next";
+import { resolveApiBaseUrl } from "@/shared/lib/apiBaseUrl";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -62,12 +63,14 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const apiBaseUrl = resolveApiBaseUrl();
+
   return (
     <html lang="ko">
       <body
         className={`${inter.className} min-h-screen bg-[var(--background)] text-[var(--foreground)]`}
       >
-        <Providers>
+        <Providers apiBaseUrl={apiBaseUrl}>
           <Navbar />
           <main className="max-w-screen-2xl mx-auto px-4 py-6 sm:px-6 sm:py-10">{children}</main>
         </Providers>
