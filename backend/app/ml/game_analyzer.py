@@ -725,37 +725,36 @@ def _analyze_single_move_with_fen(
     move: chess.Move,
     halfmove: int,
     time_per_move: float = 0.15,
-    time_per_multi: float = 0.10,
     stockfish_depth: Optional[int] = None,
     opening_eco: Optional[str] = None,
-    prev_info_after: Optional[chess.engine.InfoDict] = None,
-) -> Tuple[Optional[AnalyzedMove], Optional[chess.engine.InfoDict]]:
+    prev_multipv: Optional[List[chess.engine.InfoDict]] = None,
+) -> Tuple[Optional[AnalyzedMove], List[chess.engine.InfoDict]]:
     """
-    단일 수 분석 (FEN 포함) - 보드 상태를 수정하지 않음
+    단일 수 분석 (FEN 포함)
 
-    prev_info_after: 직전 수의 info_after. 같은 포지션이므로 재사용하면 engine.analyse 1회 절약.
-    Returns: (AnalyzedMove, info_after) 튜플
+    ── 핵심 최적화: analyse_after(multipv=3) 결과를 다음 수의 analyse_before로 재사용 ──
+    원래 수당 엔진 호출 2회(analyse_after + 별도 MultiPV)에서 1회로 절감.
+
+    prev_multipv: 직전 수의 analyse_after(multipv=3) 결과 리스트.
+                  이 포지션 = 현재 수의 before 포지션이므로:
+                    - [0]["score"].pov(moving_color) → cp_before
+                    - [i]["pv"][0] → top moves for ranking
+    Returns: (AnalyzedMove | None, after_multipv: List[InfoDict])
     """
     moving_color = board.turn
     color_str = "white" if moving_color == chess.WHITE else "black"
-    
-    # 수 전 FEN 저장
+
     fen_before = board.fen()
     material_before = _material_score(board, moving_color)
 
-    # 강제수(TF) 판정 확장
-    # 1) 합법 수 1개 => 무조건 TF
-    # 2) 체크 상태 + 합법 수가 적을 때(<=3) => "다른 수를 둬도 상대가 메이트 인 원으로 끝내는지" 검사.
-    #    오직 하나의 수만 메이트 인 원을 피하면, 사용자가 둔 그 수를 TF로 분류.
+    # TF 판정
     is_forced = False
-
     try:
         legal_moves = list(board.legal_moves)
         if len(legal_moves) == 1:
             is_forced = True
         elif board.is_check() and len(legal_moves) <= 3:
             def _opponent_has_mate_in_one_after(mv: chess.Move) -> bool:
-                # mv를 두었을 때, 상대가 다음 한 수로 체크메이트를 만들 수 있으면 True
                 board.push(mv)
                 try:
                     for reply in list(board.legal_moves):
@@ -773,72 +772,92 @@ def _analyze_single_move_with_fen(
             if len(safe_moves) == 1 and safe_moves[0] == move:
                 is_forced = True
     except Exception:
-        # TF 판정은 보조 지표이므로 실패 시 안전하게 False
         is_forced = False
-    
-    # depth+time 동시 지정: 둘 중 먼저 도달하는 쪽에서 중단
-    # → 느린 하드웨어에서도 time 상한으로 속도를 보장
+
     limit = chess.engine.Limit(depth=stockfish_depth, time=time_per_move)
 
-    # 수 전 평가 — 직전 수의 info_after와 동일 포지션이므로 재사용 (엔진 호출 절약)
-    if prev_info_after is not None:
-        info_before = prev_info_after
+    # ① Before 포지션: prev_multipv 재사용 or 최초 수면 직접 분석
+    if prev_multipv:
+        before_pv = prev_multipv
     else:
-        info_before = engine.analyse(board, limit)
-    cp_before = _get_score_pov(info_before, moving_color)
-    
-    # 사용자가 둔 수 정보
+        before_pv = engine.analyse(board, limit, multipv=3)
+
+    cp_before: Optional[int] = None
+    try:
+        cp_before = before_pv[0]["score"].pov(moving_color).score(mate_score=MATE_SCORE)
+    except Exception:
+        pass
+
     user_san = board.san(move)
     user_uci = move.uci()
-    
-    # 수 실행 후 평가
+
+    # ② After 포지션: multipv=3으로 분석 (다음 수의 before로 재사용)
     board.push(move)
     fen_after = board.fen()
     material_after = _material_score(board, moving_color)
     epd_after = " ".join(fen_after.split()[:4])
-    info_after = engine.analyse(board, limit)
-    cp_after = _get_score_pov(info_after, moving_color)
-    
+
+    # TH 조기 종료: 이론수가 확실하면 cheap depth로 충분 (cp 표시용만)
+    is_th = False
+    try:
+        if opening_db.is_loaded():
+            entry = opening_db.get_entry_by_epd(epd_after)
+            if entry and (opening_eco is None or entry.get("eco") == opening_eco):
+                is_th = True
+    except Exception:
+        pass
+
+    if is_th and not is_forced:
+        # TH: cp 표시용 최소 분석 + multipv=3 (다음 수 재사용용)
+        th_limit = chess.engine.Limit(depth=8, time=0.03)
+        after_pv = engine.analyse(board, th_limit, multipv=3)
+    else:
+        after_pv = engine.analyse(board, limit, multipv=3)
+
+    cp_after: Optional[int] = None
+    try:
+        cp_after = after_pv[0]["score"].pov(moving_color).score(mate_score=MATE_SCORE)
+    except Exception:
+        pass
+
+    board.pop()  # before 포지션으로 복원 (SAN 계산용)
+
     # 손실 계산
     cp_loss = max(0, (cp_before or 0) - (cp_after or 0))
     win_pct_before = _cp_to_win_pct(cp_before)
     win_pct_after = _cp_to_win_pct(cp_after)
     win_pct_loss = max(0.0, win_pct_before - win_pct_after)
-    
-    # 상위 수 분석 (MultiPV) - 보드 복원 후 분석
-    # 순위 판별은 낮은 depth로도 충분하므로 max(10, depth-6)으로 축소해 속도 개선
-    board.pop()
-    multi_depth = max(10, stockfish_depth - 6) if stockfish_depth else None
-    top_moves_raw = _get_top_moves(
-        engine, board, moving_color, time_per_multi, top_n=3, depth=multi_depth
-    )
-    
-    # 사용자 수의 순위 확인
+
+    # ③ 순위: before_pv (현재 before 포지션의 multipv 결과) 에서 추출
+    #    별도 엔진 호출 없이 재사용
+    top_moves_raw: List[Tuple[str, str, int, int]] = []
+    for rank, pv_info in enumerate(before_pv, 1):
+        try:
+            score = pv_info["score"].pov(moving_color).score(mate_score=MATE_SCORE)
+            if "pv" in pv_info and pv_info["pv"]:
+                mv = pv_info["pv"][0]
+                top_moves_raw.append((mv.uci(), board.san(mv), score, rank))
+        except Exception:
+            continue
+
     user_rank = 0
     is_only_best = False
-    best_cp = None
-    
+
     if top_moves_raw:
-        best_cp = top_moves_raw[0][2]  # 1순위 수의 평가
-        
-        # 사용자 수 찾기
+        best_cp = top_moves_raw[0][2]
         for uci, san, cp, rank in top_moves_raw:
             if uci == user_uci:
                 user_rank = rank
                 break
-        
-        # 유일한 최선수 여부 확인
         if len(top_moves_raw) >= 2:
             second_cp = top_moves_raw[1][2]
             if best_cp - second_cp >= ONLY_BEST_MARGIN_CP and user_rank == 1:
                 is_only_best = True
         elif len(top_moves_raw) == 1 and user_rank == 1:
             is_only_best = True
-    
+
     # 등급 결정
-    tier = _determine_tier(
-        cp_loss, win_pct_loss, user_rank, is_only_best
-    )
+    tier = _determine_tier(cp_loss, win_pct_loss, user_rank, is_only_best)
     if _is_brilliant_candidate(
         base_tier=tier,
         cp_before=cp_before,
@@ -850,26 +869,18 @@ def _analyze_single_move_with_fen(
     ):
         tier = MoveTier.T1
 
-    # 오프닝 이론수(TH): 수 후 포지션이 오프닝 DB(EPD)에 매칭되면 TH로 부여
-    try:
-        if opening_db.is_loaded():
-            entry = opening_db.get_entry_by_epd(epd_after)
-            if entry and (opening_eco is None or entry.get("eco") == opening_eco):
-                tier = MoveTier.TH
-    except Exception:
-        pass
-
-    # 강제수는 TH/브릴리언트 여부와 무관하게 최우선 적용
+    if is_th:
+        tier = MoveTier.TH
     if is_forced:
         tier = MoveTier.TF
-    
-    # 상위 수 정보 정리
+
     top_moves_info = [
         {"san": san, "cp": cp, "rank": rank}
-        for uci, san, cp, rank in top_moves_raw[:3]
+        for _, san, cp, rank in top_moves_raw[:3]
     ]
-    
-    # 보드 상태를 원래대로 유지 (호출자가 push/pop 관리)
+
+    board.push(move)  # after 포지션으로 복원 (호출자와 상태 동기화)
+
     analyzed_move = AnalyzedMove(
         halfmove=halfmove,
         move_number=halfmove // 2 + 1,
@@ -889,7 +900,7 @@ def _analyze_single_move_with_fen(
         user_move_rank=user_rank,
         is_only_best=is_only_best,
     )
-    return analyzed_move, info_after
+    return analyzed_move, after_pv
 
 
 def analyze_game_streaming(
@@ -913,26 +924,8 @@ def analyze_game_streaming(
     Returns:
         BothPlayersAnalysisResult (요약 통계 포함)
     """
-    # depth별 시간 상한 (move당 목표 소요 시간)
-    # Limit(depth=d, time=cap): depth d 또는 cap초 중 먼저 도달하면 중단.
-    # 느린 하드웨어(컨테이너 1 CPU)에서도 cap이 속도를 보장하고,
-    # 빠른 하드웨어에서는 depth가 먼저 완료돼 품질을 최대화합니다.
-    #
-    # depth=12: ~6s (40수 기준)  depth=18: ~15-17s  depth=24: ~28s
-    _DEPTH_CAPS: dict[int, tuple[float, float]] = {
-        12: (0.08, 0.05),   # (time_per_move, time_per_multi)
-        18: (0.25, 0.12),
-        24: (0.50, 0.20),
-    }
-    if stockfish_depth and stockfish_depth in _DEPTH_CAPS:
-        time_per_move, time_per_multi = _DEPTH_CAPS[stockfish_depth]
-    elif stockfish_depth:
-        scale = stockfish_depth / 18.0
-        time_per_move = round(0.25 * scale, 3)
-        time_per_multi = round(0.12 * scale, 3)
-    else:
-        time_per_move = 0.15
-        time_per_multi = 0.12
+    # depth 미지정(None)이면 시간 기반 분석
+    time_per_move = 0.15 if not stockfish_depth else None
 
     game = chess.pgn.read_game(io.StringIO(pgn_str))
     if game is None:
@@ -973,23 +966,22 @@ def analyze_game_streaming(
             board = game.board()
             node = game
             halfmove = 0
-            prev_info_after: Optional[chess.engine.InfoDict] = None
+            prev_multipv: Optional[List[chess.engine.InfoDict]] = None
 
             while node.variations:
                 next_node = node.variations[0]
                 move = next_node.move
                 moving_color = board.turn
 
-                analyzed, prev_info_after = _analyze_single_move_with_fen(
+                analyzed, prev_multipv = _analyze_single_move_with_fen(
                     engine,
                     board,
                     move,
                     halfmove,
                     time_per_move,
-                    time_per_multi,
                     stockfish_depth,
                     opening_eco=opening_eco,
-                    prev_info_after=prev_info_after,
+                    prev_multipv=prev_multipv,
                 )
 
                 if analyzed:
@@ -1001,7 +993,7 @@ def analyze_game_streaming(
                     if on_move:
                         on_move(_analyzed_move_to_dict(analyzed))
 
-                board.push(move)
+                # board.push는 _analyze_single_move_with_fen 내부에서 수행
                 node = next_node
                 halfmove += 1
 
