@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
-/** api.ts 와 동일 규칙 (rewrites는 빌드 시 이 값으로 고정됨) */
+/** layout/apiBaseUrl.ts 와 동일 우선순위 (rewrites는 빌드 시 고정) */
 const publicApiBase =
+  process.env.FORESIGHT_API_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_API ||
   "http://localhost:8000/api/v1";
