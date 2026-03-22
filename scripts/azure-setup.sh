@@ -17,8 +17,8 @@ export AZ_API_APP="${AZ_API_APP:-foresight-api}"
 export AZ_ACR="${AZ_ACR:-foresightacr2720}"
 # Vercel 프로덕션 URL (CORS). 변경 시: VERCEL_ORIGIN=https://my-app.vercel.app ./scripts/azure-setup.sh
 export VERCEL_ORIGIN="${VERCEL_ORIGIN:-https://foresight.vercel.app}"
-# 동시 게임 분석(SSE) 분산: 레플리카당 동시 HTTP가 이 값을 넘기 전 스케일아웃 (낮을수록 더 빨리 인스턴스 추가)
-export AZ_HTTP_CONCURRENCY="${AZ_HTTP_CONCURRENCY:-2}"
+# 동시 게임 분석(SSE) 분산: 1이면 동시 HTTP 1개당 레플리카 부담을 줄이고 스케일아웃 유도(유저별 독립에 가깝게)
+export AZ_HTTP_CONCURRENCY="${AZ_HTTP_CONCURRENCY:-1}"
 # 최대 레플리카 수 (비용 상한). 예: AZ_MAX_REPLICAS=15 ./scripts/azure-setup.sh
 export AZ_MAX_REPLICAS="${AZ_MAX_REPLICAS:-10}"
 
@@ -103,7 +103,7 @@ else
   # Stockfish 리소스: 1 CPU 컨테이너 기준
   #   STOCKFISH_THREADS=1  → CPU 초과 방지
   #   STOCKFISH_HASH_MB=128 → 메모리 절약
-  #   STOCKFISH_CONCURRENT=1 → 레플리카당 동시 분석 1개 (여러 사용자는 HTTP 스케일로 레플리카 증설)
+  #   STOCKFISH_CONCURRENT=0 → 앱 전역 대기열 없음 + HTTP 스케일로 레플리카 분산
   az containerapp create \
     -g "$AZ_RG" -n "$AZ_API_APP" \
     --environment "$AZ_CA_ENV" \
@@ -122,7 +122,7 @@ else
       "LICHESS_USER_AGENT=Foresight/1.0" \
       "STOCKFISH_THREADS=1" \
       "STOCKFISH_HASH_MB=128" \
-      "STOCKFISH_CONCURRENT=1" \
+      "STOCKFISH_CONCURRENT=0" \
     --output none
 fi
 echo "✓ $AZ_API_APP"
@@ -131,7 +131,7 @@ echo ""
 echo "=== 9. HTTP 스케일링 규칙 적용 ==="
 # min-replicas=0: 유휴 시 비용 $0 (Scale to Zero)
 # http-concurrency: 레플리카당 동시 HTTP 요청(SSE 포함)이 이 값을 넘기 전에 스케일아웃
-#   기본 2 → 3번째 동시 사용자부터 새 레플리카로 분산하기 쉬움 (기존 3은 한 대에 몰림)
+#   기본 1 → 동시 SSE가 늘면 새 레플리카로 분산(유저 분석이 서로 기다리지 않도록)
 # max-replicas: AZ_MAX_REPLICAS 로 덮어쓰기 가능 (기본 10)
 # → 비용은 트래픽에 비례. 기존 앱은 아래 update 만으로도 규칙 갱신됨.
 az containerapp update \

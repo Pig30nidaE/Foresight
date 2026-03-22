@@ -189,30 +189,29 @@ az containerapp show -g "$AZ_RG" -n "$AZ_API_APP" \
 
 ### 동시에 여러 명이 게임 분석할 때 (대기 큐)
 
-1. **앱 내부 한도**  
-   `backend`는 레플리카(프로세스)마다 `STOCKFISH_CONCURRENT`(기본 **1**)로 Stockfish 동시 실행 수를 막습니다.  
-   같은 레플리카에 요청이 몰리면 **세마포어** 때문에 한 명이 끝날 때까지 다음 요청이 대기합니다.
+1. **앱 내부 대기열(선택)**  
+   `STOCKFISH_CONCURRENT` 가 **0(기본)** 이면 **유저끼리 서로 분석이 끝날 때까지 기다리지 않습니다** — 요청마다 즉시 Stockfish 분석이 시작됩니다.  
+   **1 이상**으로 두면 레플리카 안에서 그 개수만큼만 병렬이고, 나머지는 세마포어에서 대기합니다 (초저사양 단일 인스턴스용).
 
-2. **Azure가 “독립 인스턴스”를 늘리는 조건**  
-   Container Apps **HTTP 스케일 규칙**으로 레플리카 수가 늘어납니다.  
-   예전 스크립트는 `max-replicas=3`, `http-concurrency=3` 이라 **한 대에 사용자가 몰리기 쉬웠습니다.**  
-   현재 `azure-setup.sh` 기본값은 **`max-replicas=10`**, **`AZ_HTTP_CONCURRENCY=2`** (레플리카당 동시 HTTP가 2를 넘기 전에 스케일아웃)입니다.
+2. **Azure가 사용자를 나누는 조건**  
+   Container Apps **HTTP 스케일**로 레플리카가 늘어납니다. `azure-setup.sh` 기본은 **`STOCKFISH_CONCURRENT=0`**, **`AZ_HTTP_CONCURRENCY=1`**, **`max-replicas=10`** — 동시 SSE가 늘면 새 레플리카로 분산하기 쉽습니다.
 
-3. **이미 만든 앱에 적용하려면** (이미지 재빌드 없이):
+3. **이미 만든 앱에 적용하려면** (환경 변수 + 스케일, 이미지 재빌드는 선택):
 
    ```bash
    az containerapp update -g "$AZ_RG" -n "$AZ_API_APP" \
+     --set-env-vars "STOCKFISH_CONCURRENT=0" \
      --scale-rule-name http-scaler \
      --scale-rule-type http \
-     --scale-rule-http-concurrency 2 \
+     --scale-rule-http-concurrency 1 \
      --min-replicas 0 \
      --max-replicas 10
    ```
 
-4. **한 컨테이너에서만 병렬을 늘리고 싶을 때** (CPU 여유가 있을 때만)  
-   Azure 환경 변수 `STOCKFISH_CONCURRENT=2` 등. 1 vCPU 컨테이너에서는 오히려 전체가 느려질 수 있습니다.
+4. **단일 소형 인스턴스만 쓸 때**  
+   비용 때문에 레플리카를 1로 고정한다면 `STOCKFISH_CONCURRENT=1` 로 앱 레벨 대기열을 두는 편이 OOM/과부하에 안전할 수 있습니다.
 
-스크립트 커스터마이즈: `AZ_HTTP_CONCURRENCY=1 AZ_MAX_REPLICAS=15 ./scripts/azure-setup.sh` (더 공격적으로 스케일아웃).
+스크립트: `AZ_MAX_REPLICAS=15 ./scripts/azure-setup.sh` 등으로 상한 조정.
 
 ## 8. Railway 제거
 
