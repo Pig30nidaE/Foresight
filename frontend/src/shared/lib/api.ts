@@ -1,29 +1,34 @@
 /**
  * 공용 Axios 인스턴스 + 공유 API 함수
  * 새 기능의 API 함수는 features/<feature>/api.ts 에 추가
+ *
+ * 프로덕션 URL은 `app/layout.tsx` → `Providers` 가 서버에서 읽은 값으로
+ * `setApiRuntimeBaseUrl` 을 호출해 덮어씁니다 (클라이언트 번들에 NEXT_PUBLIC 미주입 대비).
  */
 import axios from "axios";
 import type { Platform, TimeClass, PlayerProfile, GameSummary, PerformanceSummary } from "@/shared/types";
 import type { AnalysisSSEEvent } from "@/shared/types";
+import { resolveApiBaseUrl } from "@/shared/lib/apiBaseUrl";
 
-/**
- * 백엔드 API 베이스 (끝에 슬래시 없이 `/api/v1`).
- * Vercel 등: 반드시 **빌드 시점**에 주입됨 → env 추가/변경 후 Redeploy 필요.
- * 키 이름은 `NEXT_PUBLIC_API_URL` 권장. (구호환: `NEXT_PUBLIC_API`)
- */
-const PUBLIC_API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.NEXT_PUBLIC_API ||
-  "http://localhost:8000/api/v1";
+/** 서버가 내려준 베이스 URL (클라이언트에서 Providers가 설정) */
+let runtimeApiBaseUrl: string | null = null;
+
+export function setApiRuntimeBaseUrl(url: string): void {
+  const u = url.replace(/\/+$/, "");
+  runtimeApiBaseUrl = u;
+  api.defaults.baseURL = u;
+}
+
+function effectiveApiBaseUrl(): string {
+  return runtimeApiBaseUrl ?? resolveApiBaseUrl();
+}
 
 const api = axios.create({
-  baseURL: PUBLIC_API_BASE_URL,
+  baseURL: effectiveApiBaseUrl(),
   timeout: 30000,
 });
 
 export default api;
-
-const SSE_BASE_URL = PUBLIC_API_BASE_URL;
 
 export const getPlayerProfile = async (
   platform: Platform,
@@ -78,7 +83,7 @@ export async function* streamGameAnalysis(
   stockfishDepth?: number,
   signal?: AbortSignal,
 ): AsyncGenerator<AnalysisSSEEvent> {
-  const res = await fetch(`${SSE_BASE_URL}/game-analysis/game/stream`, {
+  const res = await fetch(`${effectiveApiBaseUrl()}/game-analysis/game/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
