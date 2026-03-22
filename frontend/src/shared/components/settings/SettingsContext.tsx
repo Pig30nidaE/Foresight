@@ -67,9 +67,8 @@ function readSessionSettings(): Settings {
     const o = JSON.parse(raw) as Record<string, unknown>;
     const language = isLanguage(o.language) ? o.language : DEFAULT_SETTINGS.language;
     const theme = isTheme(o.theme) ? o.theme : DEFAULT_SETTINGS.theme;
-    const d = Number(o.stockfishDepth);
-    const stockfishDepth =
-      Number.isFinite(d) && d >= 12 && d <= 48 ? Math.round(d) : DEFAULT_SETTINGS.stockfishDepth;
+    const d = Math.round(Number(o.stockfishDepth));
+    const stockfishDepth = [12, 18, 24].includes(d) ? d : DEFAULT_SETTINGS.stockfishDepth;
     return { language, theme, stockfishDepth };
   } catch {
     return DEFAULT_SETTINGS;
