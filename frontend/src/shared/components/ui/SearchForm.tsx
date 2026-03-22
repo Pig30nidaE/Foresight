@@ -12,81 +12,71 @@ export default function SearchForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    if (!username.trim() || platform === "lichess") return;
     router.push(
       `/dashboard?platform=${encodeURIComponent(platform)}&username=${encodeURIComponent(username.trim())}`
     );
   };
 
   return (
-    <>
-      {/* Lichess Coming Soon Overlay */}
-      {platform === "lichess" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-chess-bg/60">
-          <div className="flex flex-col items-center gap-3 px-8 py-10 rounded-2xl bg-chess-surface/90 border border-chess-border shadow-2xl text-center max-w-sm mx-4">
-            <span className="text-5xl select-none">🚧</span>
-            <h3 className="text-lg font-bold text-chess-primary">
-              {t("lichess.comingSoon.title")}
-            </h3>
-            <p className="text-sm text-chess-muted leading-relaxed">
-              {t("lichess.comingSoon.desc")}
-            </p>
-            <button
-              type="button"
-              onClick={() => setPlatform("chess.com")}
-              className="mt-2 px-5 py-2 rounded-lg bg-chess-accent hover:bg-chess-accent/80 text-white text-sm font-semibold transition-colors"
-            >
-              Chess.com →
-            </button>
+    <div className="flex w-full max-w-xl shrink-0">
+      <form onSubmit={handleSubmit} className="flex w-full flex-col gap-3">
+        {/* 폼 상단 전체 너비 — 레이아웃에 반드시 높이 반영 (홈 하단 카드와 겹침 방지) */}
+        {platform === "lichess" && (
+          <div
+            className="flex w-full flex-col gap-3 rounded-xl border border-amber-500/40 bg-chess-surface px-4 py-3 text-left shadow-sm sm:flex-row sm:items-center"
+            role="status"
+          >
+            <span className="shrink-0 select-none text-2xl sm:self-start">🚧</span>
+            <div className="min-w-0 flex-1 space-y-1">
+              <h3 className="text-sm font-bold text-chess-primary">{t("lichess.comingSoon.title")}</h3>
+              <p className="text-xs leading-relaxed text-chess-muted sm:text-sm">{t("lichess.comingSoon.desc")}</p>
+            </div>
           </div>
+        )}
+
+        {/* 토글 + 입력 + 제출: 모바일 세로, sm+ 한 줄 */}
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
+          {/*
+            모바일: flex-row로 플랫폼 토글 + 입력 한 줄
+            sm+: sm:contents → 토글·입력이 부모 flex-row에 직접 참여
+          */}
+          <div className="flex gap-2 sm:contents">
+            <div className="flex shrink-0 overflow-hidden rounded-lg border border-chess-border">
+              {(["chess.com", "lichess"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPlatform(p)}
+                  className={`px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
+                    platform === p
+                      ? "bg-chess-accent text-white"
+                      : "bg-chess-surface text-chess-muted hover:text-chess-primary"
+                  }`}
+                >
+                  {p === "chess.com" ? "Chess.com" : "Lichess"}
+                </button>
+              ))}
+            </div>
+
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder={typeof t === "function" ? t("dh.searchPlaceholder") : "유저명 입력"}
+              className="min-w-0 flex-1 rounded-lg border border-chess-border bg-chess-surface px-4 py-2 text-chess-primary placeholder-chess-muted transition-colors focus:border-chess-accent focus:outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={platform === "lichess"}
+            className="w-full shrink-0 rounded-lg bg-chess-accent px-6 py-2 font-semibold text-white transition-colors hover:bg-chess-accent/80 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
+          >
+            {typeof t === "function" ? t("dh.startAnalysis") : "분석 시작 →"}
+          </button>
         </div>
-      )}
-
-      <form
-        onSubmit={handleSubmit}
-        className="flex flex-col sm:flex-row gap-3 w-full max-w-xl"
-      >
-      {/*
-        모바일: 이 div가 flex-row로 플랫폼 토글 + 입력을 한 줄에 배치
-        PC(sm+): sm:contents → div가 사라지고 자식이 부모 flex에 직접 참여
-      */}
-      <div className="flex gap-2 sm:contents">
-        {/* Platform Toggle */}
-        <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
-          {(["chess.com", "lichess"] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPlatform(p)}
-              className={`px-3 sm:px-4 py-2 text-sm font-medium transition-colors ${
-                platform === p
-                  ? "bg-chess-accent text-white"
-                  : "bg-chess-surface text-chess-muted hover:text-chess-primary"
-              }`}
-            >
-              {p === "chess.com" ? "Chess.com" : "Lichess"}
-            </button>
-          ))}
-        </div>
-
-        {/* Username Input */}
-        <input
-          type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder={typeof t === "function" ? t("dh.searchPlaceholder") : "유저명 입력"}
-          className="flex-1 min-w-0 bg-chess-surface border border-chess-border rounded-lg px-4 py-2 text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors"
-        />
-      </div>
-
-      {/* Submit */}
-      <button
-        type="submit"
-        className="w-full sm:w-auto bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-6 py-2 rounded-lg transition-colors shrink-0"
-      >
-        {typeof t === "function" ? t("dh.startAnalysis") : "분석 시작 →"}
-      </button>
-    </form>
-    </>
+      </form>
+    </div>
   );
 }
