@@ -57,14 +57,17 @@ Keepalive: 이벤트가 0.5초 동안 없으면 `: keepalive\n\n` 전송.
    - 동기 스레드가 `queue.Queue`에 이벤트를 넣고, async 쪽은 `run_in_executor`로 `q.get(timeout=0.5)`를 반복해 SSE로 flush.
    - `None` 수신 시 루프 종료 후 `future` await.
 
-### 3.2 동시성: `asyncio.Semaphore(2)`
+### 3.2 동시성: `STOCKFISH_CONCURRENT` (선택적 Semaphore)
 
 ```python
-_analysis_semaphore = asyncio.Semaphore(2)
+# STOCKFISH_CONCURRENT > 0 일 때만 asyncio.Semaphore 사용. 0(기본)이면 세마포어 없음.
 ```
 
-- **의미**: 한 프로세스 안에서 **동시에 돌아갈 Stockfish 기반 분석 작업을 최대 2개**로 제한.
+- **의미**: **레플리카(프로세스)당** 동시 Stockfish 분석 상한을 둘지 여부.
+  - **0(기본)**: 앱 레벨에서 유저끼리 **서로 끝날 때까지 기다리지 않음** — 요청마다 즉시 `_run_analysis` 스레드가 돈다. 같은 1 vCPU 박스에 여러 분석이 겹치면 CPU는 공유되어 각각 느려질 수 있음.
+  - **1 이상**: 그 개수만큼만 병렬, 나머지는 `async with` 에서 대기 (저사양 단일 인스턴스 보호).
 - **캐시 히트**는 Semaphore를 사용하지 않음 (즉시 재생).
+- **Azure Container Apps**: `STOCKFISH_CONCURRENT=0` 이면 **HTTP 스케일·max replicas**로 사용자를 여러 레플리카에 나누는 것이 “독립 실행”에 가깝다.
 - **운영 영향**
   - CPU·메모리 보호에 유리.
   - 동시 요청이 많으면 나머지는 `queued` 이후 **슬롯이 날 때까지 대기** (asyncio 세마포어 대기 큐 순서, 일반적으로 선입선출에 가깝음).
@@ -160,7 +163,7 @@ _analysis_semaphore = asyncio.Semaphore(2)
 
 | 장점 | 한계 |
 |------|------|
-| 긴 분석도 중간 이벤트로 연결 유지·진행률 표시 | 단일 프로세스 `Semaphore(2)` → 대기열·장시간 작업 병목 |
+| 긴 분석도 중간 이벤트로 연결 유지·진행률 표시 | `STOCKFISH_CONCURRENT>0` 이거나 스케일 지연 시 한 인스턴스에 몰려 대기·CPU 공유 |
 | 동일 게임·depth 재요청은 캐시로 Stockfish 미실행 | 인메모리·단일 인스턴스 기준 캐시 (스케일 아웃 시 히트율 분산) |
 | depth 고정 시 기기 속도와 분리된 목표 depth 탐색 | 멀티스레드·MultiPV 정책으로 “완전 동일 숫자” 보장은 어려울 수 있음 |
 
@@ -168,7 +171,7 @@ _analysis_semaphore = asyncio.Semaphore(2)
 
 ## 7. 운영 체크리스트 (현 코드 기준)
 
-1. vCPU 수에 맞춰 `Semaphore` 값과 `Threads`/`Hash` 조합 검토 (과도한 동시 Stockfish 방지).
+1. vCPU·비용에 맞춰 `STOCKFISH_CONCURRENT`·`Threads`/`Hash`와 Container Apps **HTTP 스케일·max replicas** 검토 ([azure-deployment.md](./azure-deployment.md) 동시 분석 절).
 2. `queued` 대기 시간·캐시 히트율·평균 분석 시간 로깅/메트릭.
 3. 리버스 프록시 앞단에서 SSE 버퍼링 비활성화 (`X-Accel-Buffering: no`는 이미 응답에 포함).
 4. 트래픽 증가 시 **외부 작업 큐**(Redis 등) + 전용 워커로 확장 검토.

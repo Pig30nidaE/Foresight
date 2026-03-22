@@ -19,8 +19,9 @@ import queue as thread_queue
 import threading
 import time
 from collections import OrderedDict
+from contextlib import asynccontextmanager
 from functools import partial
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Body
 from pydantic import BaseModel
@@ -36,8 +37,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Azure Container Apps 등 제한 환경: 기본 1. 로컬 or 고사양이면 STOCKFISH_CONCURRENT=2 이상.
-_analysis_semaphore = asyncio.Semaphore(settings.STOCKFISH_CONCURRENT)
+# STOCKFISH_CONCURRENT > 0 이면 레플리카 내에서만 상한. 0이면 유저 간 앱 레벨 대기열 없음.
+_analysis_sem: Optional[asyncio.Semaphore] = (
+    asyncio.Semaphore(settings.STOCKFISH_CONCURRENT)
+    if settings.STOCKFISH_CONCURRENT > 0
+    else None
+)
+
+
+@asynccontextmanager
+async def _analysis_concurrency_slot() -> AsyncIterator[None]:
+    if _analysis_sem is None:
+        yield
+    else:
+        async with _analysis_sem:
+            yield
 
 # ── SSE 완료 결과 캐시 (동일 게임·동일 depth 재요청 시 재사용) ─────────────
 _CACHE_MAXSIZE = 50
@@ -169,10 +183,11 @@ async def analyze_game_stream(request: GameAnalysisRequest = Body(...)):
 
     수 하나가 분석될 때마다 SSE 이벤트로 전송합니다.
     동일 (game_id, stockfish_depth)는 캐시에서 즉시 재생합니다.
-    동시 Stockfish 프로세스는 최대 2개로 제한합니다.
+    동시 분석: STOCKFISH_CONCURRENT(기본 0) — 0이면 같은 레플리카에서도 유저끼리
+    세마포어 대기 없이 각 요청이 즉시 분석을 시작합니다. 1 이상이면 레플리카당 그 개수만 병렬.
 
     이벤트 타입:
-    - queued: Semaphore 대기 중 (캐시 히트 시에도 동일 시퀀스 유지)
+    - queued: 스트림 시작 신호 (캐시 히트 시에도 동일). 세마포어 사용 시 슬롯 대기 포함.
     - init: PGN 파싱 완료, 총 수/플레이어/오프닝 정보
     - move: 수 1개 분석 완료 (AnalyzedMove)
     - complete: 전체 분석 완료 (요약 통계)
@@ -208,7 +223,7 @@ async def analyze_game_stream(request: GameAnalysisRequest = Body(...)):
     async def event_generator():
         yield f"data: {json.dumps({'type': 'queued'})}\n\n"
 
-        async with _analysis_semaphore:
+        async with _analysis_concurrency_slot():
             q: thread_queue.Queue = thread_queue.Queue()
             loop = asyncio.get_event_loop()
 
