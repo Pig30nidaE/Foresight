@@ -535,7 +535,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                 {isAnalyzing ? (
                   <>
                     <span className="animate-spin">⏳</span>
-                    <span>{t("gh.btn.analyzing")} (Depth {stockfishDepth})</span>
+                    <span>{t("gh.btn.analyzing")}</span>
                   </>
                 ) : isAnalyzedAtCurrentDepth && showAnalysis ? (
                   <>
@@ -545,12 +545,12 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                 ) : isAnalyzedAtCurrentDepth ? (
                   <>
                     <span>✅</span>
-                    <span>분석 다시 보기 (Depth {stockfishDepth})</span>
+                    <span>{t("gh.btn.reviewAnalysis")}</span>
                   </>
                 ) : (
                   <>
                     <span>🎯</span>
-                    <span>{t("gh.btn.analyze")} (Depth {stockfishDepth})</span>
+                    <span>{t("gh.btn.analyze")}</span>
                   </>
                 )}
               </button>
@@ -582,8 +582,6 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                         {t("gh.analyze.streaming")
                           .replace("{current}", String(stream.currentMove))
                           .replace("{total}", String(stream.totalMoves))}
-                        {" · Depth "}
-                        {stockfishDepth}
                       </p>
                     </>
                   ) : (
@@ -1021,7 +1019,7 @@ function GameAnalysisPanel({
                         <span className={`text-xs sm:text-sm font-bold truncate ${isSelected ? "text-chess-primary" : "text-chess-primary/80"}`}>
                           {move.move_number}. {move.san}
                         </span>
-                        {move.is_only_best && (
+                        {move.is_only_best && move.tier !== "TH" && (
                           <span className="shrink-0 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold whitespace-nowrap">
                             {t("ga.onlyBest")}
                           </span>
@@ -1031,7 +1029,11 @@ function GameAnalysisPanel({
                           {move.win_pct_loss.toFixed(1)}%
                         </span>
                         <p className="hidden sm:block text-[11px] font-semibold mt-0.5">
-                          {move.user_move_rank === 0 ? (
+                          {move.tier === "TH" ? (
+                            <span className="text-emerald-600/90 dark:text-emerald-400/90">
+                              {t("ga.theoryMoveNote")}
+                            </span>
+                          ) : move.user_move_rank === 0 ? (
                             <span className="text-orange-400">
                               {t("ga.notInTop5").replace("{loss}", move.win_pct_loss.toFixed(1))}
                             </span>
