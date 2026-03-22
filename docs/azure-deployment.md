@@ -187,6 +187,32 @@ az containerapp show -g "$AZ_RG" -n "$AZ_API_APP" \
 
 게임 분석은 **SSE**를 사용합니다. 연결이 중간에 끊기면 Container Apps / 프록시 **타임아웃**을 확인하세요.
 
+### 동시에 여러 명이 게임 분석할 때 (대기 큐)
+
+1. **앱 내부 대기열(선택)**  
+   `STOCKFISH_CONCURRENT` 가 **0(기본)** 이면 **유저끼리 서로 분석이 끝날 때까지 기다리지 않습니다** — 요청마다 즉시 Stockfish 분석이 시작됩니다.  
+   **1 이상**으로 두면 레플리카 안에서 그 개수만큼만 병렬이고, 나머지는 세마포어에서 대기합니다 (초저사양 단일 인스턴스용).
+
+2. **Azure가 사용자를 나누는 조건**  
+   Container Apps **HTTP 스케일**로 레플리카가 늘어납니다. `azure-setup.sh` 기본은 **`STOCKFISH_CONCURRENT=0`**, **`AZ_HTTP_CONCURRENCY=1`**, **`max-replicas=10`** — 동시 SSE가 늘면 새 레플리카로 분산하기 쉽습니다.
+
+3. **이미 만든 앱에 적용하려면** (환경 변수 + 스케일, 이미지 재빌드는 선택):
+
+   ```bash
+   az containerapp update -g "$AZ_RG" -n "$AZ_API_APP" \
+     --set-env-vars "STOCKFISH_CONCURRENT=0" \
+     --scale-rule-name http-scaler \
+     --scale-rule-type http \
+     --scale-rule-http-concurrency 1 \
+     --min-replicas 0 \
+     --max-replicas 10
+   ```
+
+4. **단일 소형 인스턴스만 쓸 때**  
+   비용 때문에 레플리카를 1로 고정한다면 `STOCKFISH_CONCURRENT=1` 로 앱 레벨 대기열을 두는 편이 OOM/과부하에 안전할 수 있습니다.
+
+스크립트: `AZ_MAX_REPLICAS=15 ./scripts/azure-setup.sh` 등으로 상한 조정.
+
 ## 8. Railway 제거
 
 API를 Azure로만 쓰면 Railway 백엔드 연결을 끊어도 됩니다.  

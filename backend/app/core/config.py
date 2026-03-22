@@ -33,10 +33,12 @@ class Settings(BaseSettings):
     # Stockfish 리소스 (Azure Container Apps 등 제한 환경에서 조정)
     # Threads: 컨테이너 1 CPU → 1, 로컬 멀티코어 → 2 이상
     # Hash: 컨테이너 2Gi 기준 → 128, 로컬 → 256
-    # Concurrent: 동시 분석 허용 개수 (Semaphore). 컨테이너 1 CPU → 1
+    # Concurrent: 레플리카당 동시 게임 분석 상한 (전역 asyncio Semaphore).
+    #   0 = 앱 레벨 대기열 없음 → 유저끼리 서로 끝날 때까지 기다리지 않음(요청마다 즉시 실행).
+    #   1 이상 = 같은 인스턴스에서 그 개수만큼만 병렬, 초과분은 대기(저사양 단일 인스턴스 보호).
     STOCKFISH_THREADS: int = 1
     STOCKFISH_HASH_MB: int = 128
-    STOCKFISH_CONCURRENT: int = 1
+    STOCKFISH_CONCURRENT: int = 0
 
     # External APIs
     LICHESS_API_TOKEN: str = ""
