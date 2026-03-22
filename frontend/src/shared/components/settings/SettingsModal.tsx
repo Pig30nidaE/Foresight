@@ -2,7 +2,7 @@ import { useSettings, type Language, type Theme } from "./SettingsContext";
 import { useTranslation } from "../../lib/i18n";
 import { useState } from "react";
 
-const DEPTH_OPTIONS = [12, 18, 24, 30, 36, 42, 48];
+const DEPTH_OPTIONS = [12, 18, 24];
 
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { language, setLanguage, theme, setTheme, stockfishDepth, setStockfishDepth } = useSettings();

@@ -272,12 +272,13 @@ def _compute_opening_theory(pgn_str: str) -> dict:
         opening_header = (game.headers.get("Opening") or "").strip() or None
         canonical_eco = eco_header
 
-        # canonical_eco 기반 오프닝명 (없으면 fallback)
-        canonical_name = (
+        # 오프닝 이름 우선순위: PGN [Opening] 헤더(플랫폼 제공명) > ECO DB 이름
+        # 전적 검색에서 표시하는 이름(플랫폼 API 제공)과 동일하게 맞추기 위해 헤더 우선.
+        canonical_name = opening_header or (
             opening_db.get_name_by_eco(canonical_eco)
             if canonical_eco
             else None
-        ) or opening_header
+        )
 
         def key4(b: chess.Board) -> str:
             # Use FEN 4-field key to match lichess openings EPD keys robustly
@@ -337,15 +338,10 @@ def _compute_opening_theory(pgn_str: str) -> dict:
                 return {}
 
             eco_out = last_entry.get("eco")
-            # eco_out은 TH(이론수 배정)에 쓰이므로 기존 last_entry 기반 그대로 두되,
-            # "표시용 오프닝명"은 ECO 헤더 기준(canonical_name)을 우선합니다.
+            # 표시용 오프닝명: PGN [Opening] 헤더(플랫폼명) > ECO DB 이름
             name_out = (
                 canonical_name
-                or (
-                    opening_db.get_name_by_eco(eco_out)
-                    if eco_out
-                    else None
-                )
+                or (opening_db.get_name_by_eco(eco_out) if eco_out else None)
                 or last_entry.get("name")
             )
 
@@ -363,11 +359,12 @@ def _compute_opening_theory(pgn_str: str) -> dict:
             return {}
 
         eco_out = last_entry.get("eco")
+        # PGN [Opening] 헤더 우선, 없으면 DB 이름
         name_out = (
-            opening_db.get_name_by_eco(eco_out)
-            if eco_out
-            else None
-        ) or last_entry.get("name")
+            opening_header
+            or (opening_db.get_name_by_eco(eco_out) if eco_out else None)
+            or last_entry.get("name")
+        )
 
         th_fullmoves = (th_plies + 1) // 2
         return {
@@ -406,15 +403,13 @@ def _get_top_moves(
 ) -> List[Tuple[str, str, int, int]]:
     """
     Stockfish로 상위 N개 수 분석
-    
+
+    depth와 time_limit 모두 지정 시 먼저 도달하는 쪽에서 중단.
+    이를 통해 느린 하드웨어(컨테이너 1 CPU)에서도 시간이 보장됩니다.
+
     Returns: [(uci, san, cp_score, rank), ...]
     """
-    # depth 지정 시 time을 제거하여 기기 성능과 무관하게 동일한 결과 보장
-    limit = (
-        chess.engine.Limit(depth=depth)
-        if depth
-        else chess.engine.Limit(time=time_limit)
-    )
+    limit = chess.engine.Limit(depth=depth, time=time_limit)
 
     try:
         info = engine.analyse(board, limit, multipv=top_n)
@@ -781,12 +776,9 @@ def _analyze_single_move_with_fen(
         # TF 판정은 보조 지표이므로 실패 시 안전하게 False
         is_forced = False
     
-    # depth 지정 시 time을 제거하여 기기 성능과 무관하게 동일한 결과 보장
-    limit = (
-        chess.engine.Limit(depth=stockfish_depth)
-        if stockfish_depth
-        else chess.engine.Limit(time=time_per_move)
-    )
+    # depth+time 동시 지정: 둘 중 먼저 도달하는 쪽에서 중단
+    # → 느린 하드웨어에서도 time 상한으로 속도를 보장
+    limit = chess.engine.Limit(depth=stockfish_depth, time=time_per_move)
 
     # 수 전 평가 — 직전 수의 info_after와 동일 포지션이므로 재사용 (엔진 호출 절약)
     if prev_info_after is not None:
@@ -921,8 +913,26 @@ def analyze_game_streaming(
     Returns:
         BothPlayersAnalysisResult (요약 통계 포함)
     """
-    time_per_move = 0.15
-    time_per_multi = 0.12
+    # depth별 시간 상한 (move당 목표 소요 시간)
+    # Limit(depth=d, time=cap): depth d 또는 cap초 중 먼저 도달하면 중단.
+    # 느린 하드웨어(컨테이너 1 CPU)에서도 cap이 속도를 보장하고,
+    # 빠른 하드웨어에서는 depth가 먼저 완료돼 품질을 최대화합니다.
+    #
+    # depth=12: ~6s (40수 기준)  depth=18: ~15-17s  depth=24: ~28s
+    _DEPTH_CAPS: dict[int, tuple[float, float]] = {
+        12: (0.08, 0.05),   # (time_per_move, time_per_multi)
+        18: (0.25, 0.12),
+        24: (0.50, 0.20),
+    }
+    if stockfish_depth and stockfish_depth in _DEPTH_CAPS:
+        time_per_move, time_per_multi = _DEPTH_CAPS[stockfish_depth]
+    elif stockfish_depth:
+        scale = stockfish_depth / 18.0
+        time_per_move = round(0.25 * scale, 3)
+        time_per_multi = round(0.12 * scale, 3)
+    else:
+        time_per_move = 0.15
+        time_per_multi = 0.12
 
     game = chess.pgn.read_game(io.StringIO(pgn_str))
     if game is None:
