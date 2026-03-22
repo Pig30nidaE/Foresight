@@ -3,7 +3,8 @@
  * 새 기능의 API 함수는 features/<feature>/api.ts 에 추가
  */
 import axios from "axios";
-import type { Platform, TimeClass, PlayerProfile, GameSummary, PerformanceSummary, SingleGameAnalysis, BothPlayersAnalysis } from "@/shared/types";
+import type { Platform, TimeClass, PlayerProfile, GameSummary, PerformanceSummary } from "@/shared/types";
+import type { AnalysisSSEEvent } from "@/shared/types";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1",
@@ -11,6 +12,8 @@ const api = axios.create({
 });
 
 export default api;
+
+const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export const getPlayerProfile = async (
   platform: Platform,
@@ -55,68 +58,59 @@ export const getOpeningStats = async (
   return data;
 };
 
-// 개별 게임 분석 API (양쪽 플레이어)
-export const analyzeGameBothPlayers = async (
+/**
+ * SSE 스트리밍 게임 분석.
+ * fetch + ReadableStream으로 SSE 이벤트를 AsyncGenerator로 yield합니다.
+ */
+export async function* streamGameAnalysis(
   pgn: string,
   gameId: string,
-  timePerMove = 0.15,
-  stockfishDepth?: number
-): Promise<BothPlayersAnalysis> => {
-  try {
-    const { data } = await api.post(
-      "/game-analysis/game",
-      {
-        pgn,
-        game_id: gameId,
-        time_per_move: timePerMove,
-        stockfish_depth: stockfishDepth,
-      },
-      {
-        // 분석은 수가 많으면 30초를 쉽게 초과합니다. (기본 axios timeout=30s)
-        timeout: 180_000,
-      }
-    );
-    // #region agent log
-    fetch('http://127.0.0.1:7481/ingest/be5a306c-8cb7-4841-9b1f-99923455307e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2df934'},body:JSON.stringify({sessionId:'2df934',runId:'post-fix',hypothesisId:'H1',location:'frontend/src/shared/lib/api.ts:analyzeGameBothPlayers',message:'api_success',data:{gameId, timePerMove, pgnChars:(pgn?.length??0), timeoutMs:180000},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    return data;
-  } catch (err: any) {
-    const isAxios = !!err?.isAxiosError;
-    const status = err?.response?.status ?? null;
-    const code = err?.code ?? null; // e.g. ECONNABORTED on timeout
-    const msg = String(err?.message ?? err).slice(0, 300);
-    // #region agent log
-    fetch('http://127.0.0.1:7481/ingest/be5a306c-8cb7-4841-9b1f-99923455307e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2df934'},body:JSON.stringify({sessionId:'2df934',runId:'post-fix',hypothesisId:'H1',location:'frontend/src/shared/lib/api.ts:analyzeGameBothPlayers',message:'api_error',data:{gameId,timePerMove,isAxios,status,code,msg,timeoutMs:180000},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    throw err;
-  }
-};
+  stockfishDepth?: number,
+  signal?: AbortSignal,
+): AsyncGenerator<AnalysisSSEEvent> {
+  const res = await fetch(`${SSE_BASE_URL}/game-analysis/game/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      pgn,
+      game_id: gameId,
+      stockfish_depth: stockfishDepth,
+    }),
+    signal,
+  });
 
-// 하위 호환: 단일 플레이어 분석
-export const analyzeSingleGame = async (
-  pgn: string,
-  username: string,
-  gameId: string,
-  timePerMove = 0.15,
-  stockfishDepth?: number
-): Promise<SingleGameAnalysis> => {
-  const result = await analyzeGameBothPlayers(pgn, gameId, timePerMove, stockfishDepth);
-  
-  // 양쪽 분석 중 해당 유저의 분석만 반환
-  const targetAnalysis = 
-    result.white_analysis.username.toLowerCase() === username.toLowerCase()
-      ? result.white_analysis
-      : result.black_analysis;
-  
-  return {
-    game_id: result.game_id,
-    username: targetAnalysis.username,
-    user_color: targetAnalysis.color,
-    total_moves: targetAnalysis.total_moves,
-    analyzed_moves: targetAnalysis.analyzed_moves,
-    tier_counts: targetAnalysis.tier_counts as Record<"TH" | "TF" | "T1" | "T2" | "T3" | "T4" | "T5" | "T6", number>,
-    tier_percentages: targetAnalysis.tier_percentages as Record<"TH" | "TF" | "T1" | "T2" | "T3" | "T4" | "T5" | "T6", number>,
-    avg_cp_loss: targetAnalysis.avg_cp_loss,
-    accuracy: targetAnalysis.accuracy,
-  };
-};
+  if (!res.ok) {
+    const text = await res.text().catch(() => "Unknown error");
+    yield { type: "error" as const, message: text };
+    return;
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop()!;
+
+      for (const chunk of chunks) {
+        const line = chunk.trim();
+        if (!line || line.startsWith(":")) continue;
+        if (line.startsWith("data: ")) {
+          try {
+            yield JSON.parse(line.slice(6)) as AnalysisSSEEvent;
+          } catch {
+            // skip malformed JSON
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}

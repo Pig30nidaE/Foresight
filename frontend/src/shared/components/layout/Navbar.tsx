@@ -54,7 +54,7 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="border-b border-chess-border/60 bg-chess-bg/80 backdrop-blur-md sticky top-0 z-50">
+      <header className="border-b border-chess-border/60 bg-chess-bg/80 backdrop-blur-md sticky top-0 z-50 pt-[env(safe-area-inset-top,0px)]">
         {/* 모바일/태블릿은 동일한 틀, 데스크톱(md 이상)에서만 좌측 정렬이 되도록 wrapper를 분리 */}
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
           {/* 좌측 영역: 로고 + (md 이상에서만) 네비 링크 */}
