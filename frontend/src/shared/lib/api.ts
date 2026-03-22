@@ -6,14 +6,24 @@ import axios from "axios";
 import type { Platform, TimeClass, PlayerProfile, GameSummary, PerformanceSummary } from "@/shared/types";
 import type { AnalysisSSEEvent } from "@/shared/types";
 
+/**
+ * 백엔드 API 베이스 (끝에 슬래시 없이 `/api/v1`).
+ * Vercel 등: 반드시 **빌드 시점**에 주입됨 → env 추가/변경 후 Redeploy 필요.
+ * 키 이름은 `NEXT_PUBLIC_API_URL` 권장. (구호환: `NEXT_PUBLIC_API`)
+ */
+const PUBLIC_API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_API ||
+  "http://localhost:8000/api/v1";
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1",
+  baseURL: PUBLIC_API_BASE_URL,
   timeout: 30000,
 });
 
 export default api;
 
-const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const SSE_BASE_URL = PUBLIC_API_BASE_URL;
 
 export const getPlayerProfile = async (
   platform: Platform,
