@@ -48,6 +48,12 @@ az login
 3. Key: `NEXT_PUBLIC_API_URL`, Value: (복사한 값), Environment: **Production**
 4. **Redeploy** (Deployments → … → Redeploy)
 
+### 배포 후에도 브라우저가 `localhost`로 요청할 때
+
+1. **변수 이름**: 코드가 읽는 키는 **`NEXT_PUBLIC_API_URL`** 입니다. `NEXT_PUBLIC_API` 만 넣었거나 오타(`NEXT_PUBLIC_API_BASE` 등)면 빌드 시 값이 비어 **기본값 `http://localhost:8000/api/v1`** 이 클라이언트 번들에 박힙니다. (별칭으로 `NEXT_PUBLIC_API` 도 지원하지만, 권장 키는 `NEXT_PUBLIC_API_URL`.)
+2. **빌드 시점 고정**: `NEXT_PUBLIC_*` 는 `next build` 할 때 문자열로 치환됩니다. 변수를 나중에 추가·수정했다면 **반드시 Production(또는 해당 환경)에 다시 배포**해야 합니다. “환경 변수만 저장”으로는 이미 빌드된 JS가 바뀌지 않습니다.
+3. **환경 범위**: Vercel에서 변수를 **Preview**에만 넣고 **Production** 배포를 보면 Production 빌드에는 여전히 localhost가 들어갑니다. 사용 중인 환경(Production / Preview)에 맞게 둘 다 설정하거나, 필요한 쪽에만 맞춥니다.
+
 - 끝까지 **`/api/v1`** 포함 (코드가 이 경로를 베이스로 사용).
 - **Preview** 배포에서도 같은 API를 쓰면 동일 변수를 Preview에 추가하거나, 스테이징용 Azure 앱 URL을 따로 둡니다.
 
