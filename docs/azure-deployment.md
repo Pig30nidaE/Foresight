@@ -187,6 +187,33 @@ az containerapp show -g "$AZ_RG" -n "$AZ_API_APP" \
 
 게임 분석은 **SSE**를 사용합니다. 연결이 중간에 끊기면 Container Apps / 프록시 **타임아웃**을 확인하세요.
 
+### 동시에 여러 명이 게임 분석할 때 (대기 큐)
+
+1. **앱 내부 한도**  
+   `backend`는 레플리카(프로세스)마다 `STOCKFISH_CONCURRENT`(기본 **1**)로 Stockfish 동시 실행 수를 막습니다.  
+   같은 레플리카에 요청이 몰리면 **세마포어** 때문에 한 명이 끝날 때까지 다음 요청이 대기합니다.
+
+2. **Azure가 “독립 인스턴스”를 늘리는 조건**  
+   Container Apps **HTTP 스케일 규칙**으로 레플리카 수가 늘어납니다.  
+   예전 스크립트는 `max-replicas=3`, `http-concurrency=3` 이라 **한 대에 사용자가 몰리기 쉬웠습니다.**  
+   현재 `azure-setup.sh` 기본값은 **`max-replicas=10`**, **`AZ_HTTP_CONCURRENCY=2`** (레플리카당 동시 HTTP가 2를 넘기 전에 스케일아웃)입니다.
+
+3. **이미 만든 앱에 적용하려면** (이미지 재빌드 없이):
+
+   ```bash
+   az containerapp update -g "$AZ_RG" -n "$AZ_API_APP" \
+     --scale-rule-name http-scaler \
+     --scale-rule-type http \
+     --scale-rule-http-concurrency 2 \
+     --min-replicas 0 \
+     --max-replicas 10
+   ```
+
+4. **한 컨테이너에서만 병렬을 늘리고 싶을 때** (CPU 여유가 있을 때만)  
+   Azure 환경 변수 `STOCKFISH_CONCURRENT=2` 등. 1 vCPU 컨테이너에서는 오히려 전체가 느려질 수 있습니다.
+
+스크립트 커스터마이즈: `AZ_HTTP_CONCURRENCY=1 AZ_MAX_REPLICAS=15 ./scripts/azure-setup.sh` (더 공격적으로 스케일아웃).
+
 ## 8. Railway 제거
 
 API를 Azure로만 쓰면 Railway 백엔드 연결을 끊어도 됩니다.  
