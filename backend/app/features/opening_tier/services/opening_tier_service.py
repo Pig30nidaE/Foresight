@@ -198,27 +198,28 @@ class OpeningTierService:
             self._refresh_lock = asyncio.Lock()
 
     async def load_cache_from_disk_if_valid(self) -> bool:
-        """현재 날짜 스탬프에 해당하는 캐시가 있으면 로드합니다.
+        """디스크 캐시를 로드합니다.
 
-        없으면 네트워크 프리페치(탐색)는 수행하지 않습니다.
+        규칙:
+          - logic_version 이 일치하고 items/since/until 이 있으면 로드
+          - stamp 날짜가 오늘이 아니어도 재사용 (자정 갱신 전까지 유지)
+          - 없거나 손상되었을 때만 미로드 상태로 둠
         """
         await self._ensure_async_primitives()
         assert self._cache_ready is not None
 
-        stamp = self._current_stamp()
         if not _LATEST_CACHE_PATH.exists():
             return False
 
         try:
             raw = json.loads(_LATEST_CACHE_PATH.read_text(encoding="utf-8"))
-            if raw.get("stamp") != stamp:
-                return False
             if raw.get("logic_version") != CACHE_LOGIC_VERSION:
                 return False
             items: Dict[str, List[Dict[str, Any]]] = raw.get("items", {})
             since = raw.get("since")
             until = raw.get("until")
-            if not since or not until:
+            stamp = raw.get("stamp")
+            if not since or not until or not stamp or not items:
                 return False
 
             self._tier_cache = items
@@ -226,10 +227,33 @@ class OpeningTierService:
             self._cache_until = until
             self._cache_stamp = stamp
             self._cache_ready.set()
+            logger.info("Opening tier cache loaded from disk (stamp=%s)", stamp)
             return True
         except Exception as exc:
             logger.warning("Opening tier cache load failed: %s", exc)
             return False
+
+    def _persist_cache_snapshot(self) -> None:
+        """현재 메모리 캐시를 latest 파일에 저장합니다 (best-effort)."""
+        if (
+            self._tier_cache is None
+            or not self._tier_cache
+            or not self._cache_since
+            or not self._cache_until
+            or not self._cache_stamp
+        ):
+            return
+        payload = {
+            "logic_version": CACHE_LOGIC_VERSION,
+            "stamp": self._cache_stamp,
+            "since": self._cache_since,
+            "until": self._cache_until,
+            "items": self._tier_cache,
+        }
+        _LATEST_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = _LATEST_CACHE_PATH.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp_path.replace(_LATEST_CACHE_PATH)
 
     def start_midnight_cache_refresher(self) -> None:
         """UTC 00:00에 캐시를 일괄 재계산합니다."""
@@ -293,12 +317,20 @@ class OpeningTierService:
         openings = await self._fetch_openings(rating, speed, since=since, until=until)
         tiers = self._assign_tiers(openings, color)
 
-        # 캐시가 로드된 상태라면, 없는 키는 메모리에만 추가 (디스크는 자정 갱신에서만).
-        if self._cache_ready.is_set() and self._tier_cache is not None:
-            self._tier_cache[self._cache_key(rating, speed, color)] = tiers
-            if self._cache_since is None:
-                self._cache_since = since
-                self._cache_until = until
+        # 캐시 파일이 없던 시작 케이스도 포함해, 요청 결과는 메모리/디스크에 재사용 가능하게 적재합니다.
+        assert self._tier_cache is not None
+        self._tier_cache[self._cache_key(rating, speed, color)] = tiers
+        if self._cache_since is None:
+            self._cache_since = since
+            self._cache_until = until
+        if self._cache_stamp is None:
+            self._cache_stamp = stamp
+        if not self._cache_ready.is_set():
+            self._cache_ready.set()
+        try:
+            self._persist_cache_snapshot()
+        except Exception as exc:
+            logger.warning("Opening tier cache persist skipped: %s", exc)
         return tiers, f"{since} ~ {until}", stamp
 
     def get_bracket_labels(self, speed: str) -> List[RatingBracket]:  # noqa: ARG002
@@ -373,19 +405,6 @@ class OpeningTierService:
 
         async with self._refresh_lock:
             assert self._cache_ready is not None
-            self._cache_ready.clear()
-
-            # 스케줄러는 "기존 캐시 삭제 후 업데이트"를 원하므로 디스크 먼저 삭제합니다.
-            try:
-                if CACHE_DIR.exists():
-                    for p in CACHE_DIR.glob("*.json"):
-                        try:
-                            p.unlink()
-                        except OSError:
-                            pass
-            except Exception:
-                # 디스크 삭제 실패해도 즉시 죽지 말고, 캐시 계산/스왑은 계속합니다.
-                logger.exception("Opening tier cache disk delete failed")
 
             stamp = self._current_stamp()
             since, until = _compute_date_range()

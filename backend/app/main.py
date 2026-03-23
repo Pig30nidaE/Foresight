@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -30,12 +29,7 @@ async def lifespan(_app: FastAPI):
 
     opening_tier_svc = OpeningTierService()
     _app.state.opening_tier_service = opening_tier_svc
-    cache_ok = await opening_tier_svc.load_cache_from_disk_if_valid()
-    if not cache_ok:
-        # 캐시가 없거나 로직 버전이 달라졌다면, 첫 요청 전에 백그라운드로 갱신 시작합니다.
-        _app.state.opening_tier_refresh_task = asyncio.create_task(
-            opening_tier_svc.refresh_cache_for_all()
-        )
+    await opening_tier_svc.load_cache_from_disk_if_valid()
     opening_tier_svc.start_midnight_cache_refresher()
     yield
     # shutdown: 스케줄러 task 정리
@@ -44,10 +38,6 @@ async def lifespan(_app: FastAPI):
     except Exception:
         pass
 
-    # 백그라운드 갱신 task가 남아있을 수 있어 정리합니다.
-    task = getattr(_app.state, "opening_tier_refresh_task", None)
-    if task is not None:
-        task.cancel()
 
 
 app = FastAPI(
