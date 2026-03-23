@@ -29,7 +29,11 @@ function flatten(nodes: OpeningTreeNode[], expanded: Set<string>): RowMeta[] {
 }
 
 const winColor = (r: number) =>
-  r >= 55 ? "text-emerald-700" : r >= 45 ? "text-amber-700" : "text-red-700";
+  r >= 55
+    ? "text-emerald-800 dark:text-emerald-400"
+    : r >= 45
+      ? "text-amber-800 dark:text-amber-300"
+      : "text-red-800 dark:text-red-400";
 
 /** 파이 조각·우측 목록 색 띠 동일 순서 (data 인덱스와 일치) */
 const OPENING_PIE_SEGMENT_COLORS = [

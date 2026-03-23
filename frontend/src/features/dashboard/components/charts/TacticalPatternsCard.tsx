@@ -588,7 +588,7 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${
                   activeTab === tab.id
-                    ? "bg-chess-primary border-chess-primary text-white font-semibold"
+                    ? "bg-chess-inverse border-chess-inverse text-white font-semibold"
                     : "bg-chess-bg border-chess-border text-chess-muted hover:border-chess-muted hover:text-chess-primary"
                 }`}
               >
