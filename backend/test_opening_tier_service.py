@@ -29,10 +29,11 @@ async def test_assign_tiers_no_cache(monkeypatch):
 
     monkeypatch.setattr(svc, "_fetch_position", fake_fetch)
 
-    tiers = await svc.get_opening_tiers(1600, "blitz", "white")
+    tiers, period, collected_at = await svc.get_opening_tiers(1600, "blitz", "white")
     assert tiers, "service should return at least one entry"
     assert tiers[0]["eco"] == "A00"
     assert tiers[0]["tier"] in ("S", "A", "B", "C", "D")
+    assert collected_at
 
     # 캐시가 없다면 같은 인자 호출 시 다시 fetch_position을 수행해야 함
     called = {"count": 0}
@@ -42,13 +43,13 @@ async def test_assign_tiers_no_cache(monkeypatch):
         return await fake_fetch(fen, rating, speed, since, until)
 
     monkeypatch.setattr(svc, "_fetch_position", counting_fetch)
-    tiers2 = await svc.get_opening_tiers(1600, "blitz", "white")
+    tiers2, _, _ = await svc.get_opening_tiers(1600, "blitz", "white")
     assert tiers2 == tiers
     # 카탈로그 1개 -> 호출당 _fetch_position 1회 기대 (BFS 폴백 없음)
     assert called["count"] == 1, "no-cache means no caching hit prevention"
     # second call again: still no caching, so fetch should run again
     called["count"] = 0
-    tiers3 = await svc.get_opening_tiers(1600, "blitz", "white")
+    tiers3, _, _ = await svc.get_opening_tiers(1600, "blitz", "white")
     assert tiers3 == tiers
     assert called["count"] == 1
 

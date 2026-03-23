@@ -348,7 +348,7 @@ const SAC_TIER_META: Record<1 | 2 | 3 | 4 | 5, {
     dot: "bg-emerald-500",
     border: "border-emerald-600/35",
     bg: "bg-emerald-600/8",
-    text: "text-emerald-700",
+    text: "text-chess-win",
     desc: "사실상 유일하게 유리할 수 있는 희생이며 평가가 크게 상승한 수",
   },
   2: {
@@ -375,7 +375,7 @@ const SAC_TIER_META: Record<1 | 2 | 3 | 4 | 5, {
     dot: "bg-rose-400",
     border: "border-rose-600/35",
     bg: "bg-rose-600/8",
-    text: "text-rose-700",
+    text: "text-chess-loss",
     desc: "추천수 4순위 이하에서 ca가 cb 대비 크게 떨어지는 수",
   },
   5: {
@@ -391,8 +391,8 @@ const SAC_TIER_META: Record<1 | 2 | 3 | 4 | 5, {
 
 // ─── 게임 선택 행 ────────────────────────────────────────────
 const RESULT_BADGE: Record<string, { label: string; cls: string }> = {
-  win:  { label: "승", cls: "text-emerald-700 border-emerald-700/30 bg-emerald-700/10" },
-  loss: { label: "패", cls: "text-red-700 border-red-600/30 bg-red-600/10" },
+  win:  { label: "승", cls: "text-chess-win border-emerald-700/30 bg-emerald-700/10" },
+  loss: { label: "패", cls: "text-chess-loss border-red-600/30 bg-red-600/10" },
   draw: { label: "무", cls: "text-chess-muted border-chess-border bg-chess-border/20" },
 };
 
@@ -475,7 +475,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
         t5: tierGroups[4].games.length,
       };
 
-  const scoreColor = pattern.score >= 65 ? "text-emerald-700" : pattern.score >= 45 ? "text-amber-700" : "text-red-700";
+  const scoreColor = pattern.score >= 65 ? "text-chess-win" : pattern.score >= 45 ? "text-amber-700" : "text-chess-loss";
   const scoreBg    = pattern.score >= 65 ? "bg-emerald-600"   : pattern.score >= 45 ? "bg-amber-600"   : "bg-red-600";
   const hasBoard   = !!selectedGame;
 
@@ -495,7 +495,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-chess-primary">{pattern.label}</h2>
-                {pattern.is_strength ? <span className="text-xs text-emerald-700 font-bold">{t("sac.strength")}</span> : <span className="text-xs text-red-700 font-bold">{t("sac.weakness")}</span>}
+                {pattern.is_strength ? <span className="text-xs text-chess-win font-bold">{t("sac.strength")}</span> : <span className="text-xs text-chess-loss font-bold">{t("sac.weakness")}</span>}
                 <span className="text-[10px] px-2 py-0.5 rounded-full border border-blue-700/30 bg-blue-700/8 text-blue-700 font-semibold">🔬 Stockfish</span>
                 <div className="relative group">
                   <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-chess-muted/40 text-[10px] font-bold text-chess-muted cursor-help">!</span>

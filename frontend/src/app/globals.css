@@ -1,19 +1,37 @@
 @import "tailwindcss";
 
-/* ── Chess 커스텀 팔레트 ─────────────────────────────────── */
+/* ── Chess 커스텀 팔레트 ───────────────────────────────────
+   라이트: 크림·웜 그레이
+   다크: 쿨 차콜 계층 + 구리색 액센트 (저채도, 가독성 우선)
+*/
 @theme {
-  --color-chess-bg: #FBFBF2;
-  --color-chess-surface: #EEEEE8;
-  --color-chess-border: #C8CBC5;
-  --color-chess-muted: #5C5755;
-  --color-chess-primary: #2D2926;
-  --color-chess-accent: #A67C44;
+  --color-chess-bg: #fbfbf4;
+  --color-chess-surface: #f0f0e8;
+  --color-chess-elevated: #e8e8e0;
+  /* 라이트: 본문·보조 글자 한층 진하게 (가독성↑) */
+  --color-chess-border: #b9bdb4;
+  --color-chess-muted: #454039;
+  --color-chess-primary: #1a1714;
+  --color-chess-accent: #8f6630;
+  /* 버튼·칩 등 어두운 면 (라이트에서 primary와 동일 역할) */
+  --color-chess-inverse: #1a1714;
+  --color-chess-piece-w: #d8d8d0;
+  --color-chess-piece-b: #2e2a27;
+  /* 라이트: 승·패 등 의미색 — 순녹/순적에 가깝게 */
+  --color-chess-win: #16a34a;
+  --color-chess-loss: #dc2626;
+  /* 주의·무승부 등 (앰버 계열, 라이트/다크 모두 가독성) */
+  --color-chess-warn: #a16207;
+  /* 첫 수 분포 스택 바 — 라이트: 밝은 초록/회색/밝은 적색 (크림 배경에서 덜 묻히게) */
+  --color-fm-bar-win: #4ade80;
+  --color-fm-bar-draw: #9eb6cc;
+  --color-fm-bar-loss: #fb8f8f;
 }
 
 /* ── 기본 색상 변수 ─────────────────────────────────────── */
 :root {
-  --background: #FBFBF2;
-  --foreground: #2D2926;
+  --background: #fbfbf4;
+  --foreground: #1a1714;
 }
 
 html {
@@ -29,17 +47,36 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Dark Mode (Tailwind `dark:` 기반 + CSS 변수 기반) */
+/* Dark Mode — 계층: bg < surface < elevated, 테두리는 낮은 대비로 구분 */
 html.dark {
-  --background: #0b1220;
-  --foreground: #e5e7eb;
+  /* 베이스: 순검정 대신 쿨 그레이 차콜 (눈부심↓, 계층은 유지) */
+  --background: #1a1b22;
+  --foreground: #e8eaef;
 
-  --color-chess-bg: #0b1220;
-  --color-chess-surface: #111827;
-  --color-chess-border: #334155;
-  --color-chess-muted: #9ca3af;
-  --color-chess-primary: #e5e7eb;
-  --color-chess-accent: #f59e0b;
+  --color-chess-bg: #1a1b22;
+  --color-chess-surface: #23242e;
+  --color-chess-elevated: #2b2d38;
+  --color-chess-border: #3a3d4a;
+  --color-chess-muted: #8b95a8;
+  --color-chess-primary: #e8eaef;
+  --color-chess-accent: #c4a574;
+  --color-chess-inverse: #454a5c;
+  --color-chess-piece-w: #c9b896;
+  --color-chess-piece-b: #5c4033;
+  --color-chess-win: #4ade80;
+  --color-chess-loss: #f87171;
+  --color-chess-warn: #fbbf24;
+  /* 다크: 진한 대비 유지 (초록 vs 붉은색) */
+  --color-fm-bar-win: #4ade80;
+  --color-fm-bar-draw: #94a3b8;
+  --color-fm-bar-loss: #f87171;
+}
+
+html.dark body {
+  background: var(--background);
+  background-image:
+    radial-gradient(ellipse 100% 60% at 50% -15%, rgba(196, 165, 116, 0.055), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 50%, rgba(120, 132, 160, 0.05), transparent 50%);
 }
 
 /* ── 커스텀 스크롤바 ─────────────────────────────────────── */
@@ -47,44 +84,115 @@ html.dark {
   width: 6px;
   height: 6px;
 }
-::-webkit-scrollbar-track  { background: #EEEEE8; }
-::-webkit-scrollbar-thumb  { background: #C8CBC5; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #9A9690; }
+::-webkit-scrollbar-track {
+  background: var(--color-chess-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-chess-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-chess-muted);
+}
 
-/* ── 텍스트 선택 색상 ───────────────────────────────────── */
-::selection { background: #A67C44; color: #fff; }
+/* ── 텍스트 선택 ─────────────────────────────────────────── */
+::selection {
+  background: color-mix(in srgb, var(--color-chess-accent) 45%, transparent);
+  color: var(--foreground);
+}
+
+html.dark ::selection {
+  background: rgba(196, 165, 116, 0.35);
+  color: #f4f5f8;
+}
 
 /* ── 페이드인 애니메이션 ─────────────────────────────────── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .animate-fade-in {
   animation: fadeIn 0.35s ease both;
 }
 
+/* ── First-move bar chart: 행 등장 (스태거는 style로 delay) ─ */
+@keyframes fm-chart-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fm-chart-row {
+  animation: fm-chart-row-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fm-chart-row {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ── 스켈레톤 shimmer ───────────────────────────────────── */
 @keyframes shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position:  400px 0; }
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
 }
 .skeleton {
-  background: linear-gradient(90deg, #C8CBC5 25%, #EEEEE8 50%, #C8CBC5 75%);
+  background: linear-gradient(
+    90deg,
+    var(--color-chess-border) 25%,
+    var(--color-chess-elevated) 50%,
+    var(--color-chess-border) 75%
+  );
   background-size: 800px 100%;
   animation: shimmer 1.4s infinite linear;
   border-radius: 0.375rem;
 }
 
+html.dark .skeleton {
+  background: linear-gradient(
+    90deg,
+    #2e303a 25%,
+    #383b48 50%,
+    #2e303a 75%
+  );
+  background-size: 800px 100%;
+}
+
 /* ── 도트 그리드 배경 (홈 히어로) ───────────────────────── */
 .dot-grid {
-  background-image: radial-gradient(circle, #A6A2A2 1px, transparent 1px);
+  background-image: radial-gradient(circle, #a6a2a2 1px, transparent 1px);
   background-size: 28px 28px;
 }
 
-/* ── 섹션 로딩 슬라이드 바 (각 섹션 개별 진행률) ──────────── */
+html.dark .dot-grid {
+  background-image: radial-gradient(circle, rgba(232, 234, 239, 0.12) 1px, transparent 1px);
+}
+
+/* ── 섹션 로딩 슬라이드 바 ───────────────────────────────── */
 @keyframes loading-slide {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(350%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
 }
 .animate-loading-slide {
   animation: loading-slide 1.4s ease-in-out infinite;

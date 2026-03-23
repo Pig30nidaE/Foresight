@@ -1,31 +1,55 @@
 """
 게임 데이터 분석 서비스 — 순수 Python 통계 처리
 """
+import io
 import re
 from collections import defaultdict
-from typing import List, Optional
+from typing import List, Optional, Tuple
+
+import chess.pgn
+
 from app.models.schemas import GameSummary, OpeningStats, PerformanceSummary, Platform
 from app.shared.services import opening_db
 from app.shared.services.pgn_parser import ParsedGame, MoveData
 
-# PGN 첫 수 추출용 정규식
+# PGN 첫 수 추출용 정규식 (파서 실패 시 폴백)
 _RE_HEADERS = re.compile(r'\[[^\]]+\]')
-_RE_BRACES  = re.compile(r'\{[^}]*\}')   # {[%clk...]} 및 빈 {} 제거
-_RE_MOVENUM = re.compile(r'\d+\.+')       # 1. / 1... 제거
-_RESULT_TOKENS = frozenset({'*', '1-0', '0-1', '1/2-1/2'})
+_RE_BRACES = re.compile(r"\{[^}]*\}")  # {[%clk...]} 및 빈 {} 제거
+_RE_MOVENUM = re.compile(r"\d+\.+")  # 1. / 1... 제거
+_RESULT_TOKENS = frozenset({"*", "1-0", "0-1", "1/2-1/2"})
 
 
-def _extract_first_moves(pgn: str):
-    """PGN → (white_move1, black_move1) — 예) ('e4', 'c5')"""
-    if not pgn:
-        return None, None
-    moves_part = _RE_HEADERS.sub('', pgn)
-    moves_part = _RE_BRACES.sub('', moves_part)
-    moves_part = _RE_MOVENUM.sub('', moves_part)
+def _extract_first_moves_regex(pgn: str) -> Tuple[Optional[str], Optional[str]]:
+    """헤더·클록 제거 후 토큰 앞 두 개 → 변형(괄호) PGN에서는 순서가 틀어질 수 있음."""
+    moves_part = _RE_HEADERS.sub("", pgn)
+    moves_part = _RE_BRACES.sub("", moves_part)
+    moves_part = _RE_MOVENUM.sub("", moves_part)
     tokens = [t for t in moves_part.split() if t not in _RESULT_TOKENS and t.strip()]
     white1 = tokens[0] if len(tokens) > 0 else None
     black1 = tokens[1] if len(tokens) > 1 else None
     return white1, black1
+
+
+def _extract_first_moves(pgn: str) -> Tuple[Optional[str], Optional[str]]:
+    """PGN → (백 1수 SAN, 흑 1수 SAN). 메인라인 기준으로 파싱해 백/흑을 보드와 일치시킴."""
+    if not pgn or not pgn.strip():
+        return None, None
+    try:
+        game = chess.pgn.read_game(io.StringIO(pgn))
+        if game is not None:
+            board = game.board()
+            main = list(game.mainline_moves())
+            if not main:
+                return None, None
+            w_san = board.san(main[0])
+            board.push(main[0])
+            if len(main) < 2:
+                return w_san, None
+            b_san = board.san(main[1])
+            return w_san, b_san
+    except Exception:
+        pass
+    return _extract_first_moves_regex(pgn)
 
 
 class AnalysisService:
@@ -379,8 +403,9 @@ class AnalysisService:
         username: str,
     ) -> dict:
         """
-        MVP 섹션 3-A: 시간 압박 블런더 분석
-        수 페이즈(opening/middlegame/endgame) × 시간 압박 여부 교차 집계.
+        MVP 섹션 3-A: 시간 압박 분석
+        기물 기반 페이즈 × 시간 압박 여부 교차 집계.
+        Lichess move_analysis가 있으면 압박 상황에서의 엔진 판정(Blunder 등)을 함께 집계.
         """
         uname = username.lower()
 
@@ -421,6 +446,7 @@ class AnalysisService:
                     "clock_after": m.clock_after,
                     "time_spent": m.time_spent,
                     "is_pressure": m.is_time_pressure,
+                    "judgment": m.judgment,
                 })
 
         if not data:
@@ -436,11 +462,42 @@ class AnalysisService:
             n = len(sub)
             p = sum(1 for r in sub if r["is_pressure"])
             times = [r["time_spent"] for r in sub if r["time_spent"] is not None]
-            return {
+            out = {
                 "total_moves": int(n),
                 "pressure_moves": int(p),
                 "pressure_ratio": round(p / n, 4) if n else 0.0,
                 "avg_time_spent": round(sum(times) / len(times), 2) if times else None,
+            }
+            q = _under_pressure_quality(sub)
+            if q is not None:
+                out["under_pressure_quality"] = q
+            return out
+
+        def _under_pressure_quality(sub: list[dict]) -> Optional[dict]:
+            """시간 압박인 수 중 Lichess 엔진 판정이 붙은 수만 집계."""
+            pressure = [r for r in sub if r["is_pressure"]]
+            if not pressure:
+                return None
+            judged = [r for r in pressure if r.get("judgment")]
+            if not judged:
+                return None
+
+            def _cnt(name: str) -> int:
+                return sum(1 for r in judged if r.get("judgment") == name)
+
+            bl = _cnt("Blunder")
+            mi = _cnt("Mistake")
+            ia = _cnt("Inaccuracy")
+            nj = len(judged)
+            severe = bl + mi
+            return {
+                "pressure_moves": int(len(pressure)),
+                "judged_moves": int(nj),
+                "blunders": int(bl),
+                "mistakes": int(mi),
+                "inaccuracies": int(ia),
+                "severe_under_pressure_ratio": round(severe / nj, 4) if nj else 0.0,
+                "blunder_under_pressure_ratio": round(bl / nj, 4) if nj else 0.0,
             }
 
         overall: dict = {}

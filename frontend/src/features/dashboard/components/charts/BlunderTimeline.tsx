@@ -36,31 +36,32 @@ interface Props {
   data?: TimePressureStats;
 }
 
+/** 압박 단계 — chess-win/loss 토큰 + 다크에서도 배지 대비 유지 (민트만 쓰지 않음) */
 function pressureTone(pct: number, t: any) {
   if (pct >= 40) {
     return {
       label: t("chart.highRisk"),
-      text: "text-rose-700",
-      badge: "bg-rose-100 text-rose-700 border-rose-200",
-      bar: "from-rose-500 to-rose-600",
-      dot: "bg-rose-500",
+      text: "text-chess-loss",
+      badge:
+        "border border-chess-loss/40 bg-chess-loss/10 text-chess-loss dark:bg-red-950/40 dark:border-chess-loss/35",
+      bar: "from-red-600 to-rose-600",
     };
   }
   if (pct >= 20) {
     return {
       label: t("chart.warning"),
-      text: "text-amber-700",
-      badge: "bg-amber-100 text-amber-700 border-amber-200",
+      text: "text-chess-warn",
+      badge:
+        "border border-amber-600/50 bg-amber-100 text-amber-950 dark:bg-amber-950/35 dark:text-amber-200 dark:border-amber-500/40",
       bar: "from-amber-500 to-amber-600",
-      dot: "bg-amber-500",
     };
   }
   return {
     label: t("chart.stable"),
-    text: "text-emerald-700",
-    badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    bar: "from-emerald-500 to-emerald-600",
-    dot: "bg-emerald-500",
+    text: "text-chess-win",
+    badge:
+      "border border-chess-win/45 bg-chess-win/10 text-chess-win dark:bg-chess-win/18 dark:border-chess-win/40",
+    bar: "from-green-600 to-green-500",
   };
 }
 
@@ -104,27 +105,39 @@ export default function BlunderTimeline({ data }: Props) {
     : null;
 
   const overall = hasClock ? (data.overall["mine"] ?? Object.values(data.overall)[0]) : null;
+  const upq = overall?.under_pressure_quality;
+  const thresholdSec =
+    typeof data?.pressure_threshold_seconds === "number" ? data.pressure_threshold_seconds : null;
 
   return (
     <div className="space-y-5">
       {isMock && (
-        <p className="text-xs text-amber-700/80 text-center">
+        <p className="text-xs text-chess-warn/90 dark:text-chess-warn/80 text-center">
           {t("chart.mockData")}
         </p>
       )}
 
       {/* 클록 데이터가 있을 때: 요약 배지 */}
       {hasClock && overall && (
-        <div className="grid gap-3 text-xs sm:grid-cols-3">
+        <div
+          className={`grid gap-3 text-xs ${
+            upq ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"
+          }`}
+        >
           <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
             <p className="text-chess-muted">{t("chart.analyzedGames")}</p>
             <p className="mt-1 text-lg font-black text-chess-primary">{t("chart.gamesCount").replace("{n}", String(data!.games_with_clock))}</p>
           </div>
           <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
             <p className="text-chess-muted">{t("chart.timePressureRate")}</p>
-            <p className={`mt-1 text-lg font-black ${overall.pressure_ratio >= 0.3 ? "text-rose-700" : overall.pressure_ratio >= 0.15 ? "text-amber-700" : "text-emerald-700"}`}>
+            <p className={`mt-1 text-lg font-black ${overall.pressure_ratio >= 0.3 ? "text-chess-loss" : overall.pressure_ratio >= 0.15 ? "text-chess-warn" : "text-chess-win"}`}>
               {Math.round(overall.pressure_ratio * 100)}%
             </p>
+            {thresholdSec != null && (
+              <p className="mt-1 text-[10px] text-chess-muted leading-tight">
+                &lt;{thresholdSec}s
+              </p>
+            )}
           </div>
           <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
             <p className="text-chess-muted">{t("chart.avgThinkTime")}</p>
@@ -132,6 +145,25 @@ export default function BlunderTimeline({ data }: Props) {
               {overall.avg_time_spent != null ? t("chart.seconds").replace("{n}", String(overall.avg_time_spent)) : "-"}
             </p>
           </div>
+          {upq && (
+            <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
+              <p className="text-chess-muted">{t("chart.pressureSevereUnderPct")}</p>
+              <p
+                className={`mt-1 text-lg font-black ${
+                  upq.severe_under_pressure_ratio >= 0.35
+                    ? "text-chess-loss"
+                    : upq.severe_under_pressure_ratio >= 0.2
+                      ? "text-chess-warn"
+                      : "text-chess-win"
+                }`}
+              >
+                {Math.round(upq.severe_under_pressure_ratio * 100)}%
+              </p>
+              <p className="mt-1 text-[10px] text-chess-muted leading-tight">
+                {t("chart.pressureQualityFootnote")}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -139,25 +171,29 @@ export default function BlunderTimeline({ data }: Props) {
       <div className={phaseData && phaseData.length > 0 ? "grid gap-4 md:grid-cols-2" : ""}>
         {/* 페이즈별 압박률 카드형 막대 */}
         {phaseData && phaseData.length > 0 && (
-          <div className="bg-gradient-to-br from-chess-bg/80 to-chess-bg/30 border border-chess-border rounded-2xl p-4">
+          <div className="rounded-2xl border border-chess-border/70 dark:border-chess-border/50 bg-chess-bg/95 dark:bg-chess-elevated/12 p-4 shadow-sm">
             <div className="flex items-end justify-between gap-3 mb-3">
-              <p className="text-xs tracking-wide text-chess-muted">{t("chart.phasePressureMap")}</p>
+              <p className="text-xs font-medium tracking-wide text-chess-primary">{t("chart.phasePressureMap")}</p>
               {topRiskPhase && (
                 <p className="text-[11px] text-chess-muted">
-                  {t("chart.highestRisk")} <span className="font-bold text-chess-primary">{topRiskPhase.phase}</span>
+                  {t("chart.highestRisk")}{" "}
+                  <span className="font-semibold text-chess-primary">{topRiskPhase.phase}</span>
                 </p>
               )}
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {phaseData.map((entry) => {
                 const tone = pressureTone(entry.pressure_pct, t);
                 return (
-                  <div key={entry.phase} className="rounded-xl border border-chess-border/80 bg-chess-surface/70 px-3 py-3">
+                  <div
+                    key={entry.phase}
+                    className="rounded-xl border border-chess-border/55 dark:border-chess-border/40 bg-chess-surface/60 dark:bg-chess-bg/35 px-3 py-2.5"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-semibold text-sm text-chess-primary">{entry.phase}</p>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] px-2 py-1 rounded-full border ${tone.badge}`}>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${tone.badge}`}>
                           {tone.label}
                         </span>
                         <span className={`text-sm font-black tabular-nums ${tone.text}`}>
@@ -166,18 +202,15 @@ export default function BlunderTimeline({ data }: Props) {
                       </div>
                     </div>
 
-                    <div className="mt-2 relative h-2.5 w-full rounded-full bg-chess-bg border border-chess-border/60 overflow-hidden">
+                    {/* 읽기 전용 막대 (슬라이더 썸 제거) */}
+                    <div className="mt-2 h-2 w-full rounded-full overflow-hidden bg-chess-elevated dark:bg-chess-surface/50 ring-1 ring-chess-border/45 dark:ring-chess-border/30">
                       <div
                         className={`h-full rounded-full bg-gradient-to-r ${tone.bar}`}
-                        style={{ width: `${Math.max(entry.pressure_pct, 4)}%` }}
-                      />
-                      <span
-                        className={`absolute top-1/2 h-2.5 w-2.5 rounded-full border border-white/70 shadow -translate-y-1/2 ${tone.dot}`}
-                        style={{ left: `calc(${Math.max(entry.pressure_pct, 4)}% - 6px)` }}
+                        style={{ width: `${Math.max(entry.pressure_pct, 2)}%` }}
                       />
                     </div>
 
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-chess-muted">
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-chess-muted">
                       <span>{t("chart.sampleMoves").replace("{n}", String(entry.moves))}</span>
                       <span>{entry.avg_time != null ? t("chart.avgThink").replace("{n}", String(entry.avg_time)) : "-"}</span>
                     </div>
@@ -189,7 +222,7 @@ export default function BlunderTimeline({ data }: Props) {
         )}
 
         {/* 수 번호별 압박률 곡선 */}
-        <div className="bg-chess-bg/30 border border-chess-border rounded-2xl p-4">
+        <div className="rounded-2xl border border-chess-border/70 dark:border-chess-border/50 bg-chess-bg/90 dark:bg-chess-elevated/12 p-4 shadow-sm">
           <p className="text-xs tracking-wide text-chess-muted mb-2">
             {t("chart.pressureByMove")}{isMock ? t("chart.mockSuffix") : ""}
           </p>
@@ -202,16 +235,16 @@ export default function BlunderTimeline({ data }: Props) {
                     <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#C8CBC5" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#b9bdb4" />
                 <XAxis
                   dataKey="move_number"
                   tickFormatter={(v) => t("chart.moveN").replace("{n}", String(v))}
-                  tick={{ fill: "#5C5755", fontSize: 10 }}
+                  tick={{ fill: "#454039", fontSize: 10 }}
                 />
                 <YAxis
                   yAxisId="pressure"
                   tickFormatter={(v) => `${v}%`}
-                  tick={{ fill: "#5C5755", fontSize: 10 }}
+                  tick={{ fill: "#454039", fontSize: 10 }}
                   domain={[0, 100]}
                   width={32}
                 />

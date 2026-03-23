@@ -65,6 +65,7 @@ export interface PerformanceSummary {
 export type MoveTier = "TH" | "TF" | "T1" | "T2" | "T3" | "T4" | "T5" | "T6";
 
 export interface TopMoveInfo {
+  uci?: string;  // 화살표 표시용 (e2e4 → from e2, to e4)
   san: string;
   cp: number;
   rank: number;

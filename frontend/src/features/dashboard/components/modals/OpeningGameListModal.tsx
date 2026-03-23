@@ -22,8 +22,8 @@ function toAnalysisUrl(url: string): string {
 
 function getResultStyle(t: any, r: "win" | "loss" | "draw") {
   const map = {
-    win:  { label: t("term.win"), cls: "bg-emerald-700/10 text-emerald-700 border-emerald-700/30" },
-    loss: { label: t("term.loss"), cls: "bg-red-600/10 text-red-700 border-red-600/30" },
+    win:  { label: t("term.win"), cls: "bg-emerald-700/10 text-chess-win border-emerald-700/30" },
+    loss: { label: t("term.loss"), cls: "bg-red-600/10 text-chess-loss border-red-600/30" },
     draw: { label: t("term.draw"), cls: "bg-chess-border/30 text-chess-muted border-chess-muted/30" },
   };
   return map[r];
@@ -87,8 +87,7 @@ export default function OpeningGameListModal({ node, onClose }: Props) {
   const total = node.games;
   const winRate = node.win_rate;
   const winRateColor =
-    winRate >= 55 ? "text-emerald-700" :
-    winRate >= 45 ? "text-amber-700"   : "text-red-700";
+    winRate >= 50 ? "text-chess-win" : "text-chess-loss";
 
   const modal = (
     <div
@@ -135,11 +134,11 @@ export default function OpeningGameListModal({ node, onClose }: Props) {
         {/* W/D/L bar */}
         <div className="shrink-0 px-6 py-3 border-b border-chess-border/60">
           <div className="flex gap-2 text-xs mb-2">
-            <span className="text-emerald-700 font-semibold">{node.wins}{t("term.win").substring(0, 1).toUpperCase()}</span>
+            <span className="text-chess-win font-semibold">{node.wins}{t("term.win").substring(0, 1).toUpperCase()}</span>
             <span className="text-chess-muted">/</span>
             <span className="text-chess-muted">{node.draws}{t("term.draw").substring(0, 1).toUpperCase()}</span>
             <span className="text-chess-muted">/</span>
-            <span className="text-red-700 font-semibold">{node.losses}{t("term.loss").substring(0, 1).toUpperCase()}</span>
+            <span className="text-chess-loss font-semibold">{node.losses}{t("term.loss").substring(0, 1).toUpperCase()}</span>
           </div>
           {total > 0 && (
             <div className="flex w-full h-1.5 rounded-full overflow-hidden gap-px">

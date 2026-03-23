@@ -17,6 +17,7 @@ import math
 import os
 import shutil
 import logging
+import threading
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Tuple, Dict
@@ -75,14 +76,6 @@ T5_MAX_WIN_PCT_LOSS = 14.0
 T6_MAX_CP_LOSS = 140
 T6_MAX_WIN_PCT_LOSS = 22.0
 
-# Brilliant 후보 임계
-BRILLIANT_SWING_CP = 60           # comeback: -60→0 스윙이면 충분 (기존 120은 불가능한 요구값)
-BRILLIANT_SWING_WIN_PCT = 7.0     # 승률 7% 개선 (기존 12.0 → 완화)
-BRILLIANT_COMEBACK_BEFORE_CP = -60  # 불리한 상태 기준 완화 (기존 -80)
-BRILLIANT_COMEBACK_AFTER_CP = 0     # 균형화로도 충분 (기존 20)
-BRILLIANT_SACRIFICE_CP_IMPROVE = 25 # 희생 후 0.25폰 개선으로도 인정 (기존 70)
-
-
 def _compute_accuracy(analyzed_moves: list) -> float:
     """
     per-move accuracy의 조화평균으로 게임 정확도 계산 (Lichess 방식)
@@ -128,7 +121,7 @@ class MoveTier(Enum):
 TIER_META = {
     MoveTier.TF: {"label": "강제수", "emoji": "TF", "color": "#0ea5e9", "description": "강제로 둘 수밖에 없는 수"},
     MoveTier.TH: {"label": "이론", "emoji": "TH", "color": "#8b5cf6", "description": "오프닝 이론수"},
-    MoveTier.T1: {"label": "브릴리언트", "emoji": "!!", "color": "#22c55e", "description": "역전/희생급 명수"},
+    MoveTier.T1: {"label": "브릴리언트", "emoji": "!!", "color": "#22c55e", "description": "그 게임에서 가장 잘 둔 수"},
     MoveTier.T2: {"label": "최상", "emoji": "★", "color": "#10b981", "description": "최상급 정확수"},
     MoveTier.T3: {"label": "우수", "emoji": "✓", "color": "#34d399", "description": "우수한 수"},
     MoveTier.T4: {"label": "양호", "emoji": "○", "color": "#84cc16", "description": "양호한 수"},
@@ -429,47 +422,28 @@ def _material_score(board: chess.Board, color: chess.Color) -> int:
     )
 
 
-def _is_brilliant_candidate(
-    *,
-    base_tier: MoveTier,
-    cp_before: Optional[int],
-    cp_after: Optional[int],
-    win_pct_before: float,
-    win_pct_after: float,
-    material_before: int,
-    material_after: int,
-) -> bool:
+def _promote_best_t2_to_t1(
+    white_moves: List[AnalyzedMove],
+    black_moves: List[AnalyzedMove],
+) -> None:
     """
-    T1 Brilliant 승급 판단.
-
-    comeback (T2만 해당):
-      - 불리한 상태(cp_before ≤ BRILLIANT_COMEBACK_BEFORE_CP)에서
-        균형/역전(cp_after ≥ BRILLIANT_COMEBACK_AFTER_CP)으로 전환
-      - cp 개선 또는 승률 개선이 임계 이상
-
-    sacrifice_brilliant (T2 또는 T3):
-      - 기물을 희생한 뒤 평가가 유의미하게 개선된 경우
-      - Stockfish 낮은 깊이에서 희생수가 2위로 평가될 수 있어 T3도 허용
+    T2 수 중 게임에서 가장 잘 둔 수 1개만 T1으로 승격.
+    정렬: cp_loss ↓, win_pct_loss ↓, is_only_best ↑, user_rank ↑
     """
-    if base_tier not in (MoveTier.T2, MoveTier.T3):
-        return False
-
-    before = cp_before if cp_before is not None else 0
-    after = cp_after if cp_after is not None else 0
-    cp_swing = after - before
-    win_swing = win_pct_after - win_pct_before
-    sacrificed = material_after < material_before
-
-    # comeback: 정밀한 수만 해당 (T2 전용)
-    comeback = (
-        base_tier == MoveTier.T2
-        and before <= BRILLIANT_COMEBACK_BEFORE_CP
-        and after >= BRILLIANT_COMEBACK_AFTER_CP
-        and (cp_swing >= BRILLIANT_SWING_CP or win_swing >= BRILLIANT_SWING_WIN_PCT)
+    pool = white_moves + black_moves
+    t2_only = [m for m in pool if m.tier == MoveTier.T2]
+    if not t2_only:
+        return
+    t2_only.sort(
+        key=lambda m: (
+            m.cp_loss,
+            m.win_pct_loss,
+            0 if m.is_only_best else 1,
+            0 if m.user_move_rank == 1 else 1,
+            m.halfmove,
+        )
     )
-    # 희생 브릴리언트: T2 또는 T3 (낮은 깊이 분석에서 희생수가 2위로 평가될 수 있음)
-    sacrifice_brilliant = sacrificed and (cp_swing >= BRILLIANT_SACRIFICE_CP_IMPROVE or win_swing >= BRILLIANT_SWING_WIN_PCT)
-    return comeback or sacrifice_brilliant
+    t2_only[0].tier = MoveTier.T1
 
 
 def analyze_single_game_sync(
@@ -608,7 +582,7 @@ def analyze_single_game_sync(
                     
                     # 상위 수 정보 정리
                     top_moves_info = [
-                        {"san": san, "cp": cp, "rank": rank}
+                        {"uci": uci, "san": san, "cp": cp, "rank": rank}
                         for uci, san, cp, rank in top_moves_raw[:5]
                     ]
                     
@@ -808,27 +782,16 @@ def _analyze_single_move_with_fen(
         elif len(top_moves_raw) == 1 and user_rank == 1:
             is_only_best = True
 
-    # 등급 결정
+    # 등급 결정 (T1은 게임 종료 후 T2 중 최고의 수 1개로 확정)
     tier = _determine_tier(cp_loss, win_pct_loss, user_rank, is_only_best)
-    if _is_brilliant_candidate(
-        base_tier=tier,
-        cp_before=cp_before,
-        cp_after=cp_after,
-        win_pct_before=win_pct_before,
-        win_pct_after=win_pct_after,
-        material_before=material_before,
-        material_after=material_after,
-    ):
-        tier = MoveTier.T1
-
     if is_th:
         tier = MoveTier.TH
     if is_forced:
         tier = MoveTier.TF
 
     top_moves_info = [
-        {"san": san, "cp": cp, "rank": rank}
-        for _, san, cp, rank in top_moves_raw[:3]
+        {"uci": uci, "san": san, "cp": cp, "rank": rank}
+        for uci, san, cp, rank in top_moves_raw[:3]
     ]
 
     board.push(move)  # 호출자와 상태 동기화
@@ -861,6 +824,7 @@ def analyze_game_streaming(
     stockfish_depth: Optional[int] = None,
     on_init: Optional[Callable] = None,
     on_move: Optional[Callable] = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> Optional[BothPlayersAnalysisResult]:
     """
     SSE 스트리밍용 게임 분석. 수 하나 분석 완료 시마다 on_move 콜백을 호출하여
@@ -872,6 +836,7 @@ def analyze_game_streaming(
         stockfish_depth: Stockfish 분석 깊이 (None이면 시간 기반)
         on_init: 초기 정보 콜백 (total_moves, players, opening)
         on_move: 수 분석 완료 콜백 (AnalyzedMove dict)
+        cancel_event: 설정 시 is_set()이면 다음 수로 넘어가기 전에 중단 (클라이언트 연결 끊김 등)
 
     Returns:
         BothPlayersAnalysisResult (요약 통계 포함)
@@ -906,6 +871,7 @@ def analyze_game_streaming(
 
     white_moves: List[AnalyzedMove] = []
     black_moves: List[AnalyzedMove] = []
+    all_plies: List[AnalyzedMove] = []
 
     try:
         with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
@@ -920,6 +886,10 @@ def analyze_game_streaming(
             prev_multipv: Optional[List[chess.engine.InfoDict]] = None
 
             while node.variations:
+                if cancel_event is not None and cancel_event.is_set():
+                    logger.info("[Game Analysis] cancel_event set; stopping Stockfish loop")
+                    return None
+
                 next_node = node.variations[0]
                 move = next_node.move
                 moving_color = board.turn
@@ -939,9 +909,7 @@ def analyze_game_streaming(
                         white_moves.append(analyzed)
                     else:
                         black_moves.append(analyzed)
-
-                    if on_move:
-                        on_move(_analyzed_move_to_dict(analyzed))
+                    all_plies.append(analyzed)
 
                 # board.push는 _analyze_single_move_with_fen 내부에서 수행
                 node = next_node
@@ -953,6 +921,12 @@ def analyze_game_streaming(
     except Exception as exc:
         logger.exception(f"Game analysis error: {exc}")
         raise
+
+    _promote_best_t2_to_t1(white_moves, black_moves)
+
+    if on_move:
+        for m in sorted(all_plies, key=lambda x: x.halfmove):
+            on_move(_analyzed_move_to_dict(m))
 
     white_analysis = PlayerAnalysisResult(
         username=white_player,

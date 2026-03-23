@@ -156,13 +156,18 @@ async def get_time_pressure(
     username: str,
     time_class: str = Query(default="blitz"),
     max_games: int = Query(default=300, ge=50, le=5000),
-    pressure_threshold: float = Query(default=30.0, description="시간 압박 기준 잔여 시간(초)"),
+    pressure_threshold: Optional[float] = Query(
+        default=None,
+        gt=0,
+        description="시간 압박 기준 잔여 시간(초). 미지정 시 time_class/게임 TimeControl 기반 동적 계산.",
+    ),
     since_ms: Optional[int] = Query(default=None),
     until_ms: Optional[int] = Query(default=None),
 ):
     """
     MVP 섹션 3-A: 시간 압박 분석
     - PGN 클록 어노테이션 `{[%clk H:MM:SS]}` 파싱
+    - 시간 압박 임계값: 사용자 지정값 또는 time_class/TimeControl 기반 동적 계산
     - 수 페이즈(opening/middlegame/endgame)별 시간 압박 비율
     - 수 번호별 평균 소비 시간 + 압박 퍼센트
     - games_with_clock 이 0이면 해당 플랫폼/타임클래스에 클록 데이터가 없음.
@@ -180,21 +185,19 @@ async def get_time_pressure(
                 since_ms=since_ms,
                 until_ms=until_ms,
                 clocks=True,
-                evals=False,
+                evals=True,
             )
 
-        # #region agent log
-        import time as _t, json as _j
-        try:
-            _pgn_count2 = sum(1 for g in games if getattr(g, "pgn", None))
-            with open("/app/debug-ce40e3.log","a") as _f:
-                _f.write(_j.dumps({"sessionId":"ce40e3","timestamp":int(_t.time()*1000),"location":"stats.py:get_time_pressure","message":"time-pressure games PGN availability","hypothesisId":"A-C","data":{"total_games":len(games),"games_with_pgn":_pgn_count2,"platform":str(platform),"username":username}})+"\n")
-        except Exception:
-            pass
-        # #endregion
         # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
         parsed = parse_games_bulk(games, pressure_threshold=pressure_threshold)
-        return analysis_svc.get_time_pressure_stats(parsed, username)
+        result = analysis_svc.get_time_pressure_stats(parsed, username)
+        # 프론트는 기존 필드만 사용하므로 메타 정보는 하위호환으로 추가한다.
+        result["pressure_threshold_mode"] = "fixed" if pressure_threshold is not None else "dynamic"
+        if pressure_threshold is not None:
+            result["pressure_threshold_seconds"] = float(pressure_threshold)
+        elif parsed:
+            result["pressure_threshold_seconds"] = float(parsed[0].pressure_threshold_seconds)
+        return result
     except LichessRateLimitedError:
         raise
     except Exception as e:
