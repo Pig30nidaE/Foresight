@@ -25,7 +25,7 @@ export default function FilterBar({
   brackets,
 }: Props) {
   return (
-    <div className="flex flex-wrap gap-3 items-center bg-chess-surface/60 border border-chess-border rounded-2xl p-5">
+    <div className="flex flex-wrap gap-3 items-center bg-chess-surface/60 dark:bg-chess-elevated/20 border border-chess-border/80 dark:border-chess-border rounded-2xl p-5">
       {/* Time control */}
       <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
         {TIME_CLASSES.map((tc) => (
@@ -35,8 +35,8 @@ export default function FilterBar({
             onClick={() => onSpeedChange(tc)}
             className={`px-3 py-2 text-sm capitalize transition-colors ${
               speed === tc
-                ? "bg-chess-primary text-white"
-                : "bg-chess-surface text-chess-muted hover:text-chess-primary"
+                ? "bg-chess-inverse text-white"
+                : "bg-chess-surface dark:bg-chess-bg/60 text-chess-muted hover:text-chess-primary"
             }`}
           >
             {tc}
@@ -48,7 +48,7 @@ export default function FilterBar({
       <select
         value={rating}
         onChange={(e) => onRatingChange(Number(e.target.value))}
-        className="bg-chess-surface border border-chess-border rounded-lg px-3 py-2 text-chess-primary text-sm focus:outline-none focus:border-chess-accent transition-colors"
+        className="bg-chess-surface dark:bg-chess-bg border border-chess-border rounded-lg px-3 py-2 text-chess-primary text-sm focus:outline-none focus:ring-2 focus:ring-chess-accent/25 focus:border-chess-accent transition-colors"
       >
         {brackets.map((b) => (
           <option key={b.lichess_rating} value={b.lichess_rating}>
@@ -67,9 +67,9 @@ export default function FilterBar({
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               color === c
                 ? c === "white"
-                  ? "bg-chess-bg text-chess-primary"
-                  : "bg-chess-primary text-white"
-                : "bg-chess-surface text-chess-muted hover:text-chess-primary"
+                  ? "bg-chess-bg dark:bg-chess-elevated text-chess-primary shadow-sm"
+                  : "bg-chess-inverse text-white shadow-sm"
+                : "bg-chess-surface dark:bg-chess-bg/60 text-chess-muted hover:text-chess-primary"
             }`}
           >
             {c === "white" ? "⬜ White" : "⬛ Black"}

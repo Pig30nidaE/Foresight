@@ -185,7 +185,7 @@ class OpeningTierService:
         return f"{rating}|{speed}|{color}"
 
     def _current_stamp(self) -> str:
-        # 자정 기준은 서버(UTC) 날짜로 계산
+        """캐시 스탬프: UTC 기준 '오늘' 날짜 (YYYY-MM-DD)."""
         return datetime.utcnow().strftime(_CACHE_STAMP_FORMAT)
 
     async def _ensure_async_primitives(self) -> None:
@@ -232,7 +232,7 @@ class OpeningTierService:
             return False
 
     def start_midnight_cache_refresher(self) -> None:
-        """다음 자정에 캐시를 일괄 재계산합니다."""
+        """UTC 00:00에 캐시를 일괄 재계산합니다."""
         if self._scheduler_task is not None:
             return
 
@@ -244,6 +244,10 @@ class OpeningTierService:
                     if next_midnight <= now:
                         next_midnight = next_midnight + timedelta(days=1)
                     sleep_s = (next_midnight - now).total_seconds()
+                    logger.info(
+                        "Opening tier cache: next refresh at %s UTC",
+                        next_midnight.strftime(_CACHE_STAMP_FORMAT),
+                    )
                     await asyncio.sleep(max(sleep_s, 0))
                     await self.refresh_cache_for_all()
                 except asyncio.CancelledError:
@@ -264,20 +268,26 @@ class OpeningTierService:
 
     async def get_opening_tiers(
         self, rating: int, speed: str, color: str
-    ) -> Tuple[List[Dict[str, Any]], str]:
-        """오프닝 티어 목록과 데이터 기간 반환.
+    ) -> Tuple[List[Dict[str, Any]], str, str]:
+        """오프닝 티어 목록, 데이터 기간, 마지막 수집일(YYYY-MM-DD) 반환.
 
         캐시가 로드된 경우에는 캐시에서 반환하고,
         캐시가 없는 경우(서버 시작 직후/첫 자정 전 등)에는 요청 시점에만 탐색합니다.
         """
         await self._ensure_async_primitives()
 
+        stamp = self._current_stamp()
+
         assert self._cache_ready is not None
         if self._cache_ready.is_set() and self._tier_cache is not None:
             key = self._cache_key(rating, speed, color)
             cached = self._tier_cache.get(key)
             if cached is not None and self._cache_since and self._cache_until:
-                return cached, f"{self._cache_since} ~ {self._cache_until}"
+                return (
+                    cached,
+                    f"{self._cache_since} ~ {self._cache_until}",
+                    self._cache_stamp or stamp,
+                )
 
         since, until = _compute_date_range()
         openings = await self._fetch_openings(rating, speed, since=since, until=until)
@@ -289,7 +299,7 @@ class OpeningTierService:
             if self._cache_since is None:
                 self._cache_since = since
                 self._cache_until = until
-        return tiers, f"{since} ~ {until}"
+        return tiers, f"{since} ~ {until}", stamp
 
     def get_bracket_labels(self, speed: str) -> List[RatingBracket]:  # noqa: ARG002
         """레이팅 구간 목록 반환 (Chess.com 기준 라벨)."""

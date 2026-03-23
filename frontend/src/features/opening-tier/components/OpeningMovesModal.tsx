@@ -300,7 +300,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                 href={detail.youtube_search_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600/8 text-red-700 border border-red-600/28 hover:bg-red-600/15 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600/8 text-chess-loss border border-red-600/28 hover:bg-red-600/15 transition-colors"
               >
                 <svg
                   className="w-3.5 h-3.5"
@@ -318,7 +318,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                 href={`https://www.youtube.com/results?search_query=${encodeURIComponent(entry.name + " " + entry.eco + " 체스 오프닝 강의 한국어")}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600/8 text-red-700 border border-red-600/28 hover:bg-red-600/15 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600/8 text-chess-loss border border-red-600/28 hover:bg-red-600/15 transition-colors"
               >
                 <svg
                   className="w-3.5 h-3.5"

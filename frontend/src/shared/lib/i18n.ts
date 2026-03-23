@@ -127,8 +127,8 @@ export const ko = {
   "as.noData": "데이터 없음",
   "as.white": "⬜ 백",
   "as.black": "⬛ 흑",
-  "as.section3Title": "시간 압박 블런더 비율",
-  "as.section3Desc": "남은 시간에 따른 블런더 발생률 추이",
+  "as.section3Title": "시간 압박",
+  "as.section3Desc": "타임 컨트롤에 맞춘 잔여 시간 기준으로 압박 수 비율을 보여줍니다. Lichess는 저장된 엔진 분석이 있는 압박 수에 대해 실수·블런더 비율을 함께 집계합니다.",
 
   // Charts
   "tier.TF": "강제",
@@ -175,6 +175,10 @@ export const ko = {
   "chart.accuracyRate": "정확도",
   "chart.acpl": "평균 CP 손실",
   "chart.notEnoughFirstMoveData": "데이터가 부족합니다.",
+  "chart.firstMoveChartTitle": "첫 수 분포",
+  "chart.shareVsMax": "승·무·패 비율 (%)",
+  "chart.winRateColumn": "승률",
+  "chart.sampleN": "n = {n}",
   "chart.white": "백 (White)",
   "chart.black": "흑 (Black)",
   "chart.nGames": "{n}국",
@@ -273,6 +277,8 @@ export const ko = {
   "pattern.withRisk": " · 블런더 리스크 포함",
   "pattern.withStyle": " · 스타일 분석 포함",
   "chart.pressureRatePct": "시간 압박 비율(%)",
+  "chart.pressureSevereUnderPct": "압박 중 중대 오차 비율",
+  "chart.pressureQualityFootnote": "※ 판정이 붙은 압박 수(Lichess 분석) 기준",
   "chart.avgThinkSec": "평균 사고 시간(초)",
 
   // utils
@@ -367,7 +373,7 @@ export const ko = {
 
   "tier.title": "오프닝 티어표",
   "tier.subtitle": "레이팅 구간별 오프닝 승률 랭킹 — Lichess 기보 기반 집계",
-  "tier.infoLichess": "오프닝 데이터는 LiChess의 데이터를 기반으로 환산 및 분석되었습니다.",
+  "tier.infoLichess": "오프닝 데이터는 LiChess의 데이터를 기반으로 환산 및 분석되었습니다. 매일 00:00(UTC)에 데이터가 갱신됩니다.",
   "tier.loading": "오프닝 데이터 수집 중...",
   "tier.loadingDetail": "첫 요청 시 Lichess Explorer 탐색으로 최대 2–3분 소요됩니다.",
   "tier.error": "데이터 로드에 실패했습니다. 잠시 후 다시 시도해 주세요.",
@@ -375,6 +381,7 @@ export const ko = {
   "tier.lackDataDetail": "선택한 레이팅 구간 · 타임 컨트롤 조합에서<br></br>통계적으로 유의미한 게임 수를 확보한 오프닝이 없습니다.",
   "tier.analyzedTotal": "총 {n}개 오프닝 분석됨",
   "tier.periodBasis": "{date} 기준",
+  "tier.lastCollected": "마지막 수집된 날짜: {date}",
   "tier.noMoves": "수 순서 정보 없음",
   "tier.moveSeq": "수 순서",
   "tier.mainIdea": "메인 아이디어",
@@ -520,8 +527,8 @@ export const en: typeof ko = {
   "as.noData": "No data available",
   "as.white": "⬜ White",
   "as.black": "⬛ Black",
-  "as.section3Title": "Time Pressure Blunder Rate",
-  "as.section3Desc": "Blunder rate trend based on remaining time",
+  "as.section3Title": "Time pressure",
+  "as.section3Desc": "Share of moves played with little time left, using thresholds suited to each time control. On Lichess, severe errors under pressure use server analysis when available.",
 
   // Charts
   "tier.TF": "Forced",
@@ -568,6 +575,10 @@ export const en: typeof ko = {
   "chart.accuracyRate": "Accuracy",
   "chart.acpl": "Avg CP Loss",
   "chart.notEnoughFirstMoveData": "Not enough data available.",
+  "chart.firstMoveChartTitle": "First-move distribution",
+  "chart.shareVsMax": "Win / draw / loss (%)",
+  "chart.winRateColumn": "Win %",
+  "chart.sampleN": "n = {n}",
   "chart.white": "White",
   "chart.black": "Black",
   "chart.nGames": "{n} games",
@@ -666,6 +677,8 @@ export const en: typeof ko = {
   "pattern.withRisk": " · with blunder risk",
   "pattern.withStyle": " · with style analysis",
   "chart.pressureRatePct": "Time Pressure Rate (%)",
+  "chart.pressureSevereUnderPct": "Severe errors under pressure",
+  "chart.pressureQualityFootnote": "※ Among pressure moves with Lichess judgments only",
   "chart.avgThinkSec": "Avg Think Time (s)",
 
   // utils
@@ -760,7 +773,7 @@ export const en: typeof ko = {
 
   "tier.title": "Opening Tier List",
   "tier.subtitle": "Opening win rate rankings by rating — Based on Lichess data",
-  "tier.infoLichess": "Opening data is converted and analyzed based on Lichess data.",
+  "tier.infoLichess": "Opening data is converted and analyzed based on Lichess data. Data is refreshed daily at 00:00 UTC.",
   "tier.loading": "Collecting opening data...",
   "tier.loadingDetail": "First request may take up to 2-3 minutes via Lichess Explorer.",
   "tier.error": "Failed to load data. Please try again later.",
@@ -768,6 +781,7 @@ export const en: typeof ko = {
   "tier.lackDataDetail": "No openings have a statistically significant number of games<br></br>for the selected rating and time control combination.",
   "tier.analyzedTotal": "Total {n} openings analyzed",
   "tier.periodBasis": "As of {date}",
+  "tier.lastCollected": "Last collected: {date}",
   "tier.noMoves": "No move sequence information",
   "tier.moveSeq": "Move Sequence",
   "tier.mainIdea": "Main Idea",

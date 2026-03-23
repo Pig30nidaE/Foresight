@@ -40,7 +40,7 @@ const TABS = [
 const CATEGORY_COLOR: Record<string, string> = {
   time:     "text-amber-700",
   position: "text-blue-700",
-  opening:  "text-emerald-700",
+  opening:  "text-chess-win",
   endgame:  "text-purple-700",
   balance:  "text-chess-primary",
 };
@@ -83,12 +83,12 @@ function AiInsightsSection({ insights, isLoading }: { insights?: AiInsights | nu
         <div className="px-5 pb-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl bg-emerald-700/8 border border-emerald-700/30 p-3">
-              <p className="text-xs font-bold text-emerald-700 mb-1">{t("pattern.bestSituation")}</p>
-              <p className="text-xs text-emerald-800 leading-snug">{insights.best_situation}</p>
+              <p className="text-xs font-bold text-chess-win mb-1">{t("pattern.bestSituation")}</p>
+              <p className="text-xs text-chess-win leading-snug">{insights.best_situation}</p>
             </div>
             <div className="rounded-xl bg-red-600/8 border border-red-600/28 p-3">
-              <p className="text-xs font-bold text-red-700 mb-1">{t("pattern.worstSituation")}</p>
-              <p className="text-xs text-red-800 leading-snug">{insights.worst_situation}</p>
+              <p className="text-xs font-bold text-chess-loss mb-1">{t("pattern.worstSituation")}</p>
+              <p className="text-xs text-chess-loss leading-snug">{insights.worst_situation}</p>
             </div>
           </div>
           <div className="space-y-2">
@@ -140,15 +140,15 @@ function XGBoostProfileSection({ profile }: { profile: XGBoostProfile }) {
   // ── 위험 수준 레이블 ────────────────────────────────────────
   const riskLevel =
     risk >= 35
-      ? { label: t("pattern.high"),  icon: "⚠️", color: "text-red-700",     bg: "bg-red-600/10 border-red-600/30",         bar: "bg-red-600"     }
+      ? { label: t("pattern.high"),  icon: "⚠️", color: "text-chess-loss",     bg: "bg-red-600/10 border-red-600/30",         bar: "bg-red-600"     }
       : risk >= 20
       ? { label: t("pattern.warning"),  icon: "🔶", color: "text-amber-700",   bg: "bg-amber-600/10 border-amber-600/30",     bar: "bg-amber-600"   }
-      :   { label: t("pattern.good"), icon: "✅", color: "text-emerald-700", bg: "bg-emerald-700/10 border-emerald-700/30", bar: "bg-emerald-600" };
+      :   { label: t("pattern.good"), icon: "✅", color: "text-chess-win", bg: "bg-emerald-700/10 border-emerald-700/30", bar: "bg-emerald-600" };
 
   // ── 예측 신뢰도 문구 합성 ───────────────────────────────────
   const confidence: { label: string; detail: string; color: string } =
     meaningful && lift !== null && lift >= 5
-      ? { label: t("pattern.highConfidence"),  detail: t("pattern.confDetail1").replace("{n}", String(games)).replace("{m}", String(lift.toFixed(1))),  color: "text-emerald-700" }
+      ? { label: t("pattern.highConfidence"),  detail: t("pattern.confDetail1").replace("{n}", String(games)).replace("{m}", String(lift.toFixed(1))),  color: "text-chess-win" }
       : meaningful
       ? { label: t("pattern.midConfidence"),  detail: t("pattern.confDetail2").replace("{n}", String(games)),                  color: "text-amber-700"   }
       : games >= 40
@@ -237,14 +237,14 @@ function XGBoostProfileSection({ profile }: { profile: XGBoostProfile }) {
                   <p className="text-[10px] text-chess-muted leading-snug">{t("pattern.f1Desc")}</p>
                 </div>
                 <div className="rounded-md border border-chess-border bg-chess-bg/80 px-2.5 py-2 space-y-0.5">
-                  <p className={`text-xs font-semibold ${lift !== null && lift >= 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                  <p className={`text-xs font-semibold ${lift !== null && lift >= 0 ? "text-chess-win" : "text-amber-700"}`}>
                     {lift !== null ? t("pattern.lift").replace("{val}", `${lift >= 0 ? "+" : ""}${lift.toFixed(1)}`) : "—"}
                   </p>
                   <p className="text-[10px] text-chess-muted leading-snug">{t("pattern.liftDesc")}</p>
                 </div>
               </div>
               {profile.quality_note && (
-                <p className={`text-[10px] leading-snug px-1 ${meaningful ? "text-emerald-700" : "text-amber-700"}`}>
+                <p className={`text-[10px] leading-snug px-1 ${meaningful ? "text-chess-win" : "text-amber-700"}`}>
                   {profile.quality_note}
                 </p>
               )}
@@ -292,15 +292,15 @@ function ClusterCard({ cluster }: { cluster: ClusterInfo }) {
     cluster.is_weakness ? "border-red-600/35 bg-red-600/6" :
     cluster.is_strength ? "border-emerald-700/35 bg-emerald-700/6" :
     "border-chess-border bg-chess-bg/80";
-  const wrColor = cluster.win_rate >= 55 ? "text-emerald-700" : cluster.win_rate >= 40 ? "text-amber-700" : "text-red-700";
-  const wrBg    = cluster.win_rate >= 55 ? "bg-emerald-600"   : cluster.win_rate >= 40 ? "bg-amber-600"   : "bg-red-600";
+  const wrColor = cluster.win_rate >= 50 ? "text-chess-win" : "text-chess-loss";
+  const wrBg    = cluster.win_rate >= 50 ? "bg-emerald-600" : "bg-red-600";
   return (
     <div className={`rounded-xl border p-3.5 space-y-2 ${border}`}>
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-semibold text-chess-primary leading-snug">{cluster.label}</span>
         <div className="flex items-center gap-1.5 shrink-0">
-          {cluster.is_weakness && <span className="text-xs text-red-700 font-bold">{t("pattern.weakness")}</span>}
-          {cluster.is_strength && <span className="text-xs text-emerald-700 font-bold">{t("pattern.strength")}</span>}
+          {cluster.is_weakness && <span className="text-xs text-chess-loss font-bold">{t("pattern.weakness")}</span>}
+          {cluster.is_strength && <span className="text-xs text-chess-win font-bold">{t("pattern.strength")}</span>}
           <span className={`text-sm font-bold ${wrColor}`}>{cluster.win_rate.toFixed(0)}%</span>
         </div>
       </div>
@@ -327,7 +327,7 @@ function ScoreBar({ score }: { score: number }) {
       <div className="flex-1 bg-chess-border/60 rounded-full h-1.5 overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${safeScore}%` }} />
       </div>
-      <span className={`text-xs font-bold w-8 text-right ${safeScore >= 65 ? "text-emerald-700" : safeScore >= 45 ? "text-amber-700" : "text-red-700"}`}>{Math.round(safeScore)}</span>
+      <span className={`text-xs font-bold w-8 text-right ${safeScore >= 65 ? "text-chess-win" : safeScore >= 45 ? "text-amber-700" : "text-chess-loss"}`}>{Math.round(safeScore)}</span>
     </div>
   );
 }
@@ -356,9 +356,9 @@ function PatternCard({ p, highlight, onClick, isLastOdd }: { p: TacticalPattern;
   const hasInsight = !!p.insight;
   const hasGames = (p.top_games?.length ?? 0) > 0;
   const insightBg = highlight === "strength"
-    ? "bg-emerald-700/8 border-emerald-700/35 text-emerald-800"
+    ? "bg-emerald-700/8 border-emerald-700/35 text-chess-win"
     : highlight === "weakness"
-    ? "bg-red-600/8 border-red-600/35 text-red-800"
+    ? "bg-red-600/8 border-red-600/35 text-chess-loss"
     : "bg-blue-700/8 border-blue-700/30 text-blue-800";
 
   return (
@@ -391,8 +391,8 @@ function PatternCard({ p, highlight, onClick, isLastOdd }: { p: TacticalPattern;
           {p.situation_id != null && p.situation_id > 0 && (
             <span className="text-[10px] px-1 py-0.5 rounded bg-chess-bg text-chess-muted border border-chess-border font-mono shrink-0">#{p.situation_id}</span>
           )}
-          {highlight === "strength" && <span className="text-xs text-emerald-700 font-bold shrink-0">★</span>}
-          {highlight === "weakness" && <span className="text-xs text-red-700 font-bold shrink-0">▼</span>}
+          {highlight === "strength" && <span className="text-xs text-chess-win font-bold shrink-0">★</span>}
+          {highlight === "weakness" && <span className="text-xs text-chess-loss font-bold shrink-0">▼</span>}
         </div>
         <span className={`text-xs px-1.5 py-0.5 rounded-md border shrink-0 ${catBg} ${catColor}`}>
           {(categoryLabelMap as any)[p.category] ?? p.category}
@@ -403,8 +403,8 @@ function PatternCard({ p, highlight, onClick, isLastOdd }: { p: TacticalPattern;
       {hasMetric && (
         <div className="flex items-end gap-2">
           <span className={`text-3xl font-black leading-none ${
-            highlight === "strength" ? "text-emerald-700" :
-            highlight === "weakness" ? "text-red-700" :
+            highlight === "strength" ? "text-chess-win" :
+            highlight === "weakness" ? "text-chess-loss" :
             "text-chess-primary"
           }`}>
             {metricValue!.toFixed(p.key_metric_unit === "cp" ? 1 : 0)}
@@ -442,7 +442,7 @@ function PatternCard({ p, highlight, onClick, isLastOdd }: { p: TacticalPattern;
           </div>
           <div className="grid grid-cols-3 gap-1.5 text-[10px]">
             <div className="rounded-md border border-emerald-700/25 bg-emerald-700/8 px-2 py-1">
-              <p className="text-emerald-700 font-semibold">{t("pattern.maintainSuccess")}</p>
+              <p className="text-chess-win font-semibold">{t("pattern.maintainSuccess")}</p>
               <p className="text-chess-primary font-bold">{safeNumber(p.chart_data.maintained ?? p.chart_data.converted)}</p>
             </div>
             <div className="rounded-md border border-amber-700/25 bg-amber-700/8 px-2 py-1">
@@ -450,7 +450,7 @@ function PatternCard({ p, highlight, onClick, isLastOdd }: { p: TacticalPattern;
               <p className="text-chess-primary font-bold">{safeNumber(p.chart_data.reversed_mid ?? p.chart_data.shaky)}</p>
             </div>
             <div className="rounded-md border border-red-700/25 bg-red-700/8 px-2 py-1">
-              <p className="text-red-700 font-semibold">{t("pattern.endReversal")}</p>
+              <p className="text-chess-loss font-semibold">{t("pattern.endReversal")}</p>
               <p className="text-chess-primary font-bold">{safeNumber(p.chart_data.reversed_end ?? p.chart_data.blown)}</p>
             </div>
           </div>
@@ -470,7 +470,7 @@ function PatternCard({ p, highlight, onClick, isLastOdd }: { p: TacticalPattern;
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-xs text-emerald-700/80 hover:text-emerald-700 transition-colors"
+              className="inline-flex items-center gap-1 text-xs text-chess-win/80 hover:text-chess-win transition-colors"
             >
               <span>♟ 예시 게임</span><span>→</span>
             </a>
@@ -493,22 +493,22 @@ function SummaryRow({ data, onSelect }: { data: TacticalAnalysis; onSelect: (p: 
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="rounded-2xl bg-emerald-700/8 border border-emerald-700/30 p-4">
-        <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-2.5">{t("pattern.topStrengths")}</p>
+        <p className="text-xs font-bold text-chess-win uppercase tracking-wide mb-2.5">{t("pattern.topStrengths")}</p>
         {data.strengths.map((p) => (
           <button key={p.label} onClick={() => onSelect(p)} className="flex items-center gap-1.5 py-1 w-full text-left hover:opacity-80 transition-opacity">
             <span className="text-sm">{p.icon}</span>
             <span className="text-chess-primary text-xs font-medium flex-1 truncate">{p.label}</span>
-            <span className="ml-auto text-emerald-700 text-xs font-bold">{p.score}</span>
+            <span className="ml-auto text-chess-win text-xs font-bold">{p.score}</span>
           </button>
         ))}
       </div>
       <div className="rounded-2xl bg-red-600/8 border border-red-600/30 p-4">
-        <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-2.5">{t("pattern.needsImprovement")}</p>
+        <p className="text-xs font-bold text-chess-loss uppercase tracking-wide mb-2.5">{t("pattern.needsImprovement")}</p>
         {data.weaknesses.map((p) => (
           <button key={p.label} onClick={() => onSelect(p)} className="flex items-center gap-1.5 py-1 w-full text-left hover:opacity-80 transition-opacity">
             <span className="text-sm">{p.icon}</span>
             <span className="text-chess-primary text-xs font-medium flex-1 truncate">{p.label}</span>
-            <span className="ml-auto text-red-700 text-xs font-bold">{p.score}</span>
+            <span className="ml-auto text-chess-loss text-xs font-bold">{p.score}</span>
           </button>
         ))}
       </div>
@@ -588,7 +588,7 @@ export default function TacticalPatternsCard({ data, isLoading }: Props) {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${
                   activeTab === tab.id
-                    ? "bg-chess-primary border-chess-primary text-white font-semibold"
+                    ? "bg-chess-inverse border-chess-inverse text-white font-semibold"
                     : "bg-chess-bg border-chess-border text-chess-muted hover:border-chess-muted hover:text-chess-primary"
                 }`}
               >
