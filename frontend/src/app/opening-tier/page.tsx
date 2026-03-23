@@ -105,7 +105,7 @@ export default function OpeningTierPage() {
 
         {/* Error */}
         {error && !showLoading && (
-          <div className="bg-red-600/8 border border-red-600/30 rounded-xl px-5 py-4 text-sm text-red-700">
+          <div className="bg-red-600/8 border border-red-600/30 rounded-xl px-5 py-4 text-sm text-chess-loss">
             {t("tier.error")}
           </div>
         )}
@@ -123,9 +123,9 @@ export default function OpeningTierPage() {
                 <p>
                   <span dangerouslySetInnerHTML={{ __html: t("tier.analyzedTotal").replace("{n}", `<span class="text-chess-primary font-medium">${data.total_openings}</span>`) }} />
                 </p>
-                {data.data_period && (
+                {data.collected_at && (
                   <p>
-                    <span dangerouslySetInnerHTML={{ __html: t("tier.periodBasis").replace("{date}", `<span class="text-chess-primary">${data.data_period.replace("-", "년 ")}월</span>`) }} />
+                    <span dangerouslySetInnerHTML={{ __html: t("tier.lastCollected").replace("{date}", `<span class="text-chess-primary">${data.collected_at}</span>`) }} />
                   </p>
                 )}
               </div>

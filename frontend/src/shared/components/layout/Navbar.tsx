@@ -54,7 +54,7 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="border-b border-chess-border/60 bg-chess-bg/80 backdrop-blur-md sticky top-0 z-50 pt-[env(safe-area-inset-top,0px)]">
+      <header className="border-b border-chess-border/60 dark:border-chess-border/80 bg-chess-bg/80 dark:bg-chess-bg/90 backdrop-blur-md sticky top-0 z-50 pt-[env(safe-area-inset-top,0px)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]">
         {/* 모바일/태블릿은 동일한 틀, 데스크톱(md 이상)에서만 좌측 정렬이 되도록 wrapper를 분리 */}
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
           {/* 좌측 영역: 로고 + (md 이상에서만) 네비 링크 */}
@@ -79,8 +79,8 @@ export default function Navbar() {
                     href={href}
                     className={`px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-colors ${
                       active
-                        ? "bg-chess-accent text-white"
-                        : "text-chess-muted hover:text-chess-primary hover:bg-chess-border/50"
+                        ? "bg-chess-accent text-white dark:bg-chess-accent/18 dark:text-chess-accent dark:ring-1 dark:ring-chess-accent/35"
+                        : "text-chess-muted hover:text-chess-primary hover:bg-chess-border/50 dark:hover:bg-chess-elevated/50"
                     }`}
                   >
                     {t(labelKey)}
@@ -94,11 +94,11 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-3 shrink-0">
             <button
               type="button"
-              className="p-2 rounded-full hover:bg-chess-border/40 transition-colors"
+              className="p-2 rounded-full hover:bg-chess-border/40 dark:hover:bg-chess-elevated/60 text-chess-primary transition-colors"
               aria-label="설정"
               onClick={() => setSettingsOpen((v) => !v)}
             >
-              <Settings size={20} />
+              <Settings size={20} className="opacity-90" />
             </button>
 
             <form onSubmit={handleSearch} className="flex items-center gap-1.5">
@@ -122,11 +122,11 @@ export default function Navbar() {
           <div className="flex md:hidden items-center gap-1 shrink-0">
             <button
               type="button"
-              className="p-2.5 rounded-full hover:bg-chess-border/40 transition-colors"
+              className="p-2.5 rounded-full hover:bg-chess-border/40 dark:hover:bg-chess-elevated/60 text-chess-primary transition-colors"
               aria-label="설정"
               onClick={() => setSettingsOpen((v) => !v)}
             >
-              <Settings size={20} />
+              <Settings size={20} className="opacity-90" />
             </button>
             <button
               type="button"

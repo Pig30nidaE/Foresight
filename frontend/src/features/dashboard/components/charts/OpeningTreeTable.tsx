@@ -28,8 +28,7 @@ function flatten(nodes: OpeningTreeNode[], expanded: Set<string>): RowMeta[] {
   return rows;
 }
 
-const winColor = (r: number) =>
-  r >= 55 ? "text-emerald-700" : r >= 45 ? "text-amber-700" : "text-red-700";
+const winColor = (r: number) => (r >= 50 ? "text-chess-win" : "text-chess-loss");
 
 /** 파이 조각·우측 목록 색 띠 동일 순서 (data 인덱스와 일치) */
 const OPENING_PIE_SEGMENT_COLORS = [
@@ -124,7 +123,7 @@ function OpeningPieChart({
       <div className="relative shrink-0">
         <svg viewBox="0 0 240 240" className={svgClass}>
           {/* 배경 원 - 흐릿한 느낌 */}
-          <circle cx="120" cy="120" r="95" fill="#1f2937" opacity="0.15" />
+          <circle cx="120" cy="120" r="95" className="fill-chess-primary/10 dark:fill-white/10" />
 
           {segments.map((seg, i) => {
             const isHovered = hoveredIndex === i;
@@ -162,10 +161,17 @@ function OpeningPieChart({
           })}
 
           {/* 중앙 홀 (도넛 차트 스타일) */}
-          <circle cx="120" cy="120" r="50" fill="#111827" stroke="#374151" strokeWidth="1" strokeOpacity="0.5" />
+          <circle
+            cx="120"
+            cy="120"
+            r="50"
+            className="fill-chess-bg stroke-chess-border dark:fill-chess-surface dark:stroke-chess-border"
+            strokeWidth="1"
+            strokeOpacity={0.5}
+          />
 
-          {/* 중앙 정보 */}
-          <text x="120" y="110" textAnchor="middle" className="fill-chess-muted text-xs font-medium" opacity="0.8">
+          {/* 중앙 정보 (라이트: 밝은 홀 + 진한 글자 — 다크: 기존 대비 유지) */}
+          <text x="120" y="110" textAnchor="middle" className="fill-chess-muted text-xs font-medium" opacity="0.9">
             {t("chart.totalGames")}
           </text>
           <text x="120" y="135" textAnchor="middle" className="fill-chess-accent text-xl font-bold">
@@ -209,8 +215,7 @@ function OpeningPieChart({
               <div className="flex justify-between gap-3">
                 <span>{t("chart.winRate")}</span>
                 <span className={`font-semibold ${
-                  segments[hoveredIndex].node.win_rate >= 55 ? 'text-emerald-400' :
-                  segments[hoveredIndex].node.win_rate >= 45 ? 'text-amber-400' : 'text-red-400'
+                  segments[hoveredIndex].node.win_rate >= 50 ? "text-chess-win" : "text-chess-loss"
                 }`}>
                   {segments[hoveredIndex].node.win_rate}%
                 </span>
@@ -420,11 +425,8 @@ function OpeningDetailModal({
                 const isExpanded = expandedParents.has(parentNode.name);
                 const hasChildren = parentNode.children && parentNode.children.length > 0;
                 const childCount = parentNode.children?.length || 0;
-                const winRateColor = parentNode.win_rate >= 55
-                  ? "text-emerald-400"
-                  : parentNode.win_rate >= 45
-                    ? "text-amber-400"
-                    : "text-red-400";
+                const winRateColor =
+                  parentNode.win_rate >= 50 ? "text-chess-win" : "text-chess-loss";
                 const pieStripe =
                   OPENING_PIE_SEGMENT_COLORS[parentIndex % OPENING_PIE_SEGMENT_COLORS.length];
 
@@ -470,11 +472,11 @@ function OpeningDetailModal({
                         </span>
                         <span className="sm:hidden text-chess-muted/70">{parentNode.games}</span>
                         <div className="hidden sm:flex gap-1">
-                          <span className="text-emerald-600">{parentNode.wins}{t("chart.win")}</span>
+                          <span className="text-chess-win">{parentNode.wins}{t("chart.win")}</span>
                           <span className="text-chess-muted/50">/</span>
                           <span className="text-chess-muted">{parentNode.draws}{t("chart.draw")}</span>
                           <span className="text-chess-muted/50">/</span>
-                          <span className="text-red-600">{parentNode.losses}{t("chart.loss")}</span>
+                          <span className="text-chess-loss">{parentNode.losses}{t("chart.loss")}</span>
                         </div>
                         <span className={`font-bold w-10 text-right ${winRateColor}`}>
                           {parentNode.win_rate}%
@@ -486,11 +488,8 @@ function OpeningDetailModal({
                     {isExpanded && hasChildren && (
                       <div className="ml-4 space-y-0.5 border-l-2 border-chess-border/30 pl-3">
                         {parentNode.children!.map((child, childIndex) => {
-                          const childWinRateColor = child.win_rate >= 55
-                            ? "text-emerald-400"
-                            : child.win_rate >= 45
-                              ? "text-amber-400"
-                              : "text-red-400";
+                          const childWinRateColor =
+                            child.win_rate >= 50 ? "text-chess-win" : "text-chess-loss";
 
                           return (
                             <div
@@ -622,11 +621,11 @@ export default function OpeningTreeTable({ data }: Props) {
           <div className="flex items-center gap-2 sm:gap-3 text-xs shrink-0 ml-2">
             <span className="hidden sm:inline text-chess-muted">{t("chart.gamesCount").replace("{n}", String(node.games))}</span>
             <div className="hidden sm:flex gap-1">
-              <span className="text-emerald-700">{node.wins}{t("chart.win")}</span>
+              <span className="text-chess-win">{node.wins}{t("chart.win")}</span>
               <span className="text-chess-muted">/</span>
               <span className="text-chess-muted">{node.draws}{t("chart.draw")}</span>
               <span className="text-chess-muted">/</span>
-              <span className="text-red-700">{node.losses}{t("chart.loss")}</span>
+              <span className="text-chess-loss">{node.losses}{t("chart.loss")}</span>
             </div>
             <span className="sm:hidden text-chess-muted/70">{node.games}</span>
             <span className={`font-bold w-10 text-right ${winColor(node.win_rate)}`}>

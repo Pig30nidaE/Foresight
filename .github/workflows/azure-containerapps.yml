@@ -10,6 +10,9 @@ name: Azure API (Container Apps)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 env:
   IMAGE_API: foresight-api

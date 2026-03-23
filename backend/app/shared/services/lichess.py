@@ -331,19 +331,6 @@ class LichessService:
                         timeout=90.0,
                     )
 
-            # #region agent log
-            import json as _j
-            try:
-                _first_line = resp.text.strip().split("\n")[0] if resp.text.strip() else ""
-                _sample: dict = {}
-                try: _sample = _j.loads(_first_line)
-                except Exception: pass
-                with open("/app/debug-ce40e3.log", "a") as _f:
-                    _f.write(_j.dumps({"sessionId": "ce40e3", "runId": "post-fix", "timestamp": int(time.time() * 1000), "location": "lichess.py:get_recent_games", "message": "response sample", "data": {"has_pgn_field": "pgn" in _sample, "has_moves_field": "moves" in _sample, "has_clocks_field": "clocks" in _sample, "moves_snippet": str(_sample.get("moves", "<MISSING>"))[:80], "clocks_sample": _sample.get("clocks", [])[:4] if isinstance(_sample.get("clocks"), list) else "<MISSING>"}}) + "\n")
-            except Exception:
-                pass
-            # #endregion
-
             games: List[GameSummary] = []
             uname = _api_username(username)
             for line in resp.text.strip().split("\n"):
@@ -408,14 +395,8 @@ class LichessService:
             opening_name = opening_db.get_name_by_eco(eco_code)
 
         pgn_out: Optional[str] = _build_pgn(raw, w_disp, b_disp)
-        # #region agent log
-        import time as _t, json as _j
-        try:
-            with open("/app/debug-ce40e3.log","a") as _f:
-                _f.write(_j.dumps({"sessionId":"ce40e3","runId":"post-fix","timestamp":int(_t.time()*1000),"location":"lichess.py:_parse_game","message":"pgn_out after _build_pgn","hypothesisId":"A","data":{"game_id":raw.get("id"),"has_moves":bool(raw.get("moves")),"has_clocks":bool(raw.get("clocks")),"pgn_out_none":pgn_out is None,"pgn_snippet":pgn_out[:120] if pgn_out else None}})+"\n")
-        except Exception:
-            pass
-        # #endregion
+        ma = raw.get("analysis")
+        move_analysis = ma if isinstance(ma, list) else None
 
         return GameSummary(
             game_id=str(raw.get("id", "") or ""),
@@ -432,4 +413,5 @@ class LichessService:
             rating_white=white.get("rating"),
             rating_black=black.get("rating"),
             cp_evals=_parse_cp_evals(pgn_out or ""),
+            move_analysis=move_analysis,
         )
