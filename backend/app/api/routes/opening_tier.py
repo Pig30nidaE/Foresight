@@ -67,7 +67,9 @@ async def get_global_opening_tiers(
 
     _service = _get_service(request)
     try:
-        openings, data_period = await _service.get_opening_tiers(rating, speed, color)
+        openings, data_period, collected_at = await _service.get_opening_tiers(
+            rating, speed, color
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
@@ -77,6 +79,7 @@ async def get_global_opening_tiers(
         "color": color,
         "total_openings": len(openings),
         "data_period": data_period,
+        "collected_at": collected_at,
         "openings": openings,
     }
 
@@ -138,7 +141,7 @@ async def export_opening_tiers(
         )
 
     try:
-        openings, _ = await _service.get_opening_tiers(rating, speed, color)
+        openings, _, _ = await _service.get_opening_tiers(rating, speed, color)
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

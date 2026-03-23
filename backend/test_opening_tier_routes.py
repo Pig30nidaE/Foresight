@@ -14,7 +14,11 @@ def override_service(monkeypatch):
     svc = OpeningTierService()
 
     async def fake_get_opening_tiers(self, rating, speed, color):
-        return ([{"eco": "A00", "name": "Fake", "tier": "S", "white_wins": 1, "draws": 0, "black_wins": 0, "total_games": 1, "win_rate": 1.0, "draw_rate": 0.0, "tier_score": 1.0}], "2025-01 ~ 2025-01")
+        return (
+            [{"eco": "A00", "name": "Fake", "tier": "S", "white_wins": 1, "draws": 0, "black_wins": 0, "total_games": 1, "win_rate": 1.0, "draw_rate": 0.0, "tier_score": 1.0}],
+            "2025-01 ~ 2025-01",
+            "2025-01-15",
+        )
 
     monkeypatch.setattr(svc, "get_opening_tiers", fake_get_opening_tiers)
     monkeypatch.setattr(OpeningTierService, "get_opening_tiers", fake_get_opening_tiers)

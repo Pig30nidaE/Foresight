@@ -137,7 +137,7 @@ function DashboardContent() {
       )}
 
       {/* ── Search Card ── */}
-      <div className="bg-chess-bg border border-chess-border/50 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-chess-surface/40 dark:bg-chess-surface/25 border border-chess-border/60 dark:border-chess-border rounded-2xl shadow-sm dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] overflow-hidden">
 
         {/* 모바일: 검색 + 필터 버튼 한 줄 */}
         <div className="md:hidden flex gap-2 p-4">
@@ -169,7 +169,7 @@ function DashboardContent() {
             type="button"
             onClick={handleSearch}
             disabled={platform === "lichess"}
-            className="px-4 py-2.5 bg-chess-primary hover:bg-chess-primary/85 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
+            className="px-4 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
           >
             {t("dh.startAnalysis")}
           </button>
@@ -198,7 +198,7 @@ function DashboardContent() {
             <button
               type="submit"
               disabled={platform === "lichess"}
-              className="px-6 py-2.5 bg-chess-primary hover:bg-chess-primary/85 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
+              className="px-6 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
             >
               {t("dh.startAnalysis")}
             </button>
@@ -220,8 +220,8 @@ function DashboardContent() {
                   onClick={() => setPlatform(p)}
                   className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all border-2 ${
                     platform === p
-                      ? "border-chess-accent bg-chess-accent text-white shadow-sm"
-                      : "border-chess-border bg-transparent text-chess-muted hover:border-chess-accent/50 hover:text-chess-primary"
+                      ? "border-chess-accent bg-chess-accent text-white shadow-sm dark:bg-chess-accent/20 dark:text-chess-accent dark:border-chess-accent/45"
+                      : "border-chess-border bg-chess-elevated/25 dark:bg-transparent text-chess-muted hover:border-chess-accent/35 hover:text-chess-primary"
                   }`}
                 >
                   {p === "chess.com" ? "Chess.com" : "Lichess"}
@@ -247,8 +247,8 @@ function DashboardContent() {
                     onClick={() => setTimeClass(tc)}
                     className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full border-2 text-sm font-medium transition-all ${
                       active
-                        ? "border-chess-primary bg-chess-primary text-white shadow-sm"
-                        : "border-chess-border bg-transparent text-chess-muted hover:border-chess-primary/40 hover:text-chess-primary"
+                        ? "border-chess-inverse bg-chess-inverse text-white shadow-sm dark:shadow-[0_0_20px_-4px_rgba(196,165,116,0.35)]"
+                        : "border-chess-border bg-chess-elevated/30 dark:bg-transparent text-chess-muted hover:border-chess-accent/35 hover:text-chess-primary"
                     }`}
                   >
                     <span>{meta.emoji}</span>
@@ -275,7 +275,7 @@ function DashboardContent() {
             onClick={() => setFilterOpen(false)}
           />
           {/* 시트 */}
-          <div className="md:hidden fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-chess-bg border-t border-chess-border shadow-2xl">
+          <div className="md:hidden fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-chess-surface dark:bg-chess-elevated border-t border-chess-border shadow-2xl dark:shadow-[0_-12px_40px_rgba(0,0,0,0.45)]">
             {/* 핸들 */}
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-chess-border" />
@@ -297,8 +297,8 @@ function DashboardContent() {
                       onClick={() => setDraftPlatform(p)}
                       className={`px-4 py-2 rounded-full text-sm font-medium transition-all border-2 ${
                         draftPlatform === p
-                          ? "border-chess-accent bg-chess-accent text-white"
-                          : "border-chess-border bg-transparent text-chess-muted"
+                          ? "border-chess-accent bg-chess-accent text-white dark:bg-chess-accent/20 dark:text-chess-accent dark:border-chess-accent/45"
+                          : "border-chess-border bg-chess-elevated/40 dark:bg-transparent text-chess-muted"
                       }`}
                     >
                       {p === "chess.com" ? "Chess.com" : "Lichess"}
@@ -324,8 +324,8 @@ function DashboardContent() {
                         onClick={() => setDraftTimeClass(tc)}
                         className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
                           active
-                            ? "border-chess-primary bg-chess-primary text-white"
-                            : "border-chess-border bg-transparent text-chess-muted"
+                            ? "border-chess-inverse bg-chess-inverse text-white"
+                            : "border-chess-border bg-chess-elevated/30 dark:bg-transparent text-chess-muted"
                         }`}
                       >
                         <span className="text-base">{meta.emoji}</span>
@@ -345,7 +345,7 @@ function DashboardContent() {
               <button
                 type="button"
                 onClick={applyFilter}
-                className="w-full py-3 bg-chess-primary text-white font-semibold rounded-xl text-sm transition-colors hover:bg-chess-primary/85"
+                className="w-full py-3 bg-chess-inverse text-white font-semibold rounded-xl text-sm transition-colors hover:bg-chess-inverse/90"
               >
                 적용하기
               </button>
@@ -376,7 +376,7 @@ function DashboardContent() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl sm:text-2xl font-bold text-chess-primary truncate">{submitted}</h2>
-                  <span className="text-xs sm:text-sm text-chess-muted bg-chess-surface px-2 py-0.5 rounded-full capitalize">
+                  <span className="text-xs sm:text-sm text-chess-muted bg-chess-surface dark:bg-chess-elevated dark:text-chess-muted px-2 py-0.5 rounded-full capitalize border border-chess-border/40 dark:border-chess-border/60">
                     {submittedPlatform}
                   </span>
                 </div>
@@ -427,7 +427,7 @@ function DashboardContent() {
           </div>
 
           <section
-            className={`bg-chess-surface border border-chess-border rounded-2xl p-3 sm:p-6 ${
+            className={`bg-chess-surface/80 dark:bg-chess-surface/40 border border-chess-border/70 dark:border-chess-border rounded-2xl p-3 sm:p-6 dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] ${
               activeTab !== "games" ? "hidden" : ""
             }`}
             aria-hidden={activeTab !== "games"}

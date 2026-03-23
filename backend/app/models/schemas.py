@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Any, Optional, List
 from enum import Enum
 
 
@@ -78,6 +78,8 @@ class GameSummary(BaseModel):
     rating_white: Optional[int] = None
     rating_black: Optional[int] = None
     cp_evals: Optional[List[Optional[float]]] = None  # 수별 centipawn eval
+    # Lichess /api/games/user … evals=true 일 때 NDJSON의 analysis 배열 (수별 엔진 판정 등)
+    move_analysis: Optional[List[Any]] = None
 
 
 class OpeningStats(BaseModel):
@@ -118,6 +120,7 @@ class MoveTier(str, Enum):
 
 
 class TopMoveInfo(BaseModel):
+    uci: Optional[str] = None  # 화살표 표시용 (e2e4 → from e2, to e4)
     san: str
     cp: int
     rank: int
