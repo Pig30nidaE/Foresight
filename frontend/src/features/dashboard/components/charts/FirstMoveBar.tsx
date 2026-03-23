@@ -3,7 +3,10 @@
 import { useState, useEffect, useMemo } from "react";
 import type { FirstMoveEntry } from "@/types";
 import { useTranslation } from "@/shared/lib/i18n";
-import { usePrefersReducedMotion, readPrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import {
+  usePrefersReducedMotion as usePrefersReducedMotionFromHook,
+  readPrefersReducedMotion,
+} from "@/hooks/usePrefersReducedMotion";
 
 interface Props {
   data: FirstMoveEntry[];
@@ -71,7 +74,7 @@ function StackedSegment({
 
 export default function FirstMoveBar({ data, side }: Props) {
   const { t } = useTranslation();
-  const reducedMotion = usePrefersReducedMotion();
+  const reducedMotion = usePrefersReducedMotionFromHook();
   const [drawBars, setDrawBars] = useState(readPrefersReducedMotion);
 
   const sorted = useMemo(
