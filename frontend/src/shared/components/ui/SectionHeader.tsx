@@ -31,7 +31,7 @@ export default function SectionHeader({ title, desc, isLoading = false, progress
       </div>
 
       {desc && (
-        <p className="text-chess-muted text-sm mt-1.5">{desc}</p>
+        <p className="text-chess-primary/78 dark:text-chess-muted text-sm mt-1.5 leading-relaxed">{desc}</p>
       )}
 
       {showBar && (

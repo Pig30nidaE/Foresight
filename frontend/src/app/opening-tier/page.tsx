@@ -105,7 +105,7 @@ export default function OpeningTierPage() {
 
         {/* Error */}
         {error && !showLoading && (
-          <div className="bg-red-600/8 border border-red-600/30 rounded-xl px-5 py-4 text-sm text-red-700">
+          <div className="bg-red-600/8 border border-red-600/30 rounded-xl px-5 py-4 text-sm text-chess-loss">
             {t("tier.error")}
           </div>
         )}

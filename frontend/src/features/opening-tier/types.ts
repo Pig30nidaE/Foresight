@@ -55,7 +55,7 @@ export const TIER_CONFIG: Record<
   { color: string; bg: string; border: string }
 > = {
   S: {
-    color: "text-red-400",
+    color: "text-chess-loss",
     bg: "bg-red-500/10",
     border: "border-red-500/30",
   },
@@ -65,7 +65,7 @@ export const TIER_CONFIG: Record<
     border: "border-amber-500/30",
   },
   B: {
-    color: "text-emerald-400",
+    color: "text-chess-win",
     bg: "bg-emerald-500/10",
     border: "border-emerald-500/30",
   },
