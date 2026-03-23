@@ -88,17 +88,17 @@ function ResultBadge({
     win: {
       labelKey: "gh.summary.win",
       cls:
-        "border shadow-sm bg-emerald-100 text-emerald-950 border-emerald-600/35 dark:bg-emerald-900/35 dark:text-emerald-200 dark:border-emerald-500/45",
+        "border border-chess-win/40 bg-chess-win/12 text-chess-win shadow-sm dark:bg-chess-win/16 dark:border-chess-win/35",
     },
     loss: {
       labelKey: "gh.summary.loss",
       cls:
-        "border shadow-sm bg-red-100 text-red-950 border-red-600/35 dark:bg-red-900/35 dark:text-red-200 dark:border-red-500/45",
+        "border border-chess-loss/40 bg-chess-loss/10 text-chess-loss shadow-sm dark:bg-chess-loss/14 dark:border-chess-loss/35",
     },
     draw: {
       labelKey: "gh.summary.draw",
       cls:
-        "border shadow-sm bg-amber-100 text-amber-950 border-amber-600/35 dark:bg-amber-900/35 dark:text-amber-200 dark:border-amber-500/45",
+        "border border-amber-600/35 bg-amber-100/80 text-amber-950 shadow-sm dark:bg-amber-950/30 dark:text-amber-200 dark:border-amber-500/35",
     },
   } as const;
   const sz = { sm: "w-7 h-7 text-xs", md: "w-8 h-8 text-sm", lg: "w-10 h-10 text-base" };
@@ -352,34 +352,50 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
   const timeControl = getTimeControl(pgn, language as "ko" | "en");
   const lengthLabel = moveCount != null ? t(getGameLengthLabelKey(moveCount)) : null;
 
-  // Use compact glyphs (reduce emoji clutter) while keeping the original structure.
-  const tcIcon: Record<string, string> = { bullet: "B", blitz: "Z", rapid: "R", classical: "C" };
-
   const resultColor = {
-    win:  "text-emerald-800 dark:text-emerald-400",
-    loss: "text-red-700 dark:text-red-400",
-    draw: "text-amber-900 dark:text-amber-400",
+    win: "text-chess-win",
+    loss: "text-chess-loss",
+    draw: "text-amber-950 dark:text-amber-300",
   }[game.result];
 
   const resultLabel = { win: t("gh.card.win"), loss: t("gh.card.loss"), draw: t("gh.card.draw") }[game.result];
 
+  /** 펼침: 결과색 살짝만 (회색 띠·흐린 초록 방지) */
   const resultBgGradient = {
-    win:  "from-emerald-100/90 to-emerald-50/70 border-emerald-400/50 dark:from-emerald-500/10 dark:to-emerald-600/5 dark:border-emerald-500/30",
-    loss: "from-red-100/90 to-red-50/70 border-red-400/50 dark:from-red-500/10 dark:to-red-600/5 dark:border-red-500/30",
-    draw: "from-amber-100/90 to-amber-50/70 border-amber-500/45 dark:from-amber-500/10 dark:to-amber-600/5 dark:border-amber-500/30",
+    win:
+      "from-chess-bg via-chess-win/5 to-chess-surface/90 border-chess-border/65 dark:from-chess-elevated/25 dark:via-chess-win/10 dark:to-chess-bg/55 dark:border-chess-border/50",
+    loss:
+      "from-chess-bg via-chess-loss/5 to-chess-surface/90 border-chess-border/65 dark:from-chess-elevated/22 dark:via-chess-loss/8 dark:to-chess-bg/55 dark:border-chess-border/50",
+    draw:
+      "from-chess-bg via-amber-100/50 to-chess-surface/90 border-chess-border/65 dark:from-chess-elevated/22 dark:via-amber-950/15 dark:to-chess-bg/55 dark:border-chess-border/50",
   }[game.result];
 
+  /** 접힘: 종이 카드 + 아주 옅은 결과 악센트 */
+  const resultCollapsedAccent = {
+    win: "border-l-[2px] border-l-emerald-800/22 dark:border-l-emerald-500/28",
+    loss: "border-l-[2px] border-l-rose-800/25 dark:border-l-red-500/28",
+    draw: "border-l-[2px] border-l-amber-800/22 dark:border-l-amber-500/28",
+  }[game.result];
+
+  const collapsedShell =
+    "border border-chess-border/65 dark:border-chess-border/50 " +
+    resultCollapsedAccent +
+    " bg-chess-bg/95 dark:bg-chess-elevated/14 " +
+    "shadow-sm hover:shadow-md transition-shadow";
+
   return (
-    <div className={`rounded-2xl overflow-hidden transition-all duration-300 shadow-lg hover:shadow-xl ${
-      open 
-        ? `bg-gradient-to-br ${resultBgGradient} border-2 shadow-2xl` 
-        : "bg-chess-surface/90 border border-chess-border/50 hover:border-chess-border/80"
-    }`}>
+    <div
+      className={`rounded-2xl overflow-hidden transition-all duration-300 ${
+        open ? `border bg-gradient-to-br ${resultBgGradient} shadow-md` : collapsedShell
+      }`}
+    >
       {/* ── 헤더 ── */}
       <button
         onClick={() => setOpen((p) => !p)}
         className={`w-full p-3 sm:p-4 transition-all duration-200 text-left ${
-          open ? "bg-chess-surface/20 dark:bg-chess-elevated/25" : "hover:bg-chess-surface/50 dark:hover:bg-chess-elevated/35"
+          open
+            ? "bg-chess-surface/25 dark:bg-chess-elevated/20"
+            : "bg-transparent hover:bg-chess-surface/35 dark:hover:bg-chess-elevated/22"
         }`}
       >
         <div className="flex items-center gap-2.5 sm:gap-4">
@@ -389,12 +405,13 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 sm:gap-3 mb-1.5 flex-wrap">
               <span className={`text-base sm:text-lg font-bold ${resultColor}`}>{resultLabel}</span>
-              <span className="text-sm font-mono opacity-70">{tcIcon[game.time_class] ?? "♟"}</span>
               {ratingDiff !== null && (
                 <span className={`text-xs sm:text-sm font-semibold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full bg-chess-bg/60 border ${
                   ratingDiff > 0
-                    ? "text-emerald-800 border-emerald-400/50 dark:text-emerald-400 dark:border-emerald-500/30"
-                    : "text-red-700 border-red-400/50 dark:text-red-400 dark:border-red-500/30"
+                    ? "text-chess-win border-chess-win/45 dark:border-chess-win/35"
+                    : ratingDiff < 0
+                      ? "text-chess-loss border-chess-loss/45 dark:border-chess-loss/35"
+                      : "text-chess-primary border-chess-border/65 dark:border-chess-border/50"
                 }`}>
                   {ratingDiff > 0 ? "+" : ""}{ratingDiff}
                 </span>
@@ -411,7 +428,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                   <span className="font-medium text-chess-primary truncate max-w-[80px] sm:max-w-none">{username}</span>
                   {myRating != null && <span className="text-chess-muted hidden sm:inline">({myRating})</span>}
                 </span>
-                <span className="opacity-40">vs</span>
+                <span className="text-chess-muted/55">vs</span>
                 <span className="flex items-center gap-1">
                   <span>{oppIcon}</span>
                   <span className="font-medium text-chess-primary truncate max-w-[80px] sm:max-w-none">{opponent}</span>
@@ -452,7 +469,15 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
               <div className="text-center shrink-0">
                 <span className={`text-xl sm:text-2xl font-bold ${resultColor}`}>{resultLabel}</span>
                 {ratingDiff !== null && (
-                  <p className="text-xs sm:text-sm text-chess-muted mt-0.5">
+                  <p
+                    className={`text-xs sm:text-sm mt-0.5 ${
+                      ratingDiff > 0
+                        ? "text-chess-win"
+                        : ratingDiff < 0
+                          ? "text-chess-loss"
+                          : "text-chess-primary"
+                    }`}
+                  >
                     {ratingDiff > 0 ? "+" : ""}{ratingDiff} {t("gh.card.diff")}
                   </p>
                 )}
@@ -600,7 +625,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                 </div>
               )}
               {isAnalysisError && (
-                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-chess-loss text-sm">
                   {stream.error || t("gh.analyze.error")}
                 </div>
               )}
@@ -1047,7 +1072,7 @@ function GameAnalysisPanel({
                           {move.move_number}. {move.san}
                         </span>
                         {move.is_only_best && move.tier !== "TH" && (
-                          <span className="shrink-0 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold whitespace-nowrap">
+                          <span className="shrink-0 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-100 text-chess-win border border-emerald-200 font-bold whitespace-nowrap">
                             {t("ga.onlyBest")}
                           </span>
                         )}
@@ -1057,7 +1082,7 @@ function GameAnalysisPanel({
                         </span>
                         <p className="hidden sm:block text-[11px] font-semibold mt-0.5">
                           {move.tier === "TH" ? (
-                            <span className="text-emerald-600/90 dark:text-emerald-400/90">
+                            <span className="text-chess-win/90">
                               {t("ga.theoryMoveNote")}
                             </span>
                           ) : move.user_move_rank === 0 ? (
@@ -1262,7 +1287,7 @@ export default function GameHistorySection({
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 결과 요약 헤더 */}
-      <div className="bg-gradient-to-r from-chess-surface/80 to-chess-surface/60 border border-chess-border/50 rounded-2xl p-4 sm:p-6 shadow-lg">
+      <div className="bg-chess-bg/90 dark:bg-chess-elevated/20 border border-chess-border/60 dark:border-chess-border/50 rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row items-start justify-between gap-4 sm:gap-5">
           <div>
             <h3 className="text-base sm:text-lg font-bold text-chess-primary mb-2">{t("gh.summary.title")}</h3>
@@ -1274,16 +1299,16 @@ export default function GameHistorySection({
               </div>
               <div className="flex items-center gap-x-3 sm:gap-x-4 gap-y-2 flex-wrap">
                 <div className="flex items-center gap-1 min-w-fit">
-                  <span className="text-base sm:text-lg font-bold text-emerald-800 dark:text-emerald-400">{wins}</span>
-                  <span className="text-xs sm:text-sm text-emerald-700/90 dark:text-emerald-400/75">{t("gh.summary.win")}</span>
+                  <span className="text-base sm:text-lg font-bold text-chess-win">{wins}</span>
+                  <span className="text-xs sm:text-sm text-chess-win/90">{t("gh.summary.win")}</span>
                 </div>
                 <div className="flex items-center gap-1 min-w-fit">
                   <span className="text-base sm:text-lg font-bold text-amber-900 dark:text-amber-400">{draws}</span>
                   <span className="text-xs sm:text-sm text-amber-800/90 dark:text-amber-400/75">{t("gh.summary.draw")}</span>
                 </div>
                 <div className="flex items-center gap-1 min-w-fit">
-                  <span className="text-base sm:text-lg font-bold text-red-700 dark:text-red-400">{losses}</span>
-                  <span className="text-xs sm:text-sm text-red-700/90 dark:text-red-400/75">{t("gh.summary.loss")}</span>
+                  <span className="text-base sm:text-lg font-bold text-chess-loss">{losses}</span>
+                  <span className="text-xs sm:text-sm text-chess-loss/90">{t("gh.summary.loss")}</span>
                 </div>
               </div>
             </div>
@@ -1293,10 +1318,10 @@ export default function GameHistorySection({
           <div className="text-right w-full sm:w-auto">
             <div className="text-xs sm:text-sm text-chess-muted mb-1.5 sm:mb-2">{t("gh.summary.winRate")}</div>
             <div className="flex items-center gap-3">
-              <div className="flex-1 sm:flex-none sm:w-48 h-3 rounded-full overflow-hidden bg-chess-border/30 shadow-inner">
-                {wins > 0  && <div style={{ width: `${wins  / games.length * 100}%` }} className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500" />}
-                {draws > 0 && <div style={{ width: `${draws / games.length * 100}%` }} className="h-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-500" />}
-                {losses > 0 && <div style={{ width: `${losses / games.length * 100}%` }} className="h-full bg-gradient-to-r from-red-500 to-red-400 transition-all duration-500" />}
+              <div className="flex flex-row flex-1 sm:flex-none sm:w-48 h-2.5 rounded-full overflow-hidden bg-chess-elevated/80 dark:bg-chess-bg/60 ring-1 ring-chess-border/40">
+                {wins > 0  && <div style={{ width: `${wins  / games.length * 100}%` }} className="h-full shrink-0 bg-emerald-700 dark:bg-emerald-600/90 transition-all duration-500" />}
+                {draws > 0 && <div style={{ width: `${draws / games.length * 100}%` }} className="h-full shrink-0 bg-amber-700 dark:bg-amber-600/90 transition-all duration-500" />}
+                {losses > 0 && <div style={{ width: `${losses / games.length * 100}%` }} className="h-full shrink-0 bg-red-700 dark:bg-red-600/90 transition-all duration-500" />}
               </div>
               <span className="text-lg font-bold text-chess-primary">
                 {Math.round((wins / games.length) * 100)}%
@@ -1319,12 +1344,12 @@ export default function GameHistorySection({
           <button
             type="button"
             onClick={() => setMaxGames((p) => p + 30)}
-            className="group relative px-6 py-3 rounded-xl font-medium text-chess-accent border border-chess-accent/40 bg-gradient-to-r from-chess-accent/20 to-chess-accent/10 shadow-lg transition-all duration-300 hover:scale-105 hover:border-chess-accent/60 hover:from-chess-accent/30 hover:to-chess-accent/20 hover:shadow-xl"
+            className="group px-6 py-2.5 rounded-xl text-sm font-medium text-chess-primary border border-chess-border bg-chess-surface/80 dark:bg-chess-elevated/25 hover:bg-chess-elevated dark:hover:bg-chess-elevated/40 hover:border-chess-border transition-colors shadow-sm"
           >
             <span className="flex items-center gap-2">
               <span>{t("gh.btn.loadMore")}</span>
-              <span className="text-chess-accent/70">(+30)</span>
-              <span className="transition-transform duration-200 group-hover:translate-x-1" aria-hidden>
+              <span className="text-chess-muted">(+30)</span>
+              <span className="transition-transform duration-200 group-hover:translate-x-0.5 text-chess-muted" aria-hidden>
                 &rarr;
               </span>
             </span>

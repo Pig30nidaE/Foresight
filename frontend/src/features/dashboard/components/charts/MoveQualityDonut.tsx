@@ -62,7 +62,7 @@ export default function MoveQualityDonut({ data, isLoading = false }: Props) {
         </p>
       )}
       {!isLoading && !hasData && (
-        <p className="text-xs text-amber-400/80 mb-2 text-center">
+        <p className="text-xs text-amber-800 dark:text-amber-400/80 mb-2 text-center">
           {t("chart.waitingEngine")}
         </p>
       )}
@@ -71,7 +71,7 @@ export default function MoveQualityDonut({ data, isLoading = false }: Props) {
       {hasData && (
         <div className="flex gap-6 mb-3">
           <div className="text-center">
-            <p className="text-2xl font-bold text-emerald-400">
+            <p className="text-2xl font-bold text-chess-win">
               {data!.accuracy.toFixed(1)}%
             </p>
             <p className="text-xs text-chess-muted">{t("chart.accuracyRate")}</p>

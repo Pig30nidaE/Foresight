@@ -24,7 +24,9 @@ const CustomTooltip = ({ active, payload, t }: { active?: boolean; payload?: { p
     <div className="bg-chess-bg border border-chess-border rounded-lg px-3 py-2 text-sm shadow-sm">
       <p className="font-semibold text-chess-primary truncate max-w-48">{d.name}</p>
       <p className="text-chess-muted">{d.eco}</p>
-      <p className="text-emerald-700">{t("chart.winRate").replace(":", "")} {d.win_rate}%</p>
+      <p className={d.win_rate >= 50 ? "text-chess-win" : "text-chess-loss"}>
+        {t("chart.winRate").replace(":", "")} {d.win_rate}%
+      </p>
       <p className="text-chess-primary/80">{gamesText}</p>
     </div>
   );
@@ -44,14 +46,14 @@ export default function OpeningsChart({ data }: Props) {
           dataKey="eco"
           type="category"
           width={50}
-          tick={{ fill: "#5C5755", fontSize: 12 }}
+          tick={{ fill: "#454039", fontSize: 12 }}
         />
         <Tooltip content={<CustomTooltip t={t} />} cursor={{ fill: "rgba(179,138,88,0.08)" }} />
         <Bar dataKey="win_rate" radius={[0, 4, 4, 0]}>
           {data.map((entry, index) => (
             <Cell
               key={index}
-              fill={entry.win_rate >= 55 ? "#059669" : entry.win_rate >= 45 ? "#d97706" : "#dc2626"}
+              fill={entry.win_rate >= 50 ? "#16a34a" : "#dc2626"}
             />
           ))}
         </Bar>

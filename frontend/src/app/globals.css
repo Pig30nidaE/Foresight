@@ -8,20 +8,30 @@
   --color-chess-bg: #fbfbf4;
   --color-chess-surface: #f0f0e8;
   --color-chess-elevated: #e8e8e0;
-  --color-chess-border: #c8cbc5;
-  --color-chess-muted: #5c5755;
-  --color-chess-primary: #2d2926;
-  --color-chess-accent: #a67c44;
+  /* 라이트: 본문·보조 글자 한층 진하게 (가독성↑) */
+  --color-chess-border: #b9bdb4;
+  --color-chess-muted: #454039;
+  --color-chess-primary: #1a1714;
+  --color-chess-accent: #8f6630;
   /* 버튼·칩 등 어두운 면 (라이트에서 primary와 동일 역할) */
-  --color-chess-inverse: #2d2926;
+  --color-chess-inverse: #1a1714;
   --color-chess-piece-w: #d8d8d0;
-  --color-chess-piece-b: #3a3633;
+  --color-chess-piece-b: #2e2a27;
+  /* 라이트: 승·패 등 의미색 — 순녹/순적에 가깝게 */
+  --color-chess-win: #16a34a;
+  --color-chess-loss: #dc2626;
+  /* 주의·무승부 등 (앰버 계열, 라이트/다크 모두 가독성) */
+  --color-chess-warn: #a16207;
+  /* 첫 수 분포 스택 바 — 라이트: 밝은 초록/회색/밝은 적색 (크림 배경에서 덜 묻히게) */
+  --color-fm-bar-win: #4ade80;
+  --color-fm-bar-draw: #9eb6cc;
+  --color-fm-bar-loss: #fb8f8f;
 }
 
 /* ── 기본 색상 변수 ─────────────────────────────────────── */
 :root {
   --background: #fbfbf4;
-  --foreground: #2d2926;
+  --foreground: #1a1714;
 }
 
 html {
@@ -53,6 +63,13 @@ html.dark {
   --color-chess-inverse: #454a5c;
   --color-chess-piece-w: #c9b896;
   --color-chess-piece-b: #5c4033;
+  --color-chess-win: #4ade80;
+  --color-chess-loss: #f87171;
+  --color-chess-warn: #fbbf24;
+  /* 다크: 진한 대비 유지 (초록 vs 붉은색) */
+  --color-fm-bar-win: #4ade80;
+  --color-fm-bar-draw: #94a3b8;
+  --color-fm-bar-loss: #f87171;
 }
 
 html.dark body {
@@ -102,6 +119,29 @@ html.dark ::selection {
 }
 .animate-fade-in {
   animation: fadeIn 0.35s ease both;
+}
+
+/* ── First-move bar chart: 행 등장 (스태거는 style로 delay) ─ */
+@keyframes fm-chart-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fm-chart-row {
+  animation: fm-chart-row-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fm-chart-row {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ── 스켈레톤 shimmer ───────────────────────────────────── */

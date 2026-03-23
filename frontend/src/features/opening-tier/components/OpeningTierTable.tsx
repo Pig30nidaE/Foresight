@@ -27,7 +27,7 @@ function WinRateBar({
           W {win}%
         </span>
         <span className="text-chess-muted">D {draw}%</span>
-        <span className="text-red-700 dark:text-red-400">L {loss}%</span>
+        <span className="text-chess-loss">L {loss}%</span>
       </div>
     </div>
   );
