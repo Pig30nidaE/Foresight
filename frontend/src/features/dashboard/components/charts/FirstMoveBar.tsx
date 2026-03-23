@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { FirstMoveEntry } from "@/types";
 import { useTranslation } from "@/shared/lib/i18n";
+import { usePrefersReducedMotion, readPrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 interface Props {
   data: FirstMoveEntry[];
@@ -11,20 +12,6 @@ interface Props {
 
 function winRateDisplayClass(wr: number) {
   return wr >= 50 ? "text-chess-win" : "text-chess-loss";
-}
-
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false,
-  );
-  useLayoutEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return reduced;
 }
 
 /** 스택 세그먼트: 동일 인셋 하이라이트로 면이 한 평면에 놓인 느낌 */
@@ -85,9 +72,7 @@ function StackedSegment({
 export default function FirstMoveBar({ data, side }: Props) {
   const { t } = useTranslation();
   const reducedMotion = usePrefersReducedMotion();
-  const [drawBars, setDrawBars] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false,
-  );
+  const [drawBars, setDrawBars] = useState(readPrefersReducedMotion);
 
   const sorted = useMemo(
     () => [...data].sort((a, b) => b.games - a.games).slice(0, 8),
