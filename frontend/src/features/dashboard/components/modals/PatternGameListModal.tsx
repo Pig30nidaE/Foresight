@@ -55,15 +55,15 @@ const DEFAULT_CONFIG: PatternDisplayConfig = {
 
 // ─── 분석 타입 배지 ─────────────────────────────────────────
 const ANALYSIS_TYPE_META: Record<PatternDisplayConfig["analysisType"], { label: string; cls: string; icon: string }> = {
-  win_rate:   { icon: "🏆", label: "승률 기반",    cls: "border-emerald-700/35 bg-emerald-700/8 text-emerald-700" },
+  win_rate:   { icon: "🏆", label: "승률 기반",    cls: "border-emerald-700/35 bg-emerald-700/8 text-chess-win" },
   quality:    { icon: "🔬", label: "수 품질 기반", cls: "border-blue-700/30 bg-blue-700/8 text-blue-700" },
   occurrence: { icon: "📊", label: "발생 빈도 기반", cls: "border-purple-700/30 bg-purple-700/8 text-purple-700" },
 };
 
 // ─── 결과 스타일 ─────────────────────────────────────────────
 const RESULT_BADGE: Record<string, { label: string; cls: string }> = {
-  win:  { label: "승",   cls: "bg-emerald-700/10 text-emerald-700 border-emerald-700/30" },
-  loss: { label: "패",   cls: "bg-red-600/10 text-red-700 border-red-600/30" },
+  win:  { label: "승",   cls: "bg-emerald-700/10 text-chess-win border-emerald-700/30" },
+  loss: { label: "패",   cls: "bg-red-600/10 text-chess-loss border-red-600/30" },
   draw: { label: "무",   cls: "bg-chess-border/50 text-chess-primary border-chess-border" },
 };
 const RESULT_DOT: Record<string, string> = {
@@ -73,9 +73,9 @@ const RESULT_DOT: Record<string, string> = {
 };
 
 const ADVANTAGE_OUTCOME_META: Record<NonNullable<PatternGameItem["advantage_outcome"]>, { label: string; cls: string }> = {
-  smooth: { label: "완벽 유지", cls: "text-emerald-700" },
+  smooth: { label: "완벽 유지", cls: "text-chess-win" },
   shaky: { label: "흔들렸지만 승리", cls: "text-amber-700" },
-  blown: { label: "역전", cls: "text-red-700" },
+  blown: { label: "역전", cls: "text-chess-loss" },
 };
 
 function asFiniteNumber(value: number | null | undefined, fallback = 0): number {
@@ -134,7 +134,7 @@ function AdvantageBreakdown({ data }: { data: AdvantageBreakdownData }) {
             <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600 shrink-0" />
             <span className="text-chess-muted">우위 유지</span>
           </div>
-          <span className="text-base font-black text-emerald-700 pl-4">{maintained}</span>
+          <span className="text-base font-black text-chess-win pl-4">{maintained}</span>
           <span className="text-[10px] text-chess-muted pl-4">{maintainPct.toFixed(0)}%</span>
         </div>
         <div className="flex flex-col gap-0.5">
@@ -152,7 +152,7 @@ function AdvantageBreakdown({ data }: { data: AdvantageBreakdownData }) {
             <span className="w-2.5 h-2.5 rounded-sm bg-red-600 shrink-0" />
             <span className="text-chess-muted">엔드게임 역전</span>
           </div>
-          <span className="text-base font-black text-red-700 pl-4">{reversedEnd}</span>
+          <span className="text-base font-black text-chess-loss pl-4">{reversedEnd}</span>
           {endAvgMove >= 0 && (
             <span className="text-[10px] text-chess-muted pl-4">평균 {endAvgMove}수</span>
           )}
@@ -184,10 +184,10 @@ function GameRow({ game, rank, config }: GameRowProps) {
     statusCls   = "text-chess-muted";
   } else if (game.is_success === true) {
     statusLabel = config.successLabel;
-    statusCls   = "text-emerald-700";
+    statusCls   = "text-chess-win";
   } else if (game.is_success === false) {
     statusLabel = config.failureLabel;
-    statusCls   = "text-red-700";
+    statusCls   = "text-chess-loss";
   } else {
     // is_success 없는 패턴 (발생 빈도 기반 등)
     statusLabel = config.drawLabel;
@@ -285,20 +285,20 @@ function StatSummary({ games, config }: { games: PatternGameItem[]; config: Patt
     <div className="flex items-center gap-3 flex-wrap">
       {/* 승/무/패 */}
       <div className="flex items-center gap-1.5 text-xs">
-        <span className="text-emerald-700 font-bold">{wins}승</span>
+        <span className="text-chess-win font-bold">{wins}승</span>
         <span className="text-chess-muted">·</span>
         <span className="text-chess-muted">{draws}무</span>
         <span className="text-chess-muted">·</span>
-        <span className="text-red-700 font-bold">{losses}패</span>
+        <span className="text-chess-loss font-bold">{losses}패</span>
       </div>
       {/* 패턴 성공/실패 (quality 타입일 때 의미 있음) */}
       {config.analysisType === "quality" && (successes + failures) > 0 && (
         <>
           <span className="text-chess-muted text-xs">|</span>
           <div className="flex items-center gap-1 text-xs">
-            <span className="text-emerald-700">✓ {successes}</span>
+            <span className="text-chess-win">✓ {successes}</span>
             <span className="text-chess-muted">/</span>
-            <span className="text-red-700">✗ {failures}</span>
+            <span className="text-chess-loss">✗ {failures}</span>
           </div>
         </>
       )}
@@ -418,7 +418,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
     ? pattern.chart_data
     : null;
 
-  const scoreColor = pattern.score >= 65 ? "text-emerald-700" : pattern.score >= 45 ? "text-amber-700" : "text-red-700";
+  const scoreColor = pattern.score >= 65 ? "text-chess-win" : pattern.score >= 45 ? "text-amber-700" : "text-chess-loss";
   const scoreBg    = pattern.score >= 65 ? "bg-emerald-600"   : pattern.score >= 45 ? "bg-amber-600"   : "bg-red-600";
 
   const modal = (
@@ -447,8 +447,8 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-chess-primary leading-snug">{pattern.label}</h2>
                 {pattern.is_strength
-                  ? <span className="text-xs text-emerald-700 font-bold">★ 강점</span>
-                  : <span className="text-xs text-red-700 font-bold">▼ 약점</span>
+                  ? <span className="text-xs text-chess-win font-bold">★ 강점</span>
+                  : <span className="text-xs text-chess-loss font-bold">▼ 약점</span>
                 }
                 {/* 분석 타입 배지 */}
                 <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${typeMeta.cls}`}>
@@ -459,9 +459,9 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               <p className="text-xs text-chess-muted mt-1 leading-snug">{cfg.analysisDesc}</p>
               {isAdvantageRetention && (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-                  <span className="px-2 py-0.5 rounded-full border border-emerald-700/30 bg-emerald-700/10 text-emerald-700 font-semibold">완벽 유지: 역전 없이 승리</span>
+                  <span className="px-2 py-0.5 rounded-full border border-emerald-700/30 bg-emerald-700/10 text-chess-win font-semibold">완벽 유지: 역전 없이 승리</span>
                   <span className="px-2 py-0.5 rounded-full border border-amber-700/30 bg-amber-700/10 text-amber-700 font-semibold">흔들렸지만 승리: 한때 역전 후 재역전</span>
-                  <span className="px-2 py-0.5 rounded-full border border-red-700/30 bg-red-700/10 text-red-700 font-semibold">역전: 우위를 놓쳐 무승부/패배</span>
+                  <span className="px-2 py-0.5 rounded-full border border-red-700/30 bg-red-700/10 text-chess-loss font-semibold">역전: 우위를 놓쳐 무승부/패배</span>
                 </div>
               )}
               {isOppositeCastle && (
@@ -475,7 +475,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 </div>
               )}
               {isOpeningFamiliarity && (
-                <div className="mt-2 inline-flex items-center gap-2 text-[10px] font-semibold px-2 py-1 rounded-full border border-emerald-600/30 bg-emerald-600/10 text-emerald-200">
+                <div className="mt-2 inline-flex items-center gap-2 text-[10px] font-semibold px-2 py-1 rounded-full border border-emerald-600/30 bg-emerald-600/10 text-chess-win dark:text-emerald-200">
                   📚 오프닝 친숙도 비교 지표
                 </div>
               )}
@@ -505,11 +505,11 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
             </p>
             {/* 성공/실패 범례 */}
             <div className="flex items-center gap-3 text-[10px]">
-              <span className="flex items-center gap-1 text-emerald-700">
+              <span className="flex items-center gap-1 text-chess-win">
                 <span className="w-2 h-2 rounded-sm bg-emerald-600/60 inline-block" />
                 {cfg.successLabel}
               </span>
-              <span className="flex items-center gap-1 text-red-700">
+              <span className="flex items-center gap-1 text-chess-loss">
                 <span className="w-2 h-2 rounded-sm bg-red-600/60 inline-block" />
                 {cfg.failureLabel}
               </span>
@@ -518,9 +518,9 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
           {isOppositeCastle && castleBreakdown && (
             <div className="grid grid-cols-2 gap-2 pt-1">
               <div className="rounded-lg border border-red-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-red-700">반대 방향</p>
-                <p className="text-2xl font-black text-red-800 leading-tight tabular-nums">{castleBreakdown.oppositeRate}%</p>
-                <p className="text-[10px] text-red-700/80 tabular-nums">{castleBreakdown.oppositeGames}게임</p>
+                <p className="text-[10px] uppercase tracking-wide text-chess-loss">반대 방향</p>
+                <p className="text-2xl font-black text-chess-loss leading-tight tabular-nums">{castleBreakdown.oppositeRate}%</p>
+                <p className="text-[10px] text-chess-loss/80 tabular-nums">{castleBreakdown.oppositeGames}게임</p>
               </div>
               <div className="rounded-lg border border-sky-200 bg-white/95 px-3 py-2 shadow-sm">
                 <p className="text-[10px] uppercase tracking-wide text-sky-700">같은 방향</p>
@@ -529,7 +529,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               </div>
               <div className="col-span-2 rounded-lg border border-amber-200 bg-white/95 px-3 py-2 shadow-sm flex items-center justify-between">
                 <span className="text-[10px] text-amber-800 uppercase tracking-wide">반대-같은 방향 승률 차</span>
-                <span className={`text-base font-extrabold tabular-nums ${castleBreakdown.delta >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                <span className={`text-base font-extrabold tabular-nums ${castleBreakdown.delta >= 0 ? "text-chess-win" : "text-chess-loss"}`}>
                   {castleBreakdown.delta >= 0 ? "+" : ""}{castleBreakdown.delta}%p
                 </span>
               </div>
@@ -538,9 +538,9 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
           {isAdvantageRetention && pattern.chart_data?.type === "advantage_breakdown" && (
             <div className="grid grid-cols-3 gap-2 pt-1">
               <div className="rounded-lg border border-emerald-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-emerald-700">우위 유지 성공</p>
-                <p className="text-2xl font-black text-emerald-800 leading-tight tabular-nums">{asFiniteNumber(pattern.chart_data.maintained ?? pattern.chart_data.converted)}</p>
-                <p className="text-[10px] text-emerald-700/80 tabular-nums">{asFiniteNumber(pattern.chart_data.total) > 0 ? Math.round((asFiniteNumber(pattern.chart_data.maintained ?? pattern.chart_data.converted) / asFiniteNumber(pattern.chart_data.total)) * 100) : 0}%</p>
+                <p className="text-[10px] uppercase tracking-wide text-chess-win">우위 유지 성공</p>
+                <p className="text-2xl font-black text-chess-win leading-tight tabular-nums">{asFiniteNumber(pattern.chart_data.maintained ?? pattern.chart_data.converted)}</p>
+                <p className="text-[10px] text-chess-win/80 tabular-nums">{asFiniteNumber(pattern.chart_data.total) > 0 ? Math.round((asFiniteNumber(pattern.chart_data.maintained ?? pattern.chart_data.converted) / asFiniteNumber(pattern.chart_data.total)) * 100) : 0}%</p>
               </div>
               <div className="rounded-lg border border-amber-200 bg-white/95 px-3 py-2 shadow-sm">
                 <p className="text-[10px] uppercase tracking-wide text-amber-700">중반 역전</p>
@@ -548,18 +548,18 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 <p className="text-[10px] text-amber-700/80 tabular-nums">{pattern.chart_data.mid_avg_move != null ? `평균 ${pattern.chart_data.mid_avg_move}수` : "-"}</p>
               </div>
               <div className="rounded-lg border border-red-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-red-700">엔드게임 역전</p>
-                <p className="text-2xl font-black text-red-800 leading-tight tabular-nums">{asFiniteNumber(pattern.chart_data.reversed_end ?? pattern.chart_data.blown)}</p>
-                <p className="text-[10px] text-red-700/80 tabular-nums">{pattern.chart_data.end_avg_move != null ? `평균 ${pattern.chart_data.end_avg_move}수` : "-"}</p>
+                <p className="text-[10px] uppercase tracking-wide text-chess-loss">엔드게임 역전</p>
+                <p className="text-2xl font-black text-chess-loss leading-tight tabular-nums">{asFiniteNumber(pattern.chart_data.reversed_end ?? pattern.chart_data.blown)}</p>
+                <p className="text-[10px] text-chess-loss/80 tabular-nums">{pattern.chart_data.end_avg_move != null ? `평균 ${pattern.chart_data.end_avg_move}수` : "-"}</p>
               </div>
             </div>
           )}
           {isOpeningFamiliarity && openingBreakdown && (
             <div className="grid grid-cols-2 gap-2 pt-1">
               <div className="rounded-lg border border-emerald-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-emerald-700">주력 오프닝</p>
-                <p className="text-2xl font-black text-emerald-800 leading-tight tabular-nums">{openingBreakdown.main_rate.toFixed(0)}%</p>
-                <p className="text-[10px] text-emerald-700/80 tabular-nums">{openingBreakdown.main_count}게임</p>
+                <p className="text-[10px] uppercase tracking-wide text-chess-win">주력 오프닝</p>
+                <p className="text-2xl font-black text-chess-win leading-tight tabular-nums">{openingBreakdown.main_rate.toFixed(0)}%</p>
+                <p className="text-[10px] text-chess-win/80 tabular-nums">{openingBreakdown.main_count}게임</p>
               </div>
               <div className="rounded-lg border border-amber-200 bg-white/95 px-3 py-2 shadow-sm">
                 <p className="text-[10px] uppercase tracking-wide text-amber-700">생소 오프닝</p>
@@ -568,7 +568,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               </div>
               <div className="col-span-2 rounded-lg border border-lime-200 bg-white/95 px-3 py-2 shadow-sm flex items-center justify-between">
                 <span className="text-[10px] text-lime-800 uppercase tracking-wide">주력-생소 오프닝 승률 차</span>
-                <span className={`text-base font-extrabold tabular-nums ${openingBreakdown.diff >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                <span className={`text-base font-extrabold tabular-nums ${openingBreakdown.diff >= 0 ? "text-chess-win" : "text-chess-loss"}`}>
                   {openingBreakdown.diff >= 0 ? "+" : ""}{openingBreakdown.diff.toFixed(0)}%p
                 </span>
               </div>
@@ -582,9 +582,9 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 <p className="text-[10px] text-cyan-700/80 tabular-nums">{iqpBreakdown.my_iqp_count}게임</p>
               </div>
               <div className="rounded-lg border border-emerald-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-emerald-700">상대 IQP</p>
-                <p className="text-2xl font-black text-emerald-800 leading-tight tabular-nums">{iqpBreakdown.opp_iqp_rate.toFixed(0)}%</p>
-                <p className="text-[10px] text-emerald-700/80 tabular-nums">{iqpBreakdown.opp_iqp_count}게임</p>
+                <p className="text-[10px] uppercase tracking-wide text-chess-win">상대 IQP</p>
+                <p className="text-2xl font-black text-chess-win leading-tight tabular-nums">{iqpBreakdown.opp_iqp_rate.toFixed(0)}%</p>
+                <p className="text-[10px] text-chess-win/80 tabular-nums">{iqpBreakdown.opp_iqp_count}게임</p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-sm">
                 <p className="text-[10px] uppercase tracking-wide text-slate-700">무IQP</p>
@@ -593,7 +593,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               </div>
               <div className="col-span-3 rounded-lg border border-sky-200 bg-white/95 px-3 py-2 shadow-sm flex items-center justify-between">
                 <span className="text-[10px] text-sky-800 uppercase tracking-wide">내 IQP - 무IQP 승률 차</span>
-                <span className={`text-base font-extrabold tabular-nums ${iqpBreakdown.my_vs_none_diff >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                <span className={`text-base font-extrabold tabular-nums ${iqpBreakdown.my_vs_none_diff >= 0 ? "text-chess-win" : "text-chess-loss"}`}>
                   {iqpBreakdown.my_vs_none_diff >= 0 ? "+" : ""}{iqpBreakdown.my_vs_none_diff.toFixed(0)}%p
                 </span>
               </div>

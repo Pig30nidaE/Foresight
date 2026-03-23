@@ -427,7 +427,7 @@ function DashboardContent() {
           </div>
 
           <section
-            className={`bg-chess-surface/80 dark:bg-chess-surface/40 border border-chess-border/70 dark:border-chess-border rounded-2xl p-3 sm:p-6 dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] ${
+            className={`bg-chess-bg/85 dark:bg-chess-elevated/12 border border-chess-border/55 dark:border-chess-border/50 rounded-2xl p-3 sm:p-5 shadow-sm dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] ${
               activeTab !== "games" ? "hidden" : ""
             }`}
             aria-hidden={activeTab !== "games"}

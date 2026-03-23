@@ -1,31 +1,55 @@
 """
 게임 데이터 분석 서비스 — 순수 Python 통계 처리
 """
+import io
 import re
 from collections import defaultdict
-from typing import List, Optional
+from typing import List, Optional, Tuple
+
+import chess.pgn
+
 from app.models.schemas import GameSummary, OpeningStats, PerformanceSummary, Platform
 from app.shared.services import opening_db
 from app.shared.services.pgn_parser import ParsedGame, MoveData
 
-# PGN 첫 수 추출용 정규식
+# PGN 첫 수 추출용 정규식 (파서 실패 시 폴백)
 _RE_HEADERS = re.compile(r'\[[^\]]+\]')
-_RE_BRACES  = re.compile(r'\{[^}]*\}')   # {[%clk...]} 및 빈 {} 제거
-_RE_MOVENUM = re.compile(r'\d+\.+')       # 1. / 1... 제거
-_RESULT_TOKENS = frozenset({'*', '1-0', '0-1', '1/2-1/2'})
+_RE_BRACES = re.compile(r"\{[^}]*\}")  # {[%clk...]} 및 빈 {} 제거
+_RE_MOVENUM = re.compile(r"\d+\.+")  # 1. / 1... 제거
+_RESULT_TOKENS = frozenset({"*", "1-0", "0-1", "1/2-1/2"})
 
 
-def _extract_first_moves(pgn: str):
-    """PGN → (white_move1, black_move1) — 예) ('e4', 'c5')"""
-    if not pgn:
-        return None, None
-    moves_part = _RE_HEADERS.sub('', pgn)
-    moves_part = _RE_BRACES.sub('', moves_part)
-    moves_part = _RE_MOVENUM.sub('', moves_part)
+def _extract_first_moves_regex(pgn: str) -> Tuple[Optional[str], Optional[str]]:
+    """헤더·클록 제거 후 토큰 앞 두 개 → 변형(괄호) PGN에서는 순서가 틀어질 수 있음."""
+    moves_part = _RE_HEADERS.sub("", pgn)
+    moves_part = _RE_BRACES.sub("", moves_part)
+    moves_part = _RE_MOVENUM.sub("", moves_part)
     tokens = [t for t in moves_part.split() if t not in _RESULT_TOKENS and t.strip()]
     white1 = tokens[0] if len(tokens) > 0 else None
     black1 = tokens[1] if len(tokens) > 1 else None
     return white1, black1
+
+
+def _extract_first_moves(pgn: str) -> Tuple[Optional[str], Optional[str]]:
+    """PGN → (백 1수 SAN, 흑 1수 SAN). 메인라인 기준으로 파싱해 백/흑을 보드와 일치시킴."""
+    if not pgn or not pgn.strip():
+        return None, None
+    try:
+        game = chess.pgn.read_game(io.StringIO(pgn))
+        if game is not None:
+            board = game.board()
+            main = list(game.mainline_moves())
+            if not main:
+                return None, None
+            w_san = board.san(main[0])
+            board.push(main[0])
+            if len(main) < 2:
+                return w_san, None
+            b_san = board.san(main[1])
+            return w_san, b_san
+    except Exception:
+        pass
+    return _extract_first_moves_regex(pgn)
 
 
 class AnalysisService:
