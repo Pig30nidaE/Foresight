@@ -104,6 +104,9 @@ export default function BlunderTimeline({ data }: Props) {
     : null;
 
   const overall = hasClock ? (data.overall["mine"] ?? Object.values(data.overall)[0]) : null;
+  const upq = overall?.under_pressure_quality;
+  const thresholdSec =
+    typeof data?.pressure_threshold_seconds === "number" ? data.pressure_threshold_seconds : null;
 
   return (
     <div className="space-y-5">
@@ -115,7 +118,11 @@ export default function BlunderTimeline({ data }: Props) {
 
       {/* 클록 데이터가 있을 때: 요약 배지 */}
       {hasClock && overall && (
-        <div className="grid gap-3 text-xs sm:grid-cols-3">
+        <div
+          className={`grid gap-3 text-xs ${
+            upq ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"
+          }`}
+        >
           <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
             <p className="text-chess-muted">{t("chart.analyzedGames")}</p>
             <p className="mt-1 text-lg font-black text-chess-primary">{t("chart.gamesCount").replace("{n}", String(data!.games_with_clock))}</p>
@@ -125,6 +132,11 @@ export default function BlunderTimeline({ data }: Props) {
             <p className={`mt-1 text-lg font-black ${overall.pressure_ratio >= 0.3 ? "text-rose-700" : overall.pressure_ratio >= 0.15 ? "text-amber-700" : "text-emerald-700"}`}>
               {Math.round(overall.pressure_ratio * 100)}%
             </p>
+            {thresholdSec != null && (
+              <p className="mt-1 text-[10px] text-chess-muted leading-tight">
+                &lt;{thresholdSec}s
+              </p>
+            )}
           </div>
           <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
             <p className="text-chess-muted">{t("chart.avgThinkTime")}</p>
@@ -132,6 +144,25 @@ export default function BlunderTimeline({ data }: Props) {
               {overall.avg_time_spent != null ? t("chart.seconds").replace("{n}", String(overall.avg_time_spent)) : "-"}
             </p>
           </div>
+          {upq && (
+            <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
+              <p className="text-chess-muted">{t("chart.pressureSevereUnderPct")}</p>
+              <p
+                className={`mt-1 text-lg font-black ${
+                  upq.severe_under_pressure_ratio >= 0.35
+                    ? "text-rose-700"
+                    : upq.severe_under_pressure_ratio >= 0.2
+                      ? "text-amber-700"
+                      : "text-emerald-700"
+                }`}
+              >
+                {Math.round(upq.severe_under_pressure_ratio * 100)}%
+              </p>
+              <p className="mt-1 text-[10px] text-chess-muted leading-tight">
+                {t("chart.pressureQualityFootnote")}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

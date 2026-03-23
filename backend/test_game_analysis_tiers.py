@@ -1,4 +1,4 @@
-from app.ml.game_analyzer import MoveTier, _determine_tier
+from app.ml.game_analyzer import MoveTier, AnalyzedMove, _determine_tier, _promote_best_t2_to_t1
 
 
 def test_determine_tier_top_rank_near_zero_is_t2():
@@ -30,3 +30,22 @@ def test_determine_tier_non_top_move_steps_t5_then_t6():
 def test_determine_tier_only_best_win_loss_small_cp_loss_can_be_large_is_t2():
     # is_only_best=True 인 케이스는 "손실이 있어도" 우선 T2로 보는 기대값에 맞춘다.
     assert _determine_tier(30, 0.9, 1, True) == MoveTier.T2
+
+
+def test_promote_best_t2_to_t1():
+    def mv(hm, cp_loss, win_loss, rank, only_best, tier):
+        return AnalyzedMove(
+            halfmove=hm, move_number=hm // 2 + 1, color="white", san="e4", uci="e2e4",
+            cp_loss=cp_loss, win_pct_loss=win_loss,
+            user_move_rank=rank, is_only_best=only_best, tier=tier,
+        )
+
+    w = [
+        mv(0, 5, 0.5, 1, True, MoveTier.T2),
+        mv(2, 8, 1.0, 1, False, MoveTier.T2),
+    ]
+    b = [mv(1, 3, 0.2, 1, True, MoveTier.T2)]
+    _promote_best_t2_to_t1(w, b)
+    t1s = [m for m in w + b if m.tier == MoveTier.T1]
+    assert len(t1s) == 1
+    assert t1s[0].halfmove == 1  # cp_loss 3, win 0.2, only_best = best

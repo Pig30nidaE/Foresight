@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 from functools import partial
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
@@ -125,6 +125,7 @@ def _run_analysis(
     game_id: str,
     depth: Optional[int],
     cache_key: Tuple[str, Optional[int]],
+    cancel_event: threading.Event,
 ) -> None:
     """동기 스레드에서 실행. 분석 이벤트를 큐에 넣고, 성공 시 캐시에 저장합니다."""
     init_data: Dict[str, Any] = {}
@@ -145,9 +146,13 @@ def _run_analysis(
             stockfish_depth=depth,
             on_init=on_init,
             on_move=on_move,
+            cancel_event=cancel_event,
         )
 
         if result is None:
+            if cancel_event.is_set():
+                logger.info("[Game Analysis] cancelled (client disconnected); no error event / no cache")
+                return
             q.put({"type": "error", "message": "PGN 파싱 실패 또는 Stockfish를 찾을 수 없습니다."})
             return
 
@@ -177,7 +182,10 @@ def _run_analysis(
 
 
 @router.post("/game/stream")
-async def analyze_game_stream(request: GameAnalysisRequest = Body(...)):
+async def analyze_game_stream(
+    http_request: Request,
+    game_req: GameAnalysisRequest = Body(...),
+):
     """
     **SSE 스트리밍 게임 분석**
 
@@ -193,21 +201,27 @@ async def analyze_game_stream(request: GameAnalysisRequest = Body(...)):
     - complete: 전체 분석 완료 (요약 통계)
     - error: 오류 발생
     """
-    if not request.pgn or not request.pgn.strip():
+    if not game_req.pgn or not game_req.pgn.strip():
         async def error_gen():
             yield f"data: {json.dumps({'type': 'error', 'message': 'PGN이 필요합니다.'}, ensure_ascii=False)}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
 
-    ck = _cache_key(request.game_id, request.pgn, request.stockfish_depth)
+    ck = _cache_key(game_req.game_id, game_req.pgn, game_req.stockfish_depth)
     cached = _cache_get(ck)
     if cached is not None:
         logger.info(f"[Game Analysis SSE Cache HIT] key={ck[0]} depth={ck[1]}")
 
         async def replay_cached():
             yield f"data: {json.dumps({'type': 'queued'})}\n\n"
+            if await http_request.is_disconnected():
+                return
             yield f"data: {json.dumps(cached.init_event, ensure_ascii=False)}\n\n"
             for mv in cached.move_events:
+                if await http_request.is_disconnected():
+                    return
                 yield f"data: {json.dumps(mv, ensure_ascii=False)}\n\n"
+            if await http_request.is_disconnected():
+                return
             yield f"data: {json.dumps(cached.complete_event, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(
@@ -224,12 +238,13 @@ async def analyze_game_stream(request: GameAnalysisRequest = Body(...)):
         yield f"data: {json.dumps({'type': 'queued'})}\n\n"
 
         async with _analysis_concurrency_slot():
+            cancel_event = threading.Event()
             q: thread_queue.Queue = thread_queue.Queue()
             loop = asyncio.get_event_loop()
 
             logger.info(
-                f"[Game Analysis SSE Start] game_id={request.game_id!r} "
-                f"depth={request.stockfish_depth}"
+                f"[Game Analysis SSE Start] game_id={game_req.game_id!r} "
+                f"depth={game_req.stockfish_depth}"
             )
 
             future = loop.run_in_executor(
@@ -237,26 +252,35 @@ async def analyze_game_stream(request: GameAnalysisRequest = Body(...)):
                 partial(
                     _run_analysis,
                     q,
-                    request.pgn,
-                    request.game_id,
-                    request.stockfish_depth,
+                    game_req.pgn,
+                    game_req.game_id,
+                    game_req.stockfish_depth,
                     ck,
+                    cancel_event,
                 ),
             )
 
+            client_gone = False
             while True:
+                if not client_gone and await http_request.is_disconnected():
+                    cancel_event.set()
+                    client_gone = True
+                    logger.info("[Game Analysis] client disconnected; analysis will stop after current move")
+
                 try:
                     event = await loop.run_in_executor(
                         None, lambda: q.get(timeout=0.5)
                     )
                 except thread_queue.Empty:
-                    yield ": keepalive\n\n"
+                    if not client_gone:
+                        yield ": keepalive\n\n"
                     continue
 
                 if event is None:
                     break
 
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                if not client_gone:
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
             await future
 

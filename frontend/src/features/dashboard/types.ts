@@ -119,17 +119,33 @@ export interface TimePressurePerMove {
   avg_time_spent: number | null;
 }
 
+/** Lichess 분석(judgment)이 붙은 '시간 압박' 수에 대한 요약 */
+export interface UnderPressureQuality {
+  pressure_moves: number;
+  judged_moves: number;
+  blunders: number;
+  mistakes: number;
+  inaccuracies: number;
+  severe_under_pressure_ratio: number;
+  blunder_under_pressure_ratio: number;
+}
+
+export interface TimePressureOverallBlock {
+  total_moves: number;
+  pressure_moves: number;
+  pressure_ratio: number;
+  avg_time_spent: number | null;
+  under_pressure_quality?: UnderPressureQuality;
+}
+
 export interface TimePressureStats {
   total_games: number;
   games_with_clock: number;
-  overall: Record<string, {
-    total_moves: number;
-    pressure_moves: number;
-    pressure_ratio: number;
-    avg_time_spent: number | null;
-  }>;
+  overall: Record<string, TimePressureOverallBlock>;
   by_phase: TimePressurePhase[];
   per_move: TimePressurePerMove[];
+  pressure_threshold_seconds?: number;
+  pressure_threshold_mode?: string;
 }
 
 // ────────────────────────────────────────────

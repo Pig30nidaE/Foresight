@@ -379,8 +379,9 @@ class AnalysisService:
         username: str,
     ) -> dict:
         """
-        MVP 섹션 3-A: 시간 압박 블런더 분석
-        수 페이즈(opening/middlegame/endgame) × 시간 압박 여부 교차 집계.
+        MVP 섹션 3-A: 시간 압박 분석
+        기물 기반 페이즈 × 시간 압박 여부 교차 집계.
+        Lichess move_analysis가 있으면 압박 상황에서의 엔진 판정(Blunder 등)을 함께 집계.
         """
         uname = username.lower()
 
@@ -421,6 +422,7 @@ class AnalysisService:
                     "clock_after": m.clock_after,
                     "time_spent": m.time_spent,
                     "is_pressure": m.is_time_pressure,
+                    "judgment": m.judgment,
                 })
 
         if not data:
@@ -436,11 +438,42 @@ class AnalysisService:
             n = len(sub)
             p = sum(1 for r in sub if r["is_pressure"])
             times = [r["time_spent"] for r in sub if r["time_spent"] is not None]
-            return {
+            out = {
                 "total_moves": int(n),
                 "pressure_moves": int(p),
                 "pressure_ratio": round(p / n, 4) if n else 0.0,
                 "avg_time_spent": round(sum(times) / len(times), 2) if times else None,
+            }
+            q = _under_pressure_quality(sub)
+            if q is not None:
+                out["under_pressure_quality"] = q
+            return out
+
+        def _under_pressure_quality(sub: list[dict]) -> Optional[dict]:
+            """시간 압박인 수 중 Lichess 엔진 판정이 붙은 수만 집계."""
+            pressure = [r for r in sub if r["is_pressure"]]
+            if not pressure:
+                return None
+            judged = [r for r in pressure if r.get("judgment")]
+            if not judged:
+                return None
+
+            def _cnt(name: str) -> int:
+                return sum(1 for r in judged if r.get("judgment") == name)
+
+            bl = _cnt("Blunder")
+            mi = _cnt("Mistake")
+            ia = _cnt("Inaccuracy")
+            nj = len(judged)
+            severe = bl + mi
+            return {
+                "pressure_moves": int(len(pressure)),
+                "judged_moves": int(nj),
+                "blunders": int(bl),
+                "mistakes": int(mi),
+                "inaccuracies": int(ia),
+                "severe_under_pressure_ratio": round(severe / nj, 4) if nj else 0.0,
+                "blunder_under_pressure_ratio": round(bl / nj, 4) if nj else 0.0,
             }
 
         overall: dict = {}

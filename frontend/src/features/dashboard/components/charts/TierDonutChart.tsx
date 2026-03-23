@@ -14,20 +14,18 @@ interface TierDonutChartProps {
 
 type TierGroup = "good" | "neutral" | "risk";
 
+/* 다크 배경에서도 무난한 채도의 에메랄드·앰버·코랄 */
 const TIER_META: Record<MoveTier, { group: TierGroup; stroke: string; labelKey: I18nKey }> = {
-  // Good
-  TH: { group: "good", stroke: "#10b981", labelKey: "tier.TH" },
-  TF: { group: "good", stroke: "#10b981", labelKey: "tier.TF" },
-  T1: { group: "good", stroke: "#10b981", labelKey: "tier.T1" },
-  T2: { group: "good", stroke: "#10b981", labelKey: "tier.T2" },
-  T3: { group: "good", stroke: "#10b981", labelKey: "tier.T3" },
+  TH: { group: "good", stroke: "#2d9f72", labelKey: "tier.TH" },
+  TF: { group: "good", stroke: "#2d9f72", labelKey: "tier.TF" },
+  T1: { group: "good", stroke: "#2d9f72", labelKey: "tier.T1" },
+  T2: { group: "good", stroke: "#2d9f72", labelKey: "tier.T2" },
+  T3: { group: "good", stroke: "#2d9f72", labelKey: "tier.T3" },
 
-  // Neutral
-  T4: { group: "neutral", stroke: "#f59e0b", labelKey: "tier.T4" },
-  T5: { group: "neutral", stroke: "#f59e0b", labelKey: "tier.T5" },
+  T4: { group: "neutral", stroke: "#c9a227", labelKey: "tier.T4" },
+  T5: { group: "neutral", stroke: "#c9a227", labelKey: "tier.T5" },
 
-  // Risk
-  T6: { group: "risk", stroke: "#ef4444", labelKey: "tier.T6" },
+  T6: { group: "risk", stroke: "#d97066", labelKey: "tier.T6" },
 };
 
 function withAlpha(hex: string, alpha: number) {

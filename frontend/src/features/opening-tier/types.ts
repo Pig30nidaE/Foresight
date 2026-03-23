@@ -25,6 +25,8 @@ export interface OpeningTierResponse {
   color: string;
   total_openings: number;
   data_period: string;
+  /** 마지막 수집된 날짜 (YYYY-MM-DD) */
+  collected_at: string;
   openings: OpeningTierEntry[];
 }
 
