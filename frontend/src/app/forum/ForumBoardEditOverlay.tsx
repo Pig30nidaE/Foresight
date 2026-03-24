@@ -88,11 +88,11 @@ export default function ForumBoardEditOverlay({
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity dark:bg-black/60"
+        className="absolute inset-0 bg-black/60 transition-opacity dark:bg-black/70"
         onClick={onClose}
         aria-label="오버레이 닫기"
       />
-      <div className="relative z-10 flex max-h-[min(92dvh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-chess-border bg-chess-bg shadow-2xl dark:border-chess-border dark:bg-chess-elevated">
+      <div className="relative z-10 flex max-h-[min(92dvh,40rem)] w-full max-w-lg flex-col overflow-hidden pixel-frame bg-chess-bg dark:bg-chess-elevated">
         <div className="flex items-center justify-between gap-2 border-b border-chess-border/80 px-3 py-2">
           <h3 id={ariaTitleId} className="text-sm font-semibold text-chess-primary">
             썸네일용 보드 · FEN

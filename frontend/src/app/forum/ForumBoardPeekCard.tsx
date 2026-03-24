@@ -19,7 +19,7 @@ export default function ForumBoardPeekCard({ imported, previewFen, onActivate }:
       <button
         type="button"
         onClick={onActivate}
-        className="relative aspect-square w-[min(100%,14rem)] shrink-0 overflow-hidden rounded-xl border border-chess-border/80 bg-chess-surface shadow-sm outline-none transition hover:border-chess-accent/45 hover:shadow-md focus-visible:ring-2 focus-visible:ring-chess-accent/30 sm:w-[min(100%,15rem)]"
+        className="relative aspect-square w-[min(100%,14rem)] shrink-0 overflow-hidden pixel-frame bg-chess-surface outline-none transition-colors hover:border-chess-accent/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-chess-accent sm:w-[min(100%,15rem)]"
         aria-label={imported ? "보드 편집 열기" : "보드 불러오기"}
       >
         {showBoard ? (

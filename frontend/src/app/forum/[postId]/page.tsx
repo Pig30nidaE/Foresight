@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
@@ -13,6 +13,7 @@ import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
 import { composerPreviewFen, DEFAULT_START_FEN, getFinalFenFromPgn } from "@/shared/lib/forumChess";
 import { AuthorNameLink } from "@/shared/components/forum/AuthorName";
+import { PixelHeartGlyph } from "@/shared/components/ui/PixelGlyphs";
 import {
   freeDetailBadgeClass,
   noticeDetailBadgeClass,
@@ -20,13 +21,18 @@ import {
 } from "@/shared/components/forum/boardPostBadges";
 import { ReportModal } from "@/shared/components/forum/ReportModal";
 import { apiErrorDetail } from "@/shared/lib/apiErrorDetail";
+import { useTranslation } from "@/shared/lib/i18n";
+
+function isForumAdminAuthor(role?: string | null) {
+  return (role ?? "").toLowerCase().trim() === "admin";
+}
 
 type CommentItem = {
   id: string;
   body: string;
   created_at: string;
   can_edit?: boolean;
-  author: { id: string; public_id: string; display_name: string; role?: string };
+  author: { id: string; public_id: string; display_name: string; role?: string; avatar_url?: string | null };
 };
 
 type PostDetail = {
@@ -37,7 +43,7 @@ type PostDetail = {
   pgn_text: string | null;
   fen_initial: string | null;
   board_category?: string | null;
-  author: { id: string; public_id: string; display_name: string; role?: string };
+  author: { id: string; public_id: string; display_name: string; role?: string; avatar_url?: string | null };
   created_at: string;
   like_count: number;
   comment_count: number;
@@ -47,7 +53,7 @@ type PostDetail = {
 };
 
 const inputClass =
-  "w-full rounded-xl border border-chess-border/90 bg-chess-bg px-4 py-3 text-sm text-chess-primary shadow-inner shadow-black/[0.02] outline-none transition-[border-color,box-shadow] placeholder:text-chess-muted/70 focus:border-chess-accent/50 focus:ring-2 focus:ring-chess-accent/20 dark:border-chess-border dark:bg-chess-elevated/50";
+  "w-full pixel-input px-4 py-3 text-sm text-chess-primary placeholder:text-chess-muted/70 dark:bg-chess-elevated/50";
 
 export default function ForumPostDetailPage() {
   const params = useParams<{ postId: string }>();
@@ -72,6 +78,9 @@ export default function ForumPostDetailPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<"post" | { type: "comment"; id: string } | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
+  const [reportSubmittedFlash, setReportSubmittedFlash] = useState(false);
+  const reportFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { t } = useTranslation();
 
   const load = async () => {
     if (!postId) return;
@@ -131,6 +140,12 @@ export default function ForumPostDetailPage() {
     };
     void loadMe();
   }, [status]);
+
+  useEffect(() => {
+    return () => {
+      if (reportFlashTimerRef.current) clearTimeout(reportFlashTimerRef.current);
+    };
+  }, []);
 
   const onToggleLike = async () => {
     if (!post) return;
@@ -249,6 +264,12 @@ export default function ForumPostDetailPage() {
       });
       setReportOpen(false);
       setReportTarget(null);
+      setReportSubmittedFlash(true);
+      if (reportFlashTimerRef.current) clearTimeout(reportFlashTimerRef.current);
+      reportFlashTimerRef.current = setTimeout(() => {
+        reportFlashTimerRef.current = null;
+        setReportSubmittedFlash(false);
+      }, 4500);
       await load();
     } catch (e: unknown) {
       setError(apiErrorDetail(e));
@@ -354,10 +375,18 @@ export default function ForumPostDetailPage() {
       {error && <p className="text-red-500">{error}</p>}
       {post && (
         <>
+          {reportSubmittedFlash && (
+            <div
+              className="pixel-frame border-chess-win/35 bg-chess-win/10 px-4 py-3 text-sm text-chess-primary dark:text-chess-primary"
+              role="status"
+            >
+              {t("forum.reportSubmitted")}
+            </div>
+          )}
           {editing ? (
             <form
               onSubmit={onUpdatePost}
-              className="overflow-hidden rounded-2xl border border-chess-border/70 bg-gradient-to-b from-chess-surface/90 to-chess-bg/80 shadow-md dark:border-chess-border dark:from-chess-surface/50 dark:to-chess-bg/40"
+              className="overflow-hidden pixel-frame bg-chess-surface/80 dark:bg-chess-surface/35"
             >
               <div className="border-b border-chess-border/50 bg-chess-elevated/25 px-5 py-4 dark:bg-chess-elevated/20">
                 <p className="text-xs font-medium uppercase tracking-wider text-chess-muted">제목</p>
@@ -381,7 +410,7 @@ export default function ForumPostDetailPage() {
                         type="button"
                         onClick={() => setEditBoardSectionExpanded((v) => !v)}
                         aria-expanded={editBoardSectionExpanded}
-                        className="mb-2 flex w-full max-w-[15rem] items-center justify-center gap-2 rounded-lg border border-chess-border/80 bg-chess-surface/50 py-2 text-xs font-medium text-chess-primary transition hover:bg-chess-elevated/60 dark:bg-chess-elevated/25"
+                        className="mb-2 flex w-full max-w-[15rem] items-center justify-center gap-2 pixel-btn bg-chess-surface/55 py-2 text-xs font-medium text-chess-primary hover:bg-chess-elevated/60 dark:bg-chess-elevated/25"
                       >
                         {editBoardSectionExpanded ? (
                           <ChevronUp className="size-4 shrink-0 text-chess-muted" aria-hidden />
@@ -425,14 +454,14 @@ export default function ForumPostDetailPage() {
                 <button
                   type="button"
                   onClick={cancelEdit}
-                  className="rounded-xl border border-chess-border/90 px-5 py-3 text-sm font-medium text-chess-primary transition hover:bg-chess-elevated/50"
+                  className="font-pixel pixel-btn px-5 py-3 text-sm font-medium text-chess-primary hover:bg-chess-elevated/50"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={busy}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-chess-accent px-6 py-3 text-sm font-semibold text-white shadow-sm transition enabled:hover:brightness-105 disabled:opacity-50 dark:shadow-none"
+                  className="font-pixel pixel-btn inline-flex items-center justify-center gap-2 bg-chess-accent px-6 py-3 text-sm font-semibold text-white border-chess-accent enabled:hover:brightness-105 disabled:opacity-50"
                 >
                   {busy ? (
                     <>
@@ -446,7 +475,7 @@ export default function ForumPostDetailPage() {
               </div>
             </form>
           ) : (
-            <article className="rounded-lg border border-chess-border p-4">
+            <article className="pixel-frame p-4">
               {post.board_category === "notice" && (
                 <p className={noticeDetailBadgeClass}>공지</p>
               )}
@@ -454,16 +483,21 @@ export default function ForumPostDetailPage() {
                 <p className={patchDetailBadgeClass}>패치노트</p>
               )}
               {post.board_category === "free" && <p className={freeDetailBadgeClass}>자유글</p>}
-              <h1 className="break-words text-2xl font-bold text-chess-primary [overflow-wrap:anywhere]">{post.title}</h1>
-              <p className="mt-2 text-xs text-chess-muted">
+              <h1 className="break-words text-2xl font-bold text-chess-primary [overflow-wrap:anywhere] sm:text-3xl">
+                {post.title}
+              </h1>
+              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-chess-muted sm:text-base">
                 <AuthorNameLink
                   author={post.author}
-                  className="font-medium text-chess-primary hover:text-chess-accent hover:underline underline-offset-2"
-                />{" "}
-                · {new Date(post.created_at).toLocaleString()}
-              </p>
+                  avatarSize={32}
+                  className="min-w-0 font-semibold text-chess-primary hover:text-chess-accent hover:underline underline-offset-2 sm:text-lg"
+                />
+                <span className="shrink-0 tabular-nums opacity-90">
+                  · {new Date(post.created_at).toLocaleString()}
+                </span>
+              </div>
               {displayFen && (
-                <div className="relative mx-auto mt-6 aspect-square w-full max-w-xs overflow-hidden rounded-xl border border-chess-border/80 bg-chess-surface shadow-sm sm:max-w-sm">
+                <div className="relative mx-auto mt-6 aspect-square w-full max-w-xs overflow-hidden pixel-frame bg-chess-surface sm:max-w-sm">
                   <ForumPostThumbnail thumbnailFen={displayFen} />
                 </div>
               )}
@@ -471,7 +505,7 @@ export default function ForumPostDetailPage() {
                 {post.body}
               </p>
               {post.pgn_text?.trim() && !post.board_category && (
-                <div className="mt-4 rounded-md border border-chess-border bg-chess-surface/40 p-3">
+                <div className="mt-4 pixel-frame bg-chess-surface/45 p-3">
                   <p className="text-xs font-medium text-chess-muted">PGN</p>
                   <pre className="mt-2 max-h-48 overflow-auto break-words whitespace-pre-wrap font-mono text-xs text-chess-primary [overflow-wrap:anywhere]">
                     {post.pgn_text}
@@ -484,37 +518,41 @@ export default function ForumPostDetailPage() {
                   disabled={busy || status !== "authenticated"}
                   onClick={onToggleLike}
                   aria-label={post.liked_by_me ? `좋아요 취소, ${post.like_count}개` : `좋아요, ${post.like_count}개`}
-                  className="rounded-md border border-chess-border px-3 py-2 text-sm tabular-nums disabled:opacity-50"
+                  className="font-pixel pixel-btn px-3 py-2 text-sm tabular-nums disabled:opacity-50 inline-flex items-center gap-1.5"
                 >
-                  ❤️ {post.like_count}
+                  <PixelHeartGlyph className="text-red-500 dark:text-red-400" size={15} />
+                  {post.like_count}
                 </button>
                 {post.can_edit && (
                   <>
                     <button
                       type="button"
                       onClick={beginEdit}
-                      className="rounded-md border border-chess-border px-3 py-2 text-sm"
+                      className="font-pixel pixel-btn px-3 py-2 text-sm"
                     >
                       수정
                     </button>
                     <button
                       type="button"
                       onClick={onDeletePost}
-                      className="rounded-md border border-red-400 px-3 py-2 text-sm text-red-500"
+                      className="font-pixel pixel-btn border-red-500/60 px-3 py-2 text-sm text-red-500"
                     >
                       삭제
                     </button>
                   </>
                 )}
-                {status === "authenticated" && myUserId && post.author.id !== myUserId && (
-                  <button
-                    type="button"
-                    onClick={openReportPost}
-                    className="rounded-md border border-chess-border px-3 py-2 text-sm text-chess-muted"
-                  >
-                    신고
-                  </button>
-                )}
+                {status === "authenticated" &&
+                  myUserId &&
+                  post.author.id !== myUserId &&
+                  !isForumAdminAuthor(post.author.role) && (
+                    <button
+                      type="button"
+                      onClick={openReportPost}
+                      className="font-pixel pixel-btn px-3 py-2 text-sm text-chess-muted"
+                    >
+                      신고
+                    </button>
+                  )}
               </div>
             </article>
           )}
@@ -532,7 +570,7 @@ export default function ForumPostDetailPage() {
             />
           )}
 
-          <section className="rounded-lg border border-chess-border p-4">
+          <section className="pixel-frame p-4">
             <h2 className="text-lg font-semibold">댓글 {post.comment_count}</h2>
             <form onSubmit={onAddComment} className="mt-3 space-y-2">
               <textarea
@@ -541,19 +579,19 @@ export default function ForumPostDetailPage() {
                 required
                 rows={3}
                 placeholder="댓글을 입력하세요"
-                className="w-full rounded-md border border-chess-border bg-chess-bg px-3 py-2 text-sm break-words [overflow-wrap:anywhere]"
+                className="w-full pixel-input px-3 py-2 text-sm break-words [overflow-wrap:anywhere]"
               />
               <button
                 type="submit"
                 disabled={busy || status !== "authenticated"}
-                className="rounded-md bg-chess-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="font-pixel pixel-btn bg-chess-accent px-4 py-2 text-sm font-semibold text-white border-chess-accent disabled:opacity-50"
               >
                 댓글 작성
               </button>
             </form>
             <div className="mt-4 space-y-3">
               {post.comments.map((c) => (
-                <article key={c.id} className="rounded-md border border-chess-border p-3">
+                <article key={c.id} className="pixel-frame p-3">
                   {editingCommentId === c.id ? (
                     <form onSubmit={onSaveComment} className="space-y-2">
                       <textarea
@@ -563,20 +601,20 @@ export default function ForumPostDetailPage() {
                         minLength={1}
                         maxLength={10000}
                         rows={3}
-                        className="w-full rounded-md border border-chess-border bg-chess-bg px-3 py-2 text-sm break-words [overflow-wrap:anywhere]"
+                        className="w-full pixel-input px-3 py-2 text-sm break-words [overflow-wrap:anywhere]"
                       />
                       <div className="flex gap-2">
                         <button
                           type="submit"
                           disabled={busy}
-                          className="rounded-md bg-chess-accent px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                          className="font-pixel pixel-btn bg-chess-accent px-3 py-1 text-xs font-semibold text-white border-chess-accent disabled:opacity-50"
                         >
                           저장
                         </button>
                         <button
                           type="button"
                           onClick={cancelEditComment}
-                          className="rounded-md border border-chess-border px-3 py-1 text-xs"
+                          className="font-pixel pixel-btn px-3 py-1 text-xs"
                         >
                           취소
                         </button>
@@ -588,13 +626,16 @@ export default function ForumPostDetailPage() {
                     </p>
                   )}
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-chess-muted">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-chess-muted sm:text-base">
                       <AuthorNameLink
                         author={c.author}
-                        className="font-medium text-chess-primary hover:text-chess-accent hover:underline underline-offset-2"
-                      />{" "}
-                      · {new Date(c.created_at).toLocaleString()}
-                    </p>
+                        avatarSize={26}
+                        className="min-w-0 font-semibold text-chess-primary hover:text-chess-accent hover:underline underline-offset-2 sm:text-lg"
+                      />
+                      <span className="shrink-0 tabular-nums opacity-90">
+                        · {new Date(c.created_at).toLocaleString()}
+                      </span>
+                    </div>
                     {editingCommentId !== c.id && status === "authenticated" && (
                       <div className="flex flex-wrap items-center gap-2">
                         {c.can_edit && (
@@ -615,7 +656,7 @@ export default function ForumPostDetailPage() {
                             </button>
                           </>
                         )}
-                        {myUserId && c.author.id !== myUserId && (
+                        {myUserId && c.author.id !== myUserId && !isForumAdminAuthor(c.author.role) && (
                           <button
                             type="button"
                             onClick={() => openReportComment(c.id)}

@@ -16,6 +16,13 @@ const SQ_KEYFRAMES = `
 
 import { useTranslation } from "@/shared/lib/i18n";
 import type { TacticalPattern, PatternGameItem } from "@/types";
+import {
+  PixelCaretDownGlyph,
+  PixelCaretRightGlyph,
+  PixelChartGlyph,
+  PixelMicroscopeGlyph,
+  PixelXGlyph,
+} from "@/shared/components/ui/PixelGlyphs";
 
 // ─── Chess.com 분석 URL (특정 수로 이동) ────────────────────
 function toAnalysisUrl(url: string, moveNo?: number, color?: "white" | "black"): string {
@@ -215,7 +222,7 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
       <div className="flex flex-col h-full gap-3">
         <div className="flex items-center justify-between">
           <span className="text-xs text-chess-muted">{t("sac.noPgn")}</span>
-          <button onClick={onClose} className="text-chess-muted hover:text-chess-primary text-lg">✕</button>
+          <button type="button" onClick={onClose} className="text-chess-muted hover:text-chess-primary p-0.5" aria-label="닫기"><PixelXGlyph size={18} /></button>
         </div>
         <div className="flex-1 flex items-center justify-center">
           <a href={toAnalysisUrl(game.url)} target="_blank" rel="noopener noreferrer"
@@ -245,7 +252,7 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
             {game.white && game.black && <span className="ml-1">{game.white} vs {game.black}</span>}
           </p>
         </div>
-        <button onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary text-lg leading-none ml-2">✕</button>
+        <button type="button" onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary ml-2 p-0.5" aria-label="닫기"><PixelXGlyph size={18} /></button>
       </div>
 
       {/* 보드 — 고정 크기로 스크롤 없이 표시 */}
@@ -422,7 +429,9 @@ function SacGameRow({ game, rank, isSelected, onSelect, t }: {
           <span className={`text-[10px] font-bold ${tierMeta.text}`}>{tierMeta.label}</span>
           <span className={`text-[9px] px-1 py-0.5 rounded-full border font-semibold ${badge.cls}`}>{badge.label}</span>
         </div>
-        <span className={`text-[10px] shrink-0 ${isSelected ? "text-amber-500" : "text-chess-muted"}`}>{isSelected ? "▶" : "›"}</span>
+        <span className={`inline-flex shrink-0 ${isSelected ? "text-amber-500" : "text-chess-muted"}`}>
+          <PixelCaretRightGlyph size={10} />
+        </span>
       </div>
       {game.context && <p className="text-[10px] text-chess-muted italic truncate mt-0.5 pl-6">{game.context}</p>}
     </button>
@@ -491,12 +500,22 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
         {/* 헤더 */}
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-chess-border bg-chess-bg/70 shrink-0">
           <div className="flex items-start gap-3 min-w-0">
-            <span className="text-2xl leading-none">{pattern.icon}</span>
+            <PixelChartGlyph size={26} className="text-chess-accent shrink-0 mt-0.5 opacity-90" />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-chess-primary">{pattern.label}</h2>
-                {pattern.is_strength ? <span className="text-xs text-chess-win font-bold">{t("sac.strength")}</span> : <span className="text-xs text-chess-loss font-bold">{t("sac.weakness")}</span>}
-                <span className="text-[10px] px-2 py-0.5 rounded-full border border-blue-700/30 bg-blue-700/8 text-blue-700 font-semibold">🔬 Stockfish</span>
+                {pattern.is_strength ? (
+                  <span className="text-xs text-chess-win font-bold">{t("sac.strength")}</span>
+                ) : (
+                  <span className="text-xs text-chess-loss font-bold inline-flex items-center gap-0.5">
+                    <PixelCaretDownGlyph size={12} className="text-chess-loss" />
+                    {t("sac.weakness")}
+                  </span>
+                )}
+                <span className="text-[10px] px-2 py-0.5 rounded-full border border-blue-700/30 bg-blue-700/8 text-blue-700 font-semibold inline-flex items-center gap-1">
+                  <PixelMicroscopeGlyph size={11} className="shrink-0" />
+                  Stockfish
+                </span>
                 <div className="relative group">
                   <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-chess-muted/40 text-[10px] font-bold text-chess-muted cursor-help">!</span>
                   <div className="pointer-events-none absolute left-0 top-6 z-20 hidden w-72 rounded-xl border border-chess-border bg-chess-surface/95 p-3 text-[10px] text-chess-muted shadow-xl group-hover:block">
@@ -516,7 +535,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
               <p className="text-xs text-chess-muted mt-0.5">{t("sac.validityText")}</p>
             </div>
           </div>
-          <button onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary text-xl leading-none p-1">✕</button>
+          <button type="button" onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary p-1" aria-label="닫기"><PixelXGlyph size={20} /></button>
         </div>
 
         {/* 바디 2-컬럼 */}

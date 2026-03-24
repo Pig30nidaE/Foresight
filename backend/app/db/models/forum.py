@@ -21,6 +21,8 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     avatar_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # When True, OAuth login refreshes avatar_url from IdP; when False, user chose custom or site default.
+    avatar_sync_oauth: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
     signup_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

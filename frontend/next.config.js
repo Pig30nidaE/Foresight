@@ -30,6 +30,10 @@ const nextConfig = {
       },
     ];
   },
+  /** 유저 검색 허브 제거 — `/profile`만 북마크로 열리면 홈으로 보냄 (`/profile/[id]`는 유지). */
+  async redirects() {
+    return [{ source: "/profile", destination: "/", permanent: false }];
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.chesscomfiles.com" },

@@ -8,6 +8,8 @@ import { signOut, useSession } from "next-auth/react";
 import { useTranslation } from "../../lib/i18n";
 import api from "@/shared/lib/api";
 import { clearBackendJwtCache, getBackendJwt } from "@/shared/lib/backendJwt";
+import AvatarThumb from "@/shared/components/ui/AvatarThumb";
+import { PixelPawnGlyph } from "@/shared/components/ui/PixelGlyphs";
 
 const NAV_ITEMS = [
   { href: "/opening-tier", labelKey: "nav.openingTier" as const },
@@ -22,6 +24,7 @@ export default function Navbar() {
   const [username, setUsername] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [forumDisplayName, setForumDisplayName] = useState<string | null>(null);
+  const [forumAvatarUrl, setForumAvatarUrl] = useState<string | null | undefined>(undefined);
   const { t } = useTranslation();
   const { status: authStatus, data: session } = useSession();
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -58,20 +61,24 @@ export default function Navbar() {
     const loadDisplayName = async () => {
       if (authStatus !== "authenticated") {
         setForumDisplayName(null);
+        setForumAvatarUrl(undefined);
         return;
       }
       try {
         const token = await getBackendJwt();
         if (!token) {
           setForumDisplayName("로그인 연동 중");
+          setForumAvatarUrl(null);
           return;
         }
         const { data } = await api.get<{
           display_name?: string;
           signup_completed?: boolean;
+          avatar_url?: string | null;
         }>("/forum/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
+        setForumAvatarUrl(data?.avatar_url ?? null);
         if (data?.signup_completed) {
           setForumDisplayName(data.display_name ?? "닉네임");
         } else {
@@ -79,6 +86,7 @@ export default function Navbar() {
         }
       } catch {
         setForumDisplayName("프로필");
+        setForumAvatarUrl(null);
       }
     };
     void loadDisplayName();
@@ -94,7 +102,7 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="border-b border-chess-border/60 dark:border-chess-border/80 bg-chess-bg/80 dark:bg-chess-bg/90 backdrop-blur-md sticky top-0 z-50 pt-[env(safe-area-inset-top,0px)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]">
+      <header className="border-b-2 border-chess-border/60 dark:border-chess-border/80 bg-chess-bg/95 dark:bg-chess-bg sticky top-0 z-50 pt-[env(safe-area-inset-top,0px)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]">
         {/* 모바일/태블릿은 동일한 틀, 데스크톱(md 이상)에서만 좌측 정렬이 되도록 wrapper를 분리 */}
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
           {/* 좌측 영역: 로고 + (md 이상에서만) 네비 링크 */}
@@ -102,11 +110,15 @@ export default function Navbar() {
             {/* 로고 */}
             <Link
               href="/"
-              className="flex items-center gap-1.5 font-bold text-lg tracking-tight select-none shrink-0"
+              className="font-pixel flex items-center gap-1.5 shrink-0 select-none border-2 border-chess-border bg-chess-surface/90 px-2 py-1 shadow-[2px_2px_0_color-mix(in_srgb,var(--color-chess-primary)_18%,transparent)] hover:brightness-[1.03] active:translate-x-px active:translate-y-px active:shadow-none dark:bg-chess-surface/70 dark:shadow-[2px_2px_0_rgba(0,0,0,0.45)]"
             >
-              <span className="text-xl leading-none">♟️</span>
-              <span className="text-chess-primary">Fore</span>
-              <span className="text-chess-accent">sight</span>
+              <span className="inline-flex" aria-hidden>
+                <PixelPawnGlyph className="text-chess-primary" size={18} />
+              </span>
+              <span className="text-sm font-bold tracking-wide leading-none whitespace-nowrap">
+                <span className="text-chess-primary">foresight</span>
+                <span className="text-chess-accent">-chess</span>
+              </span>
             </Link>
 
             {/* ── 데스크톱 전용 (md 이상) ── */}
@@ -122,10 +134,10 @@ export default function Navbar() {
                   <Link
                     key={href}
                     href={href}
-                    className={`px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-colors ${
+                    className={`font-pixel px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors pixel-btn ${
                       active
-                        ? "bg-chess-accent text-white dark:bg-chess-accent/18 dark:text-chess-accent dark:ring-1 dark:ring-chess-accent/35"
-                        : "text-chess-muted hover:text-chess-primary hover:bg-chess-border/50 dark:hover:bg-chess-elevated/50"
+                        ? "bg-chess-accent text-white dark:bg-chess-accent/22 dark:text-chess-accent"
+                        : "text-chess-muted hover:text-chess-primary bg-transparent"
                     }`}
                   >
                     {t(labelKey)}
@@ -141,14 +153,23 @@ export default function Navbar() {
               <div className="flex items-center gap-1">
                 <Link
                   href="/mypage"
-                  className="text-sm font-semibold text-chess-primary hover:text-chess-accent px-2 py-1 rounded-md"
+                  className="group/nav-avatar inline-flex items-center gap-2.5 border-2 border-transparent px-1.5 py-1 rounded-[var(--pixel-radius)] text-sm font-semibold text-chess-primary hover:border-chess-border/55 hover:bg-chess-surface/70 dark:hover:bg-chess-elevated/35"
                 >
-                  {forumDisplayName ?? "My"}
+                  {forumAvatarUrl !== undefined && (
+                    <AvatarThumb
+                      src={forumAvatarUrl}
+                      alt=""
+                      size={26}
+                      variant="hud"
+                      className="transition-[filter] group-hover/nav-avatar:brightness-105"
+                    />
+                  )}
+                  <span className="truncate max-w-[10rem] leading-none pt-px">{forumDisplayName ?? "My"}</span>
                 </Link>
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="text-sm font-medium text-chess-muted hover:text-chess-primary px-2 py-1 rounded-md"
+                  className="text-sm font-medium text-chess-muted hover:text-chess-primary px-2 py-1 rounded-[var(--pixel-radius)]"
                 >
                   {t("nav.signOut")}
                 </button>
@@ -168,11 +189,11 @@ export default function Navbar() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder={t("nav.searchPlaceholder")}
-                className="w-40 bg-chess-surface border border-chess-border rounded-md px-3 py-1.5 text-sm text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors"
+                className="pixel-input w-40 px-3 py-1.5 text-sm text-chess-primary placeholder-chess-muted"
               />
               <button
                 type="submit"
-                className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-3 py-1.5 rounded-md text-sm transition-colors"
+                className="font-pixel pixel-btn bg-chess-accent hover:bg-chess-accent/85 text-white font-semibold px-3 py-1.5 text-sm"
               >
                 {t("nav.analyze")}
               </button>
@@ -183,7 +204,7 @@ export default function Navbar() {
           <div className="flex md:hidden items-center gap-1 shrink-0">
             <button
               type="button"
-              className="p-2.5 rounded-full hover:bg-chess-border/40 transition-colors"
+              className="p-2.5 rounded-[var(--pixel-radius)] border-2 border-transparent hover:border-chess-border/50 hover:bg-chess-border/30 transition-colors"
               aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
@@ -197,7 +218,7 @@ export default function Navbar() {
         {menuOpen && (
           <div
             ref={drawerRef}
-            className="md:hidden border-t border-chess-border/40 bg-chess-bg/95 backdrop-blur-md px-4 py-4 space-y-4 animate-fade-in"
+            className="md:hidden border-t-2 border-chess-border/50 bg-chess-bg px-4 py-4 space-y-4 animate-fade-in"
           >
             {/* 검색 */}
             <form onSubmit={handleSearch} className="flex gap-2">
@@ -211,13 +232,13 @@ export default function Navbar() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder={t("nav.searchPlaceholder")}
-                  className="w-full bg-chess-surface border border-chess-border rounded-lg pl-9 pr-3 py-2.5 text-sm text-chess-primary placeholder-chess-muted focus:outline-none focus:border-chess-accent transition-colors"
+                  className="pixel-input w-full pl-9 pr-3 py-2.5 text-sm text-chess-primary placeholder-chess-muted"
                   autoFocus
                 />
               </div>
               <button
                 type="submit"
-                className="bg-chess-accent hover:bg-chess-accent/80 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors shrink-0"
+                className="font-pixel pixel-btn bg-chess-accent hover:bg-chess-accent/85 text-white font-semibold px-4 py-2.5 text-sm shrink-0"
               >
                 {t("nav.analyze")}
               </button>
@@ -228,10 +249,19 @@ export default function Navbar() {
                 <div className="flex flex-1 items-center gap-2">
                   <Link
                     href="/mypage"
-                    className="flex-1 text-center py-2 rounded-lg bg-chess-surface border border-chess-border text-sm font-semibold text-chess-primary"
+                    className="group/nav-avatar flex flex-1 items-center justify-center gap-2.5 py-2.5 pixel-btn bg-chess-surface text-sm font-semibold text-chess-primary"
                     onClick={() => setMenuOpen(false)}
                   >
-                    {forumDisplayName ?? "My"}
+                    {forumAvatarUrl !== undefined && (
+                      <AvatarThumb
+                        src={forumAvatarUrl}
+                        alt=""
+                        size={28}
+                        variant="hud"
+                        className="transition-[filter] group-hover/nav-avatar:brightness-105"
+                      />
+                    )}
+                    <span className="truncate leading-snug">{forumDisplayName ?? "My"}</span>
                   </Link>
                   <button
                     type="button"
@@ -239,7 +269,7 @@ export default function Navbar() {
                       handleSignOut();
                       setMenuOpen(false);
                     }}
-                    className="flex-1 py-2 rounded-lg border border-chess-border text-sm font-medium text-chess-primary"
+                    className="flex-1 py-2 pixel-btn text-sm font-medium text-chess-primary"
                   >
                     {t("nav.signOut")}
                   </button>
@@ -247,7 +277,7 @@ export default function Navbar() {
               ) : (
                 <a
                   href="/api/auth/signin?callbackUrl=%2Fpost-login"
-                  className="flex-1 text-center py-2 rounded-lg bg-chess-accent text-white text-sm font-semibold"
+                  className="flex-1 text-center py-2 pixel-btn bg-chess-accent text-white text-sm font-semibold border-chess-accent"
                   onClick={() => setMenuOpen(false)}
                 >
                   {t("nav.signIn")}
@@ -268,10 +298,10 @@ export default function Navbar() {
                   <Link
                     key={href}
                     href={href}
-                    className={`flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-colors ${
+                    className={`font-pixel flex items-center px-4 py-3 text-sm font-medium pixel-btn ${
                       active
-                        ? "bg-chess-accent/15 text-chess-accent border border-chess-accent/30"
-                        : "text-chess-muted hover:text-chess-primary hover:bg-chess-border/40"
+                        ? "bg-chess-accent/18 text-chess-accent border-chess-accent/45"
+                        : "text-chess-muted hover:text-chess-primary bg-transparent"
                     }`}
                   >
                     {t(labelKey)}
