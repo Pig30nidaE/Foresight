@@ -114,7 +114,7 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
               boardOrientation: "white",
               showNotation: false,
               allowDrawingArrows: false,
-              customSquareStyles,
+              squareStyles: customSquareStyles,
               boardStyle: {
                 width: "100%",
                 aspectRatio: "1",
