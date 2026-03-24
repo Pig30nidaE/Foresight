@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/shared/lib/i18n";
-import { PixelSearchIcon } from "@/shared/components/ui/PixelHudIcons";
 
 export default function SearchForm() {
   const router = useRouter();
@@ -57,13 +56,12 @@ export default function SearchForm() {
             </div>
 
             <div className="relative min-w-0 flex-1">
-              <PixelSearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px]" />
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder={typeof t === "function" ? t("dh.searchPlaceholder") : "유저명 입력"}
-                className="pixel-input font-pixel w-full pl-10 pr-4 py-2.5 text-base text-chess-primary placeholder:text-chess-muted/80"
+                placeholder={t("dh.searchPlaceholder")}
+                className="pixel-input font-pixel w-full px-4 py-2.5 text-base text-chess-primary placeholder:text-chess-muted/80"
               />
             </div>
           </div>
@@ -73,7 +71,7 @@ export default function SearchForm() {
             disabled={platform === "lichess"}
             className="font-pixel pixel-btn w-full shrink-0 bg-chess-inverse px-6 py-2.5 text-sm font-bold text-white hover:bg-chess-inverse/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
           >
-            {typeof t === "function" ? t("dh.startAnalysis") : "분석 시작 →"}
+            {t("dh.startAnalysis")}
           </button>
         </div>
       </form>

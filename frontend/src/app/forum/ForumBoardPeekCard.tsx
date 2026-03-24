@@ -1,6 +1,7 @@
 "use client";
 
 import ForumPostThumbnail from "@/app/forum/ForumPostThumbnail";
+import { useTranslation } from "@/shared/lib/i18n";
 
 type ForumBoardPeekCardProps = {
   /** 보드가 연결된 경우 true */
@@ -12,6 +13,7 @@ type ForumBoardPeekCardProps = {
 };
 
 export default function ForumBoardPeekCard({ imported, previewFen, onActivate }: ForumBoardPeekCardProps) {
+  const { t } = useTranslation();
   const showBoard = Boolean(imported && previewFen);
 
   return (
@@ -20,7 +22,7 @@ export default function ForumBoardPeekCard({ imported, previewFen, onActivate }:
         type="button"
         onClick={onActivate}
         className="relative aspect-square w-[min(100%,14rem)] shrink-0 overflow-hidden pixel-frame bg-chess-surface outline-none transition-colors hover:border-chess-accent/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-chess-accent sm:w-[min(100%,15rem)]"
-        aria-label={imported ? "보드 편집 열기" : "보드 불러오기"}
+        aria-label={imported ? t("forum.peek.openEdit") : t("forum.peek.import")}
       >
         {showBoard ? (
           <ForumPostThumbnail thumbnailFen={previewFen} />

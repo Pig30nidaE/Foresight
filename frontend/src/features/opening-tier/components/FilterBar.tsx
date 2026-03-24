@@ -64,7 +64,7 @@ export default function FilterBar({
             className={`font-pixel px-4 py-2 text-xs font-bold ${
               color === c
                 ? c === "white"
-                  ? "bg-chess-bg dark:bg-chess-elevated text-chess-primary"
+                  ? "bg-amber-200 text-slate-900 ring-2 ring-slate-900 dark:bg-slate-100 dark:ring-chess-accent"
                   : "bg-chess-inverse text-white"
                 : "bg-chess-surface dark:bg-chess-bg/60 text-chess-muted hover:text-chess-primary"
             }`}

@@ -604,7 +604,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                 ) : isAnalyzedAtCurrentDepth && showAnalysis ? (
                   <>
                     <PixelXGlyph className="text-chess-accent" size={16} />
-                    <span>분석 닫기</span>
+                    <span>{t("gh.btn.closeAnalysis")}</span>
                   </>
                 ) : isAnalyzedAtCurrentDepth ? (
                   <>
@@ -693,19 +693,38 @@ interface GameAnalysisPanelProps {
   boardOrientation: "white" | "black";
 }
 
-const TIER_CONFIG: Record<MoveTier, { label: string; color: string; desc: string }> = {
-  TH: { label: "이론", color: "#8b5cf6", desc: "오프닝 이론수" },
-  TF: { label: "강제", color: "#0ea5e9", desc: "합법 수가 1개뿐인 수" },
-  T1: { label: "정점", color: "#22c55e", desc: "역전/희생급 명수" },
-  T2: { label: "최상", color: "#10b981", desc: "최상급 정확수" },
-  T3: { label: "우수", color: "#34d399", desc: "우수한 수" },
-  T4: { label: "양호", color: "#84cc16", desc: "양호한 수" },
-  T5: { label: "보통", color: "#f59e0b", desc: "아쉬운 수" },
-  T6: { label: "폐기", color: "#ef4444", desc: "큰 실수" },
+const MOVE_TIER_COLOR: Record<MoveTier, string> = {
+  TH: "#8b5cf6",
+  TF: "#0ea5e9",
+  T1: "#22c55e",
+  T2: "#10b981",
+  T3: "#34d399",
+  T4: "#84cc16",
+  T5: "#f59e0b",
+  T6: "#ef4444",
 };
 
-// TIER_CONFIG labels are defined statically – localised labels are looked up
-// via `t("tier.XY.label")` in code rather than from TIER_CONFIG.label.
+const MOVE_TIER_LABEL_KEY: Record<MoveTier, I18nKey> = {
+  TH: "tier.th.label",
+  TF: "tier.tf.label",
+  T1: "tier.t1.label",
+  T2: "tier.t2.label",
+  T3: "tier.t3.label",
+  T4: "tier.t4.label",
+  T5: "tier.t5.label",
+  T6: "tier.t6.label",
+};
+
+const MOVE_TIER_DESC_KEY: Record<MoveTier, I18nKey> = {
+  TH: "tier.th.desc",
+  TF: "tier.tf.desc",
+  T1: "tier.t1.desc",
+  T2: "tier.t2.desc",
+  T3: "tier.t3.desc",
+  T4: "tier.t4.desc",
+  T5: "tier.t5.desc",
+  T6: "tier.t6.desc",
+};
 function GameAnalysisPanel({
   data,
   selectedTier,
@@ -802,14 +821,19 @@ function GameAnalysisPanel({
 
   const goToPrev = () => {
     if (combinedMoves.length === 0) return;
-    const nextIdx = fullIdx <= 0 ? combinedMoves.length - 1 : fullIdx - 1;
+    const nextIdx = fullIdx <= 0 ? 0 : fullIdx - 1;
     if (selectedTier !== "all") setSelectedTier("all");
     setSelectedMove(combinedMoves[nextIdx]);
   };
 
   const goToNext = () => {
     if (combinedMoves.length === 0) return;
-    const nextIdx = fullIdx === -1 || fullIdx >= combinedMoves.length - 1 ? 0 : fullIdx + 1;
+    const nextIdx =
+      fullIdx === -1
+        ? 0
+        : fullIdx >= combinedMoves.length - 1
+          ? combinedMoves.length - 1
+          : fullIdx + 1;
     if (selectedTier !== "all") setSelectedTier("all");
     setSelectedMove(combinedMoves[nextIdx]);
   };
@@ -871,13 +895,13 @@ function GameAnalysisPanel({
                     </span>
                     <span
                       className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-black text-white shadow-sm shrink-0"
-                      style={{ backgroundColor: TIER_CONFIG[selectedMove.tier].color }}
+                      style={{ backgroundColor: MOVE_TIER_COLOR[selectedMove.tier] }}
                     >
                       {selectedMove.tier}
                     </span>
                   </>
                 ) : (
-                  <span className="text-sm text-chess-primary/80 font-semibold">{typeof t === "function" ? t("ga.board") : "체스보드"}</span>
+                  <span className="text-sm text-chess-primary/80 font-semibold">{t("ga.board")}</span>
                 )}
               </div>
               {/* PC 전용 소형 버튼 + 키보드 힌트 */}
@@ -887,7 +911,7 @@ function GameAnalysisPanel({
                   onClick={goToPrev}
                   disabled={filteredMoves.length === 0}
                   className="w-8 h-8 flex items-center justify-center rounded-lg border border-chess-border bg-chess-surface dark:bg-chess-bg text-chess-primary hover:bg-chess-border/50 dark:hover:bg-chess-elevated/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold"
-                  aria-label="이전 수"
+                  aria-label={t("ga.aria.prevMove")}
                 >
                   <PixelCaretLeftGlyph size={14} className="text-chess-primary" />
                 </button>
@@ -896,7 +920,7 @@ function GameAnalysisPanel({
                   onClick={goToNext}
                   disabled={filteredMoves.length === 0}
                   className="w-8 h-8 flex items-center justify-center rounded-lg border border-chess-border bg-chess-surface dark:bg-chess-bg text-chess-primary hover:bg-chess-border/50 dark:hover:bg-chess-elevated/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold"
-                  aria-label="다음 수"
+                  aria-label={t("ga.aria.nextMove")}
                 >
                   <PixelCaretRightGlyph size={14} className="text-chess-primary" />
                 </button>
@@ -970,7 +994,7 @@ function GameAnalysisPanel({
                 disabled={filteredMoves.length === 0}
                 style={{ touchAction: "manipulation" }}
                 className="font-pixel pixel-btn flex-1 py-3 flex items-center justify-center bg-chess-surface dark:bg-chess-bg text-chess-primary active:bg-chess-border/40 dark:active:bg-chess-elevated/35 disabled:opacity-30 disabled:cursor-not-allowed text-lg font-bold select-none"
-                aria-label="이전 수"
+                aria-label={t("ga.aria.prevMove")}
               >
                 <PixelCaretLeftGlyph size={18} className="text-chess-primary" />
               </button>
@@ -980,7 +1004,7 @@ function GameAnalysisPanel({
                 disabled={filteredMoves.length === 0}
                 style={{ touchAction: "manipulation" }}
                 className="font-pixel pixel-btn flex-1 py-3 flex items-center justify-center bg-chess-surface dark:bg-chess-bg text-chess-primary active:bg-chess-border/40 dark:active:bg-chess-elevated/35 disabled:opacity-30 disabled:cursor-not-allowed text-lg font-bold select-none"
-                aria-label="다음 수"
+                aria-label={t("ga.aria.nextMove")}
               >
                 <PixelCaretRightGlyph size={18} className="text-chess-primary" />
               </button>
@@ -1003,12 +1027,12 @@ function GameAnalysisPanel({
                           : "bg-chess-bg dark:bg-chess-elevated/25 text-chess-muted hover:text-chess-primary"
                       }`}
                     >
-                      {typeof t === "function" ? t("ga.all") : "전체"}
+                      {t("ga.all")}
                       <span className="ml-1.5 font-normal opacity-80">({filteredMoves.length})</span>
                     </button>
                     {(["TH", "TF", "T1", "T2", "T3", "T4", "T5", "T6"] as MoveTier[]).map((tier) => {
                       const sel = selectedTier === tier;
-                      const cfg = TIER_CONFIG[tier];
+                      const tierBg = MOVE_TIER_COLOR[tier];
                       return (
                         <button
                           key={tier}
@@ -1016,7 +1040,7 @@ function GameAnalysisPanel({
                           className={`font-pixel shrink-0 px-3 py-1.5 text-xs font-bold pixel-btn ${
                             sel ? "text-white border-transparent" : "bg-chess-bg dark:bg-chess-elevated/25 text-chess-muted hover:text-chess-primary"
                           }`}
-                          style={sel ? { backgroundColor: cfg.color } : {}}
+                          style={sel ? { backgroundColor: tierBg } : {}}
                         >
                           {tier}
                         </button>
@@ -1033,7 +1057,7 @@ function GameAnalysisPanel({
                       ? "bg-chess-accent text-white border-chess-accent"
                       : "bg-chess-primary dark:bg-chess-muted text-white border-chess-primary dark:border-chess-muted hover:bg-chess-muted dark:hover:bg-chess-border"
                   }`}
-                  aria-label="등급 설명 보기"
+                  aria-label={t("ga.aria.tierLegendToggle")}
                 >
                   ！
                 </button>
@@ -1044,23 +1068,25 @@ function GameAnalysisPanel({
             {showTierInfo && (
               <div className="border-b border-chess-border bg-chess-surface/60 px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1">
                 {(["TH", "TF", "T1", "T2", "T3", "T4", "T5", "T6"] as MoveTier[]).map((tier) => {
-                  const cfg = TIER_CONFIG[tier];
+                  const tierBg = MOVE_TIER_COLOR[tier];
                   return (
                     <div key={tier} className="flex items-center gap-1.5 py-0.5">
                       <span
                         className="shrink-0 w-7 text-center rounded text-[10px] font-black text-white py-0.5 leading-none"
-                        style={{ backgroundColor: cfg.color }}
+                        style={{ backgroundColor: tierBg }}
                       >
                         {tier}
                       </span>
-                      <span className="text-[11px] font-semibold text-chess-primary whitespace-nowrap">{cfg.label}</span>
-                      <span className="text-[10px] text-chess-muted truncate hidden sm:inline">— {cfg.desc}</span>
+                      <span className="text-[11px] font-semibold text-chess-primary whitespace-nowrap">
+                        {t(MOVE_TIER_LABEL_KEY[tier])}
+                      </span>
+                      <span className="text-[10px] text-chess-muted truncate hidden sm:inline">
+                        — {t(MOVE_TIER_DESC_KEY[tier])}
+                      </span>
                     </div>
                   );
                 })}
-                <p className="col-span-2 text-[10px] text-chess-muted mt-1 sm:hidden">
-                  TH 이론 · TF 강제 · T1 정점 · T2 최상 · T3 우수 · T4 양호 · T5 보통 · T6 폐기
-                </p>
+                <p className="col-span-2 text-[10px] text-chess-muted mt-1 sm:hidden">{t("ga.tierLegendMobile")}</p>
               </div>
             )}
 
@@ -1069,12 +1095,12 @@ function GameAnalysisPanel({
               {filteredMoves.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-chess-primary/70 text-sm gap-3">
                   <PixelInboxGlyph size={40} className="opacity-40" />
-                  <span className="font-semibold">{typeof t === "function" ? t("ga.noMoves") : "해당 등급의 수가 없습니다."}</span>
+                  <span className="font-semibold">{t("ga.noMoves")}</span>
                 </div>
               ) : (
                 filteredMoves.map((move: AnalyzedMove) => {
                   const isSelected = selectedMove?.halfmove === move.halfmove;
-                  const cfg = TIER_CONFIG[move.tier];
+                  const moveTierBg = MOVE_TIER_COLOR[move.tier];
                   return (
                     <button
                       key={move.halfmove}
@@ -1097,7 +1123,7 @@ function GameAnalysisPanel({
                       {/* 티어 뱃지 */}
                       <span
                         className="w-7 sm:w-8 text-center shrink-0 rounded text-[9px] sm:text-[10px] font-black py-0.5 text-white shadow-sm"
-                        style={{ backgroundColor: cfg.color }}
+                        style={{ backgroundColor: moveTierBg }}
                       >
                         {move.tier}
                       </span>
@@ -1185,7 +1211,6 @@ function GameAnalysisPanel({
             <TierDonutChart
               tierPercentages={white.tier_percentages}
               tierCounts={white.tier_counts}
-              accuracy={white.accuracy}
               size={200}
               strokeWidth={18}
             />
@@ -1209,7 +1234,6 @@ function GameAnalysisPanel({
             <TierDonutChart
               tierPercentages={black.tier_percentages}
               tierCounts={black.tier_counts}
-              accuracy={black.accuracy}
               size={200}
               strokeWidth={18}
             />

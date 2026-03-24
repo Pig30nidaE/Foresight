@@ -106,44 +106,44 @@ export default function FirstMoveBar({ data, side }: Props) {
     <div className="pixel-frame pixel-hud-fill overflow-hidden">
       <div className="flex flex-col gap-3 border-b-2 border-chess-border/55 dark:border-chess-border/45 px-4 py-3 sm:flex-row sm:items-center sm:justify-between bg-chess-bg/40 dark:bg-chess-bg/25">
         <div>
-          <p className="font-pixel text-[11px] font-bold text-chess-muted">
+          <p className="font-pixel text-xs sm:text-sm font-bold text-chess-muted">
             {t("chart.firstMoveChartTitle")}
           </p>
-          <p className="font-pixel text-sm font-bold text-chess-primary mt-0.5">{t(sideTitleKey)}</p>
+          <p className="font-pixel text-base sm:text-lg font-bold text-chess-primary mt-0.5">{t(sideTitleKey)}</p>
         </div>
-        <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-[10px] font-medium text-chess-muted">
+        <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs sm:text-sm font-medium text-chess-muted">
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-[1px] bg-fm-bar-win shadow-sm" aria-hidden />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-[1px] bg-fm-bar-win shadow-sm" aria-hidden />
             {t("chart.win")}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-[1px] bg-fm-bar-draw shadow-sm" aria-hidden />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-[1px] bg-fm-bar-draw shadow-sm" aria-hidden />
             {t("chart.draw")}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-[1px] bg-fm-bar-loss shadow-sm" aria-hidden />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-[1px] bg-fm-bar-loss shadow-sm" aria-hidden />
             {t("chart.loss")}
           </span>
         </div>
       </div>
 
-      <div className="hidden md:grid md:grid-cols-[minmax(10rem,13rem)_1fr_minmax(4.75rem,5.25rem)] md:gap-4 md:items-end border-b-2 border-chess-border/40 dark:border-chess-border/30 bg-chess-surface/35 dark:bg-chess-bg/30 px-4 py-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-chess-muted">
+      <div className="hidden md:grid md:grid-cols-[minmax(11rem,14rem)_1fr_minmax(5.5rem,6rem)] md:gap-4 md:items-end border-b-2 border-chess-border/40 dark:border-chess-border/30 bg-chess-surface/35 dark:bg-chess-bg/30 px-4 py-2.5">
+        <span className="text-xs font-semibold uppercase tracking-wider text-chess-muted">
           {t("chart.opening")}
         </span>
         <div>
-          <div className="mb-1 flex justify-between px-0.5 text-[9px] font-medium tabular-nums text-chess-muted/70 select-none">
+          <div className="mb-1 flex justify-between px-0.5 text-[10px] font-medium tabular-nums text-chess-muted/70 select-none">
             <span>0</span>
             <span>25</span>
             <span>50</span>
             <span>75</span>
             <span>100</span>
           </div>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-chess-muted">
+          <span className="text-xs font-semibold uppercase tracking-wider text-chess-muted">
             {t("chart.shareVsMax")}
           </span>
         </div>
-        <span className="text-right text-[10px] font-semibold uppercase tracking-wider text-chess-muted">
+        <span className="text-right text-xs font-semibold uppercase tracking-wider text-chess-muted">
           {t("chart.winRateColumn")}
         </span>
       </div>
@@ -160,20 +160,20 @@ export default function FirstMoveBar({ data, side }: Props) {
           return (
             <div
               key={entry.eco}
-              className={`px-4 py-3 md:grid md:grid-cols-[minmax(10rem,13rem)_1fr_minmax(4.75rem,5.25rem)] md:gap-4 md:items-center md:py-2.5 animate-fm-chart-row`}
+              className={`px-4 py-3 md:grid md:grid-cols-[minmax(11rem,14rem)_1fr_minmax(5.5rem,6rem)] md:gap-4 md:items-center md:py-3 animate-fm-chart-row`}
               style={reducedMotion ? undefined : { animationDelay: `${rowDelayMs}ms` }}
             >
               <div className="min-w-0">
-                <div className="flex items-baseline gap-2">
-                  <span className="font-mono text-xs font-semibold tabular-nums text-chess-muted">
+                <div className="flex items-baseline gap-2 font-sans subpixel-antialiased">
+                  <span className="text-sm font-semibold tabular-nums tracking-normal text-chess-muted">
                     {entry.eco}
                   </span>
-                  <span className="truncate text-sm font-medium leading-snug text-chess-primary">
+                  <span className="truncate text-base font-medium leading-snug tracking-normal text-chess-primary">
                     {entry.first_move_category}
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] tabular-nums text-chess-muted md:hidden">
-                  {t("chart.nGames").replace("{n}", String(entry.games))}
+                <p className="mt-1 text-sm tabular-nums text-chess-muted md:hidden">
+                  {t("chart.sampleN").replace("{n}", String(entry.games))}
                   <span className="mx-1.5 text-chess-border">·</span>
                   <span className={winRateDisplayClass(entry.win_rate)}>
                     {entry.win_rate.toFixed(1)}%
@@ -182,7 +182,7 @@ export default function FirstMoveBar({ data, side }: Props) {
               </div>
 
               <div className="mt-2 md:mt-0">
-                <div className="relative h-3.5 w-full border-2 border-chess-border bg-chess-bg pixel-hud-fill">
+                <div className="relative h-4.5 w-full border-2 border-chess-border bg-chess-bg pixel-hud-fill">
                   <div
                     className="pointer-events-none absolute inset-0 z-0 hidden md:grid md:grid-cols-4"
                     aria-hidden
@@ -231,27 +231,27 @@ export default function FirstMoveBar({ data, side }: Props) {
                     />
                   </div>
                 </div>
-                <div className="mt-1.5 hidden gap-5 text-[10px] tabular-nums md:flex">
+                <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 font-sans text-sm font-semibold tabular-nums subpixel-antialiased sm:gap-x-8">
                   <span>
-                    <span className="font-medium text-chess-muted">W</span>{" "}
-                    <span className="font-medium text-fm-bar-win">{entry.wins}</span>
+                    <span className="text-chess-muted">W</span>{" "}
+                    <span className="text-fm-bar-win">{entry.wins}</span>
                   </span>
                   <span>
-                    <span className="font-medium text-chess-muted">D</span>{" "}
-                    <span className="font-medium text-fm-bar-draw">{entry.draws}</span>
+                    <span className="text-chess-muted">D</span>{" "}
+                    <span className="text-fm-bar-draw">{entry.draws}</span>
                   </span>
                   <span>
-                    <span className="font-medium text-chess-muted">L</span>{" "}
-                    <span className="font-medium text-fm-bar-loss">{entry.losses}</span>
+                    <span className="text-chess-muted">L</span>{" "}
+                    <span className="text-fm-bar-loss">{entry.losses}</span>
                   </span>
                 </div>
               </div>
 
               <div className="hidden text-right md:block">
-                <p className={`text-sm font-semibold tabular-nums ${winRateDisplayClass(entry.win_rate)}`}>
+                <p className={`text-base font-semibold tabular-nums ${winRateDisplayClass(entry.win_rate)}`}>
                   {entry.win_rate.toFixed(1)}%
                 </p>
-                <p className="mt-0.5 text-[10px] tabular-nums text-chess-muted">
+                <p className="mt-1 font-sans text-sm tabular-nums subpixel-antialiased text-chess-muted">
                   {t("chart.sampleN").replace("{n}", String(entry.games))}
                 </p>
               </div>

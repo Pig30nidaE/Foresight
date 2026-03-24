@@ -75,7 +75,7 @@ export default function Navbar() {
           display_name?: string;
           signup_completed?: boolean;
           avatar_url?: string | null;
-        }>("/forum/me", {
+        }>("/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
         setForumAvatarUrl(data?.avatar_url ?? null);
@@ -103,14 +103,14 @@ export default function Navbar() {
   return (
     <>
       <header className="border-b-2 border-chess-border/60 dark:border-chess-border/80 bg-chess-bg/95 dark:bg-chess-bg sticky top-0 z-50 pt-[env(safe-area-inset-top,0px)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]">
-        {/* 모바일/태블릿은 동일한 틀, 데스크톱(md 이상)에서만 좌측 정렬이 되도록 wrapper를 분리 */}
+        {/* 모바일/태블릿은 동일한 틀, 데스크톱(lg 이상)에서만 좌측 정렬이 되도록 wrapper를 분리 */}
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
-          {/* 좌측 영역: 로고 + (md 이상에서만) 네비 링크 */}
+          {/* 좌측 영역: 로고 + (lg 이상에서만) 네비 링크 */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {/* 로고 */}
             <Link
               href="/"
-              className="font-pixel flex items-center gap-1.5 shrink-0 select-none border-2 border-chess-border bg-chess-surface/90 px-2 py-1 shadow-[2px_2px_0_color-mix(in_srgb,var(--color-chess-primary)_18%,transparent)] hover:brightness-[1.03] active:translate-x-px active:translate-y-px active:shadow-none dark:bg-chess-surface/70 dark:shadow-[2px_2px_0_rgba(0,0,0,0.45)]"
+              className="font-pixel flex items-center gap-1.5 shrink-0 select-none px-1 py-0.5 hover:brightness-[1.03]"
             >
               <span className="inline-flex" aria-hidden>
                 <PixelPawnGlyph className="text-chess-primary" size={18} />
@@ -121,8 +121,8 @@ export default function Navbar() {
               </span>
             </Link>
 
-            {/* ── 데스크톱 전용 (md 이상) ── */}
-            <nav className="hidden md:flex items-center gap-1 text-sm shrink-0">
+            {/* ── 데스크톱 전용 (lg 이상) ── */}
+            <nav className="hidden lg:flex items-center gap-1 text-sm shrink-0">
               {NAV_ITEMS.map(({ href, labelKey }) => {
                 const active =
                   href === "/forum"
@@ -147,8 +147,8 @@ export default function Navbar() {
             </nav>
           </div>
 
-          {/* ── 데스크톱 검색 + 설정 (md 이상) ── */}
-          <div className="hidden md:flex items-center gap-3 shrink-0">
+          {/* ── 데스크톱 검색 + 설정 (lg 이상) ── */}
+          <div className="hidden lg:flex items-center gap-3 shrink-0">
             {authStatus === "authenticated" ? (
               <div className="flex items-center gap-1">
                 <Link
@@ -200,8 +200,8 @@ export default function Navbar() {
             </form>
           </div>
 
-          {/* ── 모바일 우측 아이콘 (md 미만) ── */}
-          <div className="flex md:hidden items-center gap-1 shrink-0">
+          {/* ── 모바일 우측 아이콘 (lg 미만) ── */}
+          <div className="flex lg:hidden items-center gap-1 shrink-0">
             <button
               type="button"
               className="p-2.5 rounded-[var(--pixel-radius)] border-2 border-transparent hover:border-chess-border/50 hover:bg-chess-border/30 transition-colors"
@@ -214,11 +214,11 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* ── 모바일 드로어 ── */}
+        {/* ── 모바일 드로어 (lg 미만) ── */}
         {menuOpen && (
           <div
             ref={drawerRef}
-            className="md:hidden border-t-2 border-chess-border/50 bg-chess-bg px-4 py-4 space-y-4 animate-fade-in"
+            className="lg:hidden border-t-2 border-chess-border/50 bg-chess-bg px-4 py-4 space-y-4 animate-fade-in"
           >
             {/* 검색 */}
             <form onSubmit={handleSearch} className="flex gap-2">

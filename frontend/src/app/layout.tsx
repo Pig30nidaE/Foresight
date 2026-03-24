@@ -18,10 +18,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://fsight.app"),
-  title: {
-    default: "foresight-chess | Chess Analytics for Competitors",
-    template: "%s | foresight-chess",
-  },
+  title: "foresight-chess",
   description:
     "체스 유저를 위한 분석 플랫폼. 오프닝 티어, 승률 분석, 게임 히스토리 등 경쟁력 있는 체스를 위한 데이터 인사이트를 제공합니다.",
   keywords: [
@@ -39,15 +36,29 @@ export const metadata: Metadata = {
     locale: "ko_KR",
     url: "https://fsight.app",
     siteName: "foresight-chess",
-    title: "foresight-chess | Chess Analytics for Competitors",
+    title: "foresight-chess",
     description:
       "체스 유저를 위한 분석 플랫폼. 오프닝 티어, 승률 분석, 게임 히스토리 등 경쟁력 있는 체스를 위한 데이터 인사이트를 제공합니다.",
+    images: [
+      {
+        url: "/images/foresight-chess-thumbnail.png",
+        width: 252,
+        height: 217,
+        alt: "foresight-chess",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "foresight-chess | Chess Analytics for Competitors",
+    title: "foresight-chess",
     description:
       "체스 유저를 위한 분석 플랫폼. 오프닝 티어, 승률 분석, 게임 히스토리 등 경쟁력 있는 체스를 위한 데이터 인사이트를 제공합니다.",
+    images: ["/images/foresight-chess-thumbnail.png"],
+  },
+  icons: {
+    icon: "/images/foresight-chess-thumbnail.png",
+    shortcut: "/images/foresight-chess-thumbnail.png",
+    apple: "/images/foresight-chess-thumbnail.png",
   },
   robots: {
     index: true,
