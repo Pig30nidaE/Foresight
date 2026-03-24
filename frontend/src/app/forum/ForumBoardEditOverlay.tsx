@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 
 import ForumPositionEditor from "@/app/forum/ForumPositionEditor";
 import { applyFenStringToBoard, DEFAULT_START_FEN, EMPTY_BOARD_FEN } from "@/shared/lib/forumChess";
+import { useTranslation } from "@/shared/lib/i18n";
 
 type ForumBoardEditOverlayProps = {
   open: boolean;
@@ -29,6 +30,7 @@ export default function ForumBoardEditOverlay({
   inputClassName,
   ariaTitleId = "forum-board-overlay-title",
 }: ForumBoardEditOverlayProps) {
+  const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [fenDraft, setFenDraft] = useState(boardFen);
   const [fenError, setFenError] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export default function ForumBoardEditOverlay({
   const handleApplyFen = () => {
     const next = applyFenStringToBoard(fenDraft);
     if (!next) {
-      setFenError("올바른 FEN 형식이 아닙니다.");
+      setFenError(t("forum.overlay.invalidFen"));
       return;
     }
     setFenError(null);
@@ -90,18 +92,18 @@ export default function ForumBoardEditOverlay({
         type="button"
         className="absolute inset-0 bg-black/60 transition-opacity dark:bg-black/70"
         onClick={onClose}
-        aria-label="오버레이 닫기"
+        aria-label={t("forum.overlay.closeBackdrop")}
       />
       <div className="relative z-10 flex max-h-[min(92dvh,40rem)] w-full max-w-lg flex-col overflow-hidden pixel-frame bg-chess-bg dark:bg-chess-elevated">
         <div className="flex items-center justify-between gap-2 border-b border-chess-border/80 px-3 py-2">
           <h3 id={ariaTitleId} className="text-sm font-semibold text-chess-primary">
-            썸네일용 보드 · FEN
+            {t("forum.overlay.title")}
           </h3>
           <button
             type="button"
             onClick={onClose}
             className="rounded-lg p-1.5 text-chess-muted transition hover:bg-chess-surface hover:text-chess-primary"
-            aria-label="닫기"
+            aria-label={t("forum.overlay.close")}
           >
             <X className="size-5" />
           </button>
@@ -126,7 +128,7 @@ export default function ForumBoardEditOverlay({
               onClick={handleApplyFen}
               className="inline-flex items-center gap-1 rounded-md border border-chess-border bg-chess-surface/80 px-2.5 py-1.5 text-xs font-medium text-chess-primary transition hover:bg-chess-elevated/80"
             >
-              FEN을 보드에 반영
+              {t("forum.overlay.applyFen")}
             </button>
           </div>
 
@@ -137,7 +139,7 @@ export default function ForumBoardEditOverlay({
               onClick={() => onBoardFenChange(DEFAULT_START_FEN)}
               className="rounded-md border border-chess-border bg-chess-surface/80 px-2.5 py-1.5 text-xs font-medium text-chess-primary transition hover:bg-chess-elevated/80 disabled:opacity-50"
             >
-              초기화
+              {t("forum.overlay.resetBoard")}
             </button>
             <button
               type="button"
@@ -145,7 +147,7 @@ export default function ForumBoardEditOverlay({
               onClick={() => onBoardFenChange(EMPTY_BOARD_FEN)}
               className="rounded-md border border-chess-border bg-chess-surface/80 px-2.5 py-1.5 text-xs font-medium text-chess-primary transition hover:bg-chess-elevated/80 disabled:opacity-50"
             >
-              기물 전체 삭제
+              {t("forum.overlay.clearPieces")}
             </button>
             <button
               type="button"
@@ -153,7 +155,7 @@ export default function ForumBoardEditOverlay({
               onClick={handleDeleteBoard}
               className="rounded-md border border-red-400/60 bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-500/15 disabled:opacity-50 dark:text-red-300"
             >
-              보드 연결 해제
+              {t("forum.overlay.detachBoard")}
             </button>
           </div>
 
@@ -167,7 +169,7 @@ export default function ForumBoardEditOverlay({
             onClick={onClose}
             className="w-full rounded-lg bg-chess-accent py-2 text-sm font-semibold text-white transition hover:brightness-105"
           >
-            완료 · 본문으로 돌아가기
+            {t("forum.overlay.done")}
           </button>
         </div>
       </div>

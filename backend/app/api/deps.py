@@ -10,6 +10,13 @@ from app.db.models.forum import User
 from app.db.session import get_async_session
 from app.shared.forum_public_id import next_unique_user_public_id
 
+_PROTECTED_ADMIN_EMAIL = "pig30nidae@gmail.com"
+_PROTECTED_ADMIN_DISPLAY_NAME = "관리자"
+
+
+def _is_protected_admin_email(email: str | None) -> bool:
+    return (email or "").strip().lower() == _PROTECTED_ADMIN_EMAIL
+
 
 def _bearer_token(authorization: str | None) -> str | None:
     if not authorization:
@@ -86,6 +93,12 @@ async def upsert_user_from_claims(db: AsyncSession, claims: dict) -> User:
             avatar_sync_oauth=True,
         )
         db.add(user)
+
+    # Reserved super-admin account policy: always force role/display_name by email.
+    if _is_protected_admin_email(user.email):
+        user.role = "admin"
+        user.display_name = _PROTECTED_ADMIN_DISPLAY_NAME
+
     try:
         await db.commit()
     except IntegrityError as exc:

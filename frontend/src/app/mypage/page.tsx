@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -39,6 +39,7 @@ type MyComment = {
 };
 
 export default function MyPage() {
+  const PAGE_SIZE = 5;
   const router = useRouter();
   const { status } = useSession();
   const { t } = useTranslation();
@@ -52,11 +53,14 @@ export default function MyPage() {
   const [profilePublic, setProfilePublic] = useState(true);
   const [posts, setPosts] = useState<MyPost[]>([]);
   const [comments, setComments] = useState<MyComment[]>([]);
+  const [postsPage, setPostsPage] = useState(1);
+  const [commentsPage, setCommentsPage] = useState(1);
   const { language, setLanguage, theme, setTheme, stockfishDepth, setStockfishDepth } = useSettings();
   const [draftLang, setDraftLang] = useState<Language>(language);
   const [draftTheme, setDraftTheme] = useState<Theme>(theme);
   const [draftDepth, setDraftDepth] = useState<number>(stockfishDepth);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
 
   const syncMe = (data: Me) => {
     setMe(data);
@@ -73,8 +77,8 @@ export default function MyPage() {
     try {
       setLoading(true);
       const token = await getBackendJwt();
-      if (!token) throw new Error("로그인 토큰이 없습니다.");
-      const meRes = await api.get<Me>("/forum/me", { headers: { Authorization: `Bearer ${token}` } });
+      if (!token) throw new Error(t("forum.error.noLoginToken"));
+      const meRes = await api.get<Me>("/me", { headers: { Authorization: `Bearer ${token}` } });
       setMe(meRes.data);
       setDisplayName(meRes.data.display_name);
       setProfilePublic(Boolean(meRes.data.profile_public));
@@ -87,8 +91,8 @@ export default function MyPage() {
       }
 
       const [postsRes, commentsRes] = await Promise.all([
-        api.get<{ items: MyPost[] }>("/forum/me/posts", { headers: { Authorization: `Bearer ${token}` } }),
-        api.get<{ items: MyComment[] }>("/forum/me/comments", { headers: { Authorization: `Bearer ${token}` } }),
+        api.get<{ items: MyPost[] }>("/me/posts", { headers: { Authorization: `Bearer ${token}` } }),
+        api.get<{ items: MyComment[] }>("/me/comments", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       setPosts(postsRes.data.items ?? []);
       setComments(commentsRes.data.items ?? []);
@@ -96,7 +100,7 @@ export default function MyPage() {
       const d = e?.response?.data?.detail;
       const msg =
         typeof d === "string" ? d : Array.isArray(d) ? d.map((x: unknown) => JSON.stringify(x)).join(" ") : e?.message;
-      setError(msg ?? "마이페이지를 불러오지 못했습니다.");
+      setError(msg ?? t("mypage.error.load"));
     } finally {
       setLoading(false);
     }
@@ -105,6 +109,14 @@ export default function MyPage() {
   useEffect(() => {
     void load();
   }, [status]);
+
+  useEffect(() => {
+    setPostsPage(1);
+  }, [posts]);
+
+  useEffect(() => {
+    setCommentsPage(1);
+  }, [comments]);
 
   useEffect(() => {
     setDraftLang(language);
@@ -121,18 +133,21 @@ export default function MyPage() {
     setBusy(true);
     try {
       const token = await getBackendJwt();
-      if (!token) throw new Error("로그인 토큰이 없습니다.");
+      if (!token) throw new Error(t("forum.error.noLoginToken"));
       const { data } = await api.patch<Me>(
-        "/forum/me/profile",
+        "/me/profile",
         { display_name: displayName, profile_public: profilePublic },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       syncMe(data);
       setError(null);
+      setProfileSaved(true);
+      window.setTimeout(() => setProfileSaved(false), 1500);
     } catch (e: any) {
       const d = e?.response?.data?.detail;
-      const msg = typeof d === "string" ? d : e?.message ?? "프로필 저장에 실패했습니다.";
+      const msg = typeof d === "string" ? d : e?.message ?? t("mypage.error.profileSave");
       setError(msg);
+      setProfileSaved(false);
     } finally {
       setBusy(false);
     }
@@ -140,8 +155,8 @@ export default function MyPage() {
 
   const patchProfileFields = async (body: Record<string, unknown>) => {
     const token = await getBackendJwt();
-    if (!token) throw new Error("로그인 토큰이 없습니다.");
-    const { data } = await api.patch<Me>("/forum/me/profile", body, {
+    if (!token) throw new Error(t("forum.error.noLoginToken"));
+    const { data } = await api.patch<Me>("/me/profile", body, {
       headers: { Authorization: `Bearer ${token}` },
     });
     syncMe(data);
@@ -152,14 +167,14 @@ export default function MyPage() {
     e.target.value = "";
     if (!f) return;
     if (f.size > 5 * 1024 * 1024) {
-      setError("이미지는 5MB 이하로 올려 주세요.");
+      setError(t("mypage.error.imageSize"));
       return;
     }
     setAvatarBusy(true);
     setError(null);
     try {
       const token = await getBackendJwt();
-      if (!token) throw new Error("로그인 토큰이 없습니다.");
+      if (!token) throw new Error(t("forum.error.noLoginToken"));
       const fd = new FormData();
       fd.append("file", f);
       const { data: up } = await api.post<{ url: string }>("/forum/upload", fd, {
@@ -169,7 +184,7 @@ export default function MyPage() {
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
       const d = err?.response?.data?.detail;
-      setError(typeof d === "string" ? d : err?.message ?? "이미지 업로드에 실패했습니다.");
+      setError(typeof d === "string" ? d : err?.message ?? t("mypage.error.upload"));
     } finally {
       setAvatarBusy(false);
     }
@@ -183,7 +198,7 @@ export default function MyPage() {
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
       const d = err?.response?.data?.detail;
-      setError(typeof d === "string" ? d : err?.message ?? "프로필 사진을 바꾸지 못했습니다.");
+      setError(typeof d === "string" ? d : err?.message ?? t("mypage.error.avatarChange"));
     } finally {
       setAvatarBusy(false);
     }
@@ -197,7 +212,7 @@ export default function MyPage() {
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
       const d = err?.response?.data?.detail;
-      setError(typeof d === "string" ? d : err?.message ?? "계정 사진을 적용하지 못했습니다.");
+      setError(typeof d === "string" ? d : err?.message ?? t("mypage.error.oauthAvatar"));
     } finally {
       setAvatarBusy(false);
     }
@@ -212,23 +227,34 @@ export default function MyPage() {
     window.setTimeout(() => setSettingsSaved(false), 1500);
   };
 
+  const postsPageCount = Math.max(1, Math.ceil(posts.length / PAGE_SIZE));
+  const commentsPageCount = Math.max(1, Math.ceil(comments.length / PAGE_SIZE));
+  const pagedPosts = useMemo(
+    () => posts.slice((postsPage - 1) * PAGE_SIZE, postsPage * PAGE_SIZE),
+    [posts, postsPage]
+  );
+  const pagedComments = useMemo(
+    () => comments.slice((commentsPage - 1) * PAGE_SIZE, commentsPage * PAGE_SIZE),
+    [comments, commentsPage]
+  );
+
   return (
     <section className="mx-auto w-full max-w-4xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="font-pixel text-2xl md:text-3xl font-bold tracking-wide text-chess-primary pixel-glitch-title">
-          마이페이지
+          {t("mypage.title")}
         </h1>
         <Link
           href="/forum"
           className="font-pixel inline-flex items-center px-3 py-1.5 text-xs font-medium text-chess-primary pixel-btn bg-chess-surface/80 hover:brightness-[1.03] dark:bg-chess-elevated/50"
         >
-          게시판으로 이동
+          {t("mypage.goForum")}
         </Link>
       </div>
 
       {loading && (
         <p className="font-pixel text-sm text-chess-muted border-2 border-chess-border border-dashed px-3 py-2 w-fit">
-          불러오는 중...
+          {t("mypage.loading")}
         </p>
       )}
       {error && (
@@ -239,19 +265,19 @@ export default function MyPage() {
 
       {me && !me.signup_completed && (
         <div className="pixel-frame pixel-hud-fill p-4 text-sm text-chess-primary">
-          <p>포럼 가입을 마치면 닉네임 수정·글 목록을 이용할 수 있습니다.</p>
+          <p>{t("mypage.incompleteHint")}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href="/signup/consent"
               className="font-pixel inline-flex items-center px-3 py-2 text-xs font-semibold text-white bg-chess-accent pixel-btn"
             >
-              가입 동의
+              {t("mypage.cta.consent")}
             </Link>
             <Link
               href="/signup"
               className="font-pixel inline-flex items-center px-3 py-2 text-xs font-medium text-chess-primary pixel-btn bg-chess-surface/80"
             >
-              닉네임 입력
+              {t("mypage.cta.nickname")}
             </Link>
           </div>
         </div>
@@ -260,32 +286,32 @@ export default function MyPage() {
       {me && me.signup_completed && (
         <>
           <form onSubmit={onSaveSettings} className="space-y-3 pixel-frame pixel-hud-fill p-4 sm:p-5">
-            <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">앱 설정</h2>
-            <p className="text-xs text-chess-muted">이 설정은 사용자 계정별로 브라우저에 저장됩니다.</p>
+            <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.appSettings")}</h2>
+            <p className="text-xs text-chess-muted">{t("mypage.appSettingsHint")}</p>
             <div>
-              <label className="block text-sm font-medium text-chess-primary">언어</label>
+              <label className="block text-sm font-medium text-chess-primary">{t("mypage.label.language")}</label>
               <select
                 className="mt-1 w-full px-3 py-2 text-sm text-chess-primary pixel-input"
                 value={draftLang}
                 onChange={(e) => setDraftLang(e.target.value as Language)}
               >
-                <option value="ko">한국어</option>
-                <option value="en">English</option>
+                <option value="ko">{t("mypage.lang.ko")}</option>
+                <option value="en">{t("mypage.lang.en")}</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-chess-primary">테마</label>
+              <label className="block text-sm font-medium text-chess-primary">{t("mypage.label.theme")}</label>
               <select
                 className="mt-1 w-full px-3 py-2 text-sm text-chess-primary pixel-input"
                 value={draftTheme}
                 onChange={(e) => setDraftTheme(e.target.value as Theme)}
               >
-                <option value="light">라이트</option>
-                <option value="dark">다크</option>
+                <option value="light">{t("mypage.theme.light")}</option>
+                <option value="dark">{t("mypage.theme.dark")}</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-chess-primary">Stockfish Depth</label>
+              <label className="block text-sm font-medium text-chess-primary">{t("settings.depth")}</label>
               <select
                 className="mt-1 w-full px-3 py-2 text-sm text-chess-primary pixel-input"
                 value={draftDepth}
@@ -303,27 +329,29 @@ export default function MyPage() {
                 type="submit"
                 className="font-pixel px-4 py-2 text-xs font-semibold text-white bg-chess-accent pixel-btn"
               >
-                설정 저장
+                {t("mypage.saveSettings")}
               </button>
               {settingsSaved && (
-                <span className="font-pixel text-[11px] text-chess-win tabular-nums">저장되었습니다.</span>
+                <span className="font-pixel text-[11px] text-chess-win tabular-nums">{t("mypage.flash.settingsSaved")}</span>
               )}
             </div>
           </form>
 
           <form onSubmit={onSaveProfile} className="space-y-3 pixel-frame pixel-hud-fill p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">프로필 설정</h2>
+              <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.profileSection")}</h2>
               {me.profile_public && me.public_id && (
                 <Link
                   href={`/profile/${me.public_id}`}
                   className="font-pixel text-[11px] font-medium text-chess-accent underline decoration-2 underline-offset-2 hover:brightness-110"
                 >
-                  공개 프로필 보기
+                  {t("mypage.viewPublicProfile")}
                 </Link>
               )}
             </div>
-            <p className="text-xs text-chess-muted">이메일: {me.email ?? "-"}</p>
+            <p className="text-xs text-chess-muted">
+              {t("mypage.email")} {me.email ?? "-"}
+            </p>
 
             <div>
               <p className="text-sm font-medium text-chess-primary">{t("profile.photo")}</p>
@@ -369,7 +397,7 @@ export default function MyPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-chess-primary">닉네임</label>
+              <label className="block text-sm font-medium text-chess-primary">{t("mypage.label.nickname")}</label>
               <input
                 type="text"
                 required
@@ -387,26 +415,31 @@ export default function MyPage() {
                 onChange={(e) => setProfilePublic(e.target.checked)}
                 className="mt-1 h-3.5 w-3.5 shrink-0 accent-chess-accent border-chess-border"
               />
-              <span>프로필 공개 (끄면 타인이 내 글/댓글 목록을 볼 수 없음)</span>
+              <span>{t("mypage.profilePublic")}</span>
             </label>
-            <button
-              type="submit"
-              disabled={busy}
-              className="font-pixel px-4 py-2 text-xs font-semibold text-white bg-chess-accent pixel-btn disabled:opacity-50"
-            >
-              {busy ? "저장 중..." : "저장"}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={busy}
+                className="font-pixel px-4 py-2 text-xs font-semibold text-white bg-chess-accent pixel-btn disabled:opacity-50"
+              >
+                {busy ? t("mypage.saving") : t("mypage.save")}
+              </button>
+              {profileSaved && (
+                <span className="font-pixel text-[11px] text-chess-win tabular-nums">{t("mypage.flash.profileSaved")}</span>
+              )}
+            </div>
           </form>
 
           <section className="pixel-frame pixel-hud-fill p-4 sm:p-5">
-            <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">내가 쓴 글</h2>
+            <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.myPosts")}</h2>
             <div className="mt-3 space-y-2">
               {posts.length === 0 ? (
                 <p className="text-sm text-chess-muted border-2 border-dashed border-chess-border/70 px-3 py-6 text-center">
-                  작성한 글이 없습니다.
+                  {t("mypage.noPosts")}
                 </p>
               ) : (
-                posts.map((p) => (
+                pagedPosts.map((p) => (
                   <article key={p.id} className="pixel-frame pixel-hud-fill p-3">
                     <Link
                       href={`/forum/${p.public_id ?? p.id}`}
@@ -424,17 +457,40 @@ export default function MyPage() {
                 ))
               )}
             </div>
+            {posts.length > PAGE_SIZE && (
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPostsPage((prev) => Math.max(1, prev - 1))}
+                  disabled={postsPage === 1}
+                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {t("forum.pagination.prev")}
+                </button>
+                <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                  {postsPage} / {postsPageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPostsPage((prev) => Math.min(postsPageCount, prev + 1))}
+                  disabled={postsPage === postsPageCount}
+                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {t("forum.pagination.next")}
+                </button>
+              </div>
+            )}
           </section>
 
           <section className="pixel-frame pixel-hud-fill p-4 sm:p-5">
-            <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">내가 쓴 댓글</h2>
+            <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.myComments")}</h2>
             <div className="mt-3 space-y-2">
               {comments.length === 0 ? (
                 <p className="text-sm text-chess-muted border-2 border-dashed border-chess-border/70 px-3 py-6 text-center">
-                  작성한 댓글이 없습니다.
+                  {t("mypage.noComments")}
                 </p>
               ) : (
-                comments.map((c) => (
+                pagedComments.map((c) => (
                   <article key={c.id} className="pixel-frame pixel-hud-fill p-3">
                     <Link
                       href={`/forum/${c.post_public_id ?? c.post_id}`}
@@ -452,6 +508,29 @@ export default function MyPage() {
                 ))
               )}
             </div>
+            {comments.length > PAGE_SIZE && (
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCommentsPage((prev) => Math.max(1, prev - 1))}
+                  disabled={commentsPage === 1}
+                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {t("forum.pagination.prev")}
+                </button>
+                <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                  {commentsPage} / {commentsPageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCommentsPage((prev) => Math.min(commentsPageCount, prev + 1))}
+                  disabled={commentsPage === commentsPageCount}
+                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {t("forum.pagination.next")}
+                </button>
+              </div>
+            )}
           </section>
         </>
       )}

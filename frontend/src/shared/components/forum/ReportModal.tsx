@@ -2,6 +2,8 @@
 
 import { FormEvent, useState } from "react";
 
+import { useTranslation } from "@/shared/lib/i18n";
+
 type Props = {
   open: boolean;
   title: string;
@@ -11,6 +13,7 @@ type Props = {
 };
 
 export function ReportModal({ open, title, busy, onClose, onSubmit }: Props) {
+  const { t } = useTranslation();
   const [reason, setReason] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -19,13 +22,13 @@ export function ReportModal({ open, title, busy, onClose, onSubmit }: Props) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLocalError(null);
-    const t = reason.trim();
-    if (t.length < 5) {
-      setLocalError("사유는 5자 이상 입력해 주세요.");
+    const trimmed = reason.trim();
+    if (trimmed.length < 5) {
+      setLocalError(t("forum.report.reasonMin"));
       return;
     }
     try {
-      await onSubmit(t);
+      await onSubmit(trimmed);
       setReason("");
       onClose();
     } catch {
@@ -47,14 +50,14 @@ export function ReportModal({ open, title, busy, onClose, onSubmit }: Props) {
         <h2 id="report-modal-title" className="text-lg font-semibold text-chess-primary">
           {title}
         </h2>
-        <p className="mt-1 text-xs text-chess-muted">신고 사유를 입력해 주세요. (5–500자)</p>
+        <p className="mt-1 text-xs text-chess-muted">{t("forum.report.reasonHint")}</p>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={4}
           maxLength={500}
           className="mt-3 w-full rounded-md border border-chess-border bg-chess-bg px-3 py-2 text-sm text-chess-primary"
-          placeholder="예: 욕설, 스팸, 개인정보 노출 등"
+          placeholder={t("forum.report.placeholder")}
         />
         {localError && <p className="mt-2 text-sm text-red-500">{localError}</p>}
         <div className="mt-4 flex justify-end gap-2">
@@ -67,14 +70,14 @@ export function ReportModal({ open, title, busy, onClose, onSubmit }: Props) {
             }}
             className="rounded-md border border-chess-border px-3 py-2 text-sm text-chess-primary"
           >
-            취소
+            {t("settings.cancel")}
           </button>
           <button
             type="submit"
             disabled={busy}
             className="rounded-md bg-chess-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {busy ? "전송 중…" : "신고하기"}
+            {busy ? t("forum.report.submitting") : t("forum.report.submit")}
           </button>
         </div>
       </form>

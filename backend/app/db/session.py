@@ -8,11 +8,11 @@ engine = None
 AsyncSessionLocal = None
 
 if settings.DATABASE_URL.strip():
-    engine = create_async_engine(
-        settings.DATABASE_URL.strip(),
-        echo=False,
-        pool_pre_ping=True,
-    )
+    _engine_kwargs: dict = {"echo": False, "pool_pre_ping": True}
+    _recycle = settings.DATABASE_POOL_RECYCLE_SECONDS
+    if _recycle is not None and _recycle > 0:
+        _engine_kwargs["pool_recycle"] = _recycle
+    engine = create_async_engine(settings.DATABASE_URL.strip(), **_engine_kwargs)
     AsyncSessionLocal = async_sessionmaker(
         engine,
         class_=AsyncSession,

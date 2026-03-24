@@ -57,7 +57,11 @@ def decode_access_token(token: str) -> dict:
             _bridge_verify_secret(),
             algorithms=[settings.JWT_ALGORITHM],
             issuer=settings.JWT_ISSUER,
-            options={"verify_aud": False},
+            options={
+                "verify_aud": False,
+                "verify_signature": True,
+                "require_exp": True,
+            },
         )
     except ExpiredSignatureError as exc:
         raise HTTPException(

@@ -1,14 +1,13 @@
 import base64
 import json
-import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Annotated
 
 import magic
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, literal, select, update
+from sqlalchemy import func, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -54,7 +53,7 @@ from app.shared.signup_helpers import (
     mask_email_for_display,
     normalize_email,
 )
-from app.shared.signup_mail import hash_signup_code, send_signup_verification_email
+from app.shared.display_name import normalize_display_name
 from app.shared.forum_blob import upload_image_bytes
 from app.shared.forum_chess import thumbnail_fen_for_post, validate_fen_optional, validate_pgn_optional
 from app.shared.forum_public_id import new_post_public_id, try_parse_uuid
@@ -64,6 +63,8 @@ router = APIRouter()
 _PREVIEW_LEN = 280
 _MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 _ALLOWED_MIME = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
+_PROTECTED_ADMIN_EMAIL = "pig30nidae@gmail.com"
+_PROTECTED_ADMIN_DISPLAY_NAME = "관리자"
 
 
 async def _next_unique_public_id(db: AsyncSession) -> str:
@@ -136,11 +137,42 @@ def _can_edit_post(me: User, post: Post) -> bool:
     return post.author_id == me.id or _can_moderate_all_content(me)
 
 
+def _is_protected_account(user: User) -> bool:
+    return (user.email or "").strip().lower() == _PROTECTED_ADMIN_EMAIL
+
+
+async def _assert_not_protected_content(db: AsyncSession, *, post: Post | None = None, comment: Comment | None = None) -> None:
+    if post is not None:
+        author = await db.get(User, post.author_id)
+        if author is not None and _is_protected_account(author):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="보호 계정의 콘텐츠는 삭제/숨김할 수 없습니다.",
+            )
+    if comment is not None:
+        author = await db.get(User, comment.author_id)
+        if author is not None and _is_protected_account(author):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="보호 계정의 콘텐츠는 삭제/숨김할 수 없습니다.",
+            )
+
+
 def _normalize_display_name(value: str) -> str:
-    normalized = value.strip()
-    if len(normalized) < 2 or len(normalized) > 50:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Display name must be 2-50 chars")
-    return normalized
+    return normalize_display_name(value)
+
+
+async def _is_display_name_taken(db: AsyncSession, *, my_user_id: uuid.UUID, display_name: str) -> bool:
+    name_key = display_name.strip().lower()
+    taken = await db.scalar(
+        select(func.count())
+        .select_from(User)
+        .where(
+            User.id != my_user_id,
+            func.lower(func.trim(User.display_name)) == name_key,
+        )
+    )
+    return bool(taken)
 
 
 def _validate_avatar_url_value(url: str) -> str:
@@ -160,15 +192,10 @@ async def _me_response(db: AsyncSession, me: User) -> MeResponse:
     other = await find_user_with_same_email(db, my_user_id=me.id, email_normalized=norm)
     email_conflict = other is not None and not me.signup_completed
     masked_conflict = mask_email_for_display(norm) if (email_conflict and norm) else None
-    smtp_on = bool(settings.SMTP_HOST.strip())
     needs_email_verification = (
-        smtp_on
-        and norm is not None
-        and not me.signup_completed
-        and me.email_verified_at is None
-        and not email_conflict
+        False
     )
-    email_verified = norm is None or me.email_verified_at is not None or not smtp_on
+    email_verified = True
     return MeResponse(
         id=me.id,
         public_id=me.public_id,
@@ -200,51 +227,11 @@ async def request_signup_email_code(
     db: AsyncSession = Depends(get_async_session),
     me: User = Depends(get_current_user),
 ):
-    _ = request
-    if me.signup_completed:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 가입이 완료되었습니다.")
-    norm = normalize_email(me.email)
-    if not norm:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이메일이 없어 인증을 진행할 수 없습니다.",
-        )
-    other = await find_user_with_same_email(db, my_user_id=me.id, email_normalized=norm)
-    if other:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=duplicate_email_message(mask_email_for_display(norm)),
-        )
-    if not settings.SMTP_HOST.strip():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="이메일 발송이 설정되지 않았습니다. 관리자에게 문의해 주세요.",
-        )
-    try:
-        code = f"{secrets.randbelow(1_000_000):06d}"
-        me.signup_email_code_hash = hash_signup_code(me.id, code)
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="서버 설정 오류로 인증 코드를 발급할 수 없습니다.",
-        ) from exc
-
-    me.signup_email_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
-    me.signup_email_verify_attempts = 0
-    await db.commit()
-    await db.refresh(me)
-    to_addr = me.email.strip() if me.email else norm
-    try:
-        await send_signup_verification_email(to_addr, code)
-    except Exception as exc:
-        me.signup_email_code_hash = None
-        me.signup_email_code_expires_at = None
-        await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="인증 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
-        ) from exc
-    return {"ok": True}
+    _ = (request, db, me)
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="이메일 2차 인증 기능은 폐기되었습니다. OAuth 로그인 후 바로 회원가입을 진행해 주세요.",
+    )
 
 
 @router.post("/signup/email-code/verify", response_model=MeResponse)
@@ -255,61 +242,11 @@ async def verify_signup_email_code(
     db: AsyncSession = Depends(get_async_session),
     me: User = Depends(get_current_user),
 ):
-    _ = request
-    if me.signup_completed:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 가입이 완료되었습니다.")
-    norm = normalize_email(me.email)
-    if not norm:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이메일이 없어 인증을 진행할 수 없습니다.",
-        )
-    other = await find_user_with_same_email(db, my_user_id=me.id, email_normalized=norm)
-    if other:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=duplicate_email_message(mask_email_for_display(norm)),
-        )
-    if me.signup_email_verify_attempts >= 5:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="인증 시도 횟수를 초과했습니다. 코드를 다시 요청해 주세요.",
-        )
-    if not me.signup_email_code_hash or not me.signup_email_code_expires_at:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="인증 코드를 먼저 요청해 주세요.",
-        )
-    now = datetime.now(timezone.utc)
-    expires = me.signup_email_code_expires_at
-    if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
-    if now > expires:
-        me.signup_email_code_hash = None
-        me.signup_email_code_expires_at = None
-        me.signup_email_verify_attempts = 0
-        await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="인증 코드가 만료되었습니다. 다시 요청해 주세요.",
-        )
-
-    expected = hash_signup_code(me.id, payload.code.strip())
-    if expected != me.signup_email_code_hash:
-        me.signup_email_verify_attempts += 1
-        await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="인증 코드가 올바르지 않습니다.",
-        )
-
-    me.email_verified_at = now
-    me.signup_email_code_hash = None
-    me.signup_email_code_expires_at = None
-    me.signup_email_verify_attempts = 0
-    await db.commit()
-    await db.refresh(me)
-    return await _me_response(db, me)
+    _ = (request, payload, db, me)
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="이메일 2차 인증 기능은 폐기되었습니다. OAuth 로그인 후 바로 회원가입을 진행해 주세요.",
+    )
 
 
 @router.post("/signup", response_model=MeResponse)
@@ -331,13 +268,22 @@ async def complete_signup(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=duplicate_email_message(mask_email_for_display(norm)),
             )
-        if settings.SMTP_HOST.strip() and me.email_verified_at is None:
+    if _is_protected_account(me):
+        me.display_name = _PROTECTED_ADMIN_DISPLAY_NAME
+        me.role = "admin"
+    else:
+        normalized_name = _normalize_display_name(payload.display_name)
+        if await _is_display_name_taken(db, my_user_id=me.id, display_name=normalized_name):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="이메일 인증을 완료해 주세요.",
+                status_code=status.HTTP_409_CONFLICT,
+                detail="이미 사용 중인 닉네임입니다.",
             )
-    me.display_name = _normalize_display_name(payload.display_name)
+        me.display_name = normalized_name
     me.terms_accepted_at = datetime.now(timezone.utc)
+    # 가입 완료 시점에는 OAuth 프로필 이미지를 기본값으로 사용하지 않습니다.
+    # (프론트의 기본 아바타를 노출하고, 사용자가 직접 선택할 수 있게 유지)
+    me.avatar_sync_oauth = False
+    me.avatar_url = None
     me.signup_completed = True
     try:
         await db.commit()
@@ -399,9 +345,21 @@ async def update_my_profile(
             me.avatar_sync_oauth = False
         changed = True
 
-    if "display_name" in data and data["display_name"] is not None:
+    if _is_protected_account(me):
+        if me.display_name != _PROTECTED_ADMIN_DISPLAY_NAME:
+            me.display_name = _PROTECTED_ADMIN_DISPLAY_NAME
+            changed = True
+        if (me.role or "").strip().lower() != "admin":
+            me.role = "admin"
+            changed = True
+    elif "display_name" in data and data["display_name"] is not None:
         new_name = _normalize_display_name(data["display_name"])
         if new_name != me.display_name.strip():
+            if await _is_display_name_taken(db, my_user_id=me.id, display_name=new_name):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="이미 사용 중인 닉네임입니다.",
+                )
             me.display_name = new_name
             changed = True
     if "profile_public" in data and data["profile_public"] is not None:
@@ -581,6 +539,7 @@ async def _list_posts_core(
     cursor: str | None,
     sort: str,
     page: int,
+    q: str | None,
 ) -> PostListResponse:
     c_count = select(func.count(Comment.id)).where(Comment.post_id == Post.id).scalar_subquery()
     l_count = (
@@ -607,6 +566,17 @@ async def _list_posts_core(
             where_clauses.append(Post.board_category.in_(("notice", "free", "patch")))
         else:
             where_clauses.append(Post.board_category == board_kind)
+
+    q_norm = (q or "").strip()
+    if q_norm:
+        escaped = q_norm.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        where_clauses.append(
+            or_(
+                Post.title.ilike(pattern, escape="\\"),
+                Post.body.ilike(pattern, escape="\\"),
+            )
+        )
 
     sort_key = (sort or "new").lower()
     if sort_key not in ("new", "old", "likes", "comments"):
@@ -689,6 +659,7 @@ async def list_posts(
     cursor: str | None = None,
     sort: str = Query("new"),
     page: int = Query(1, ge=1, le=500),
+    q: str | None = Query(None, min_length=1, max_length=100),
 ):
     _ = request
     return await _list_posts_core(
@@ -700,6 +671,7 @@ async def list_posts(
         cursor=cursor,
         sort=sort,
         page=page,
+        q=q,
     )
 
 
@@ -717,6 +689,7 @@ async def list_board_posts(
     cursor: str | None = None,
     sort: str = Query("new"),
     page: int = Query(1, ge=1, le=500),
+    q: str | None = Query(None, min_length=1, max_length=100),
 ):
     _ = request
     if kind is not None and kind not in ("notice", "free", "patch"):
@@ -733,6 +706,7 @@ async def list_board_posts(
         cursor=cursor,
         sort=sort,
         page=page,
+        q=q,
     )
 
 
@@ -911,6 +885,7 @@ async def delete_post(
     post = await db.get(Post, pid)
     if post is None or post.deleted_at is not None or post.is_hidden:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    await _assert_not_protected_content(db, post=post)
     if not _can_edit_post(me, post):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     post.deleted_at = datetime.now(timezone.utc)
@@ -995,6 +970,7 @@ async def delete_comment(
     c = await db.get(Comment, cid)
     if c is None or c.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
+    await _assert_not_protected_content(db, comment=c)
     if c.author_id != me.id and not _can_moderate_all_content(me):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     c.deleted_at = datetime.now(timezone.utc)
@@ -1045,6 +1021,7 @@ async def create_report(
         post = await db.get(Post, payload.post_id, with_for_update=True)
         if post is None or post.deleted_at is not None or post.is_hidden:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+        await _assert_not_protected_content(db, post=post)
         post_author = await db.get(User, post.author_id)
         if post_author is not None and _is_admin_user(post_author):
             raise HTTPException(
@@ -1061,6 +1038,7 @@ async def create_report(
         comment_locked = await db.get(Comment, payload.comment_id, with_for_update=True)
         if comment_locked is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
+        await _assert_not_protected_content(db, comment=comment_locked)
         comment_author = await db.get(User, comment_locked.author_id)
         if comment_author is not None and _is_admin_user(comment_author):
             raise HTTPException(
@@ -1182,6 +1160,7 @@ async def admin_hide_post(
     post = await db.get(Post, pid)
     if post is None or post.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    await _assert_not_protected_content(db, post=post)
     post.is_hidden = True
     post.hidden_reason = payload.reason.strip()
     post.hidden_by_id = me.id
@@ -1240,6 +1219,7 @@ async def admin_hide_comment(
     comment = await db.get(Comment, cid)
     if comment is None or comment.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
+    await _assert_not_protected_content(db, comment=comment)
     comment.is_hidden = True
     comment.hidden_reason = payload.reason.strip()
     comment.hidden_by_id = me.id
