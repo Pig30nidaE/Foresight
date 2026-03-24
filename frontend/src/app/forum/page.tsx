@@ -13,13 +13,20 @@ import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
 import { composerPreviewFen, DEFAULT_START_FEN } from "@/shared/lib/forumChess";
 import { AuthorNameLink } from "@/shared/components/forum/AuthorName";
+import { PixelChatGlyph, PixelHeartGlyph } from "@/shared/components/ui/PixelGlyphs";
 
 type PostItem = {
   id: string;
   public_id: string;
   title: string;
   body_preview: string;
-  author: { id: string; public_id: string; display_name: string; role?: string };
+  author: {
+    id: string;
+    public_id: string;
+    display_name: string;
+    role?: string;
+    avatar_url?: string | null;
+  };
   created_at: string;
   like_count: number;
   comment_count: number;
@@ -215,7 +222,7 @@ export default function ForumPage() {
   };
 
   const inputClass =
-    "w-full rounded-xl border border-chess-border/90 bg-chess-bg px-4 py-3 text-sm text-chess-primary shadow-inner shadow-black/[0.02] outline-none transition-[border-color,box-shadow] placeholder:text-chess-muted/70 focus:border-chess-accent/50 focus:ring-2 focus:ring-chess-accent/20 dark:border-chess-border dark:bg-chess-elevated/50";
+    "w-full pixel-input px-4 py-3 text-sm text-chess-primary placeholder:text-chess-muted/70 dark:bg-chess-elevated/50";
 
   return (
     <section className="space-y-6">
@@ -233,7 +240,7 @@ export default function ForumPage() {
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="rounded-lg border border-chess-border bg-chess-bg px-3 py-2 text-sm text-chess-primary"
+                className="pixel-input px-3 py-2 text-sm text-chess-primary"
               >
                 <option value="new">최신순</option>
                 <option value="old">오래된순</option>
@@ -250,7 +257,7 @@ export default function ForumPage() {
               if (creating) closeCompose();
               else setCreating(true);
             }}
-            className="inline-flex items-center gap-2 rounded-xl bg-chess-accent px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-105 active:scale-[0.99] dark:shadow-none"
+            className="font-pixel pixel-btn inline-flex items-center gap-2 bg-chess-accent px-4 py-2.5 text-sm font-semibold text-white border-chess-accent hover:brightness-105"
           >
             {creating ? (
               "닫기"
@@ -271,14 +278,14 @@ export default function ForumPage() {
                 router.push("/signup/consent");
               }
             }}
-            className="rounded-xl border border-chess-border/90 bg-chess-surface/60 px-4 py-2.5 text-sm font-medium text-chess-primary transition hover:bg-chess-elevated/80"
+            className="font-pixel pixel-btn bg-chess-surface/70 px-4 py-2.5 text-sm font-medium text-chess-primary hover:bg-chess-elevated/80"
           >
             {status === "authenticated" ? "가입 완료 후 글쓰기" : "로그인 후 글쓰기"}
           </button>
         )}
       </div>
       {meError && (
-        <p className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+        <p className="pixel-frame border-amber-600/45 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
           {meError}
         </p>
       )}
@@ -291,7 +298,7 @@ export default function ForumPage() {
       {creating && canWrite && (
         <form
           onSubmit={onCreatePost}
-          className="overflow-hidden rounded-2xl border border-chess-border/70 bg-gradient-to-b from-chess-surface/90 to-chess-bg/80 shadow-md dark:border-chess-border dark:from-chess-surface/50 dark:to-chess-bg/40"
+          className="overflow-hidden pixel-frame bg-chess-surface/80 dark:bg-chess-surface/35"
         >
           <div className="border-b border-chess-border/50 bg-chess-elevated/25 px-5 py-4 dark:bg-chess-elevated/20">
             <p className="text-xs font-medium uppercase tracking-wider text-chess-muted">제목</p>
@@ -317,7 +324,7 @@ export default function ForumPage() {
                   type="button"
                   onClick={() => setComposeBoardSectionExpanded((v) => !v)}
                   aria-expanded={composeBoardSectionExpanded}
-                  className="mb-2 flex w-full max-w-[15rem] items-center justify-center gap-2 rounded-lg border border-chess-border/80 bg-chess-surface/50 py-2 text-xs font-medium text-chess-primary transition hover:bg-chess-elevated/60 dark:bg-chess-elevated/25"
+                  className="mb-2 flex w-full max-w-[15rem] items-center justify-center gap-2 pixel-btn bg-chess-surface/55 py-2 text-xs font-medium text-chess-primary hover:bg-chess-elevated/60 dark:bg-chess-elevated/25"
                 >
                   {composeBoardSectionExpanded ? (
                     <ChevronUp className="size-4 shrink-0 text-chess-muted" aria-hidden />
@@ -362,14 +369,14 @@ export default function ForumPage() {
             <button
               type="button"
               onClick={closeCompose}
-              className="rounded-xl border border-chess-border/90 px-5 py-3 text-sm font-medium text-chess-primary transition hover:bg-chess-elevated/50"
+              className="font-pixel pixel-btn px-5 py-3 text-sm font-medium text-chess-primary hover:bg-chess-elevated/50"
             >
               취소
             </button>
             <button
               type="submit"
               disabled={busyCreate}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-chess-accent px-6 py-3 text-sm font-semibold text-white shadow-sm transition enabled:hover:brightness-105 disabled:opacity-50 dark:shadow-none"
+              className="font-pixel pixel-btn inline-flex items-center justify-center gap-2 bg-chess-accent px-6 py-3 text-sm font-semibold text-white border-chess-accent enabled:hover:brightness-105 disabled:opacity-50"
             >
               {busyCreate ? (
                 <>
@@ -396,9 +403,9 @@ export default function ForumPage() {
         />
       )}
 
-      <div className="rounded-2xl border border-chess-border/50 bg-chess-surface/25 p-3 sm:p-4 dark:bg-chess-surface/20">
+      <div className="pixel-frame bg-chess-surface/30 p-3 sm:p-4 dark:bg-chess-surface/22">
         {!loadingPosts && !postsError && posts.length === 0 && (
-          <div className="mb-4 rounded-xl border border-dashed border-chess-border/80 bg-chess-bg/50 px-3 py-8 text-center dark:bg-chess-elevated/20">
+          <div className="mb-4 pixel-frame border-dashed border-chess-border/80 bg-chess-bg/55 px-3 py-8 text-center dark:bg-chess-elevated/20">
             <p className="text-sm font-medium text-chess-primary">아직 게시글이 없습니다</p>
             <p className="mt-1 text-sm text-chess-muted">
               {canWrite && !creating ? "위에서 글쓰기를 눌러 첫 글을 남겨 보세요." : "첫 글이 곧 올라올 거예요."}
@@ -409,7 +416,7 @@ export default function ForumPage() {
           {posts.map((p) => (
             <article
               key={p.id}
-              className="group flex min-h-0 flex-col overflow-hidden rounded-xl border border-chess-border/70 bg-chess-bg/80 shadow-sm transition hover:border-chess-accent/30 hover:shadow-md dark:bg-chess-surface/40"
+              className="group flex min-h-0 flex-col overflow-hidden pixel-frame bg-chess-bg/85 transition-colors hover:border-chess-accent/50 dark:bg-chess-surface/40"
             >
               <Link
                 href={`/forum/${p.public_id ?? p.id}`}
@@ -429,23 +436,28 @@ export default function ForumPage() {
                 <p className="mt-1.5 line-clamp-2 flex-1 overflow-hidden break-words text-xs leading-relaxed text-chess-muted [overflow-wrap:anywhere]">
                   {p.body_preview}
                 </p>
-                <div className="mt-2 text-[11px] leading-tight text-chess-muted/90">
-                  <p
-                    className="truncate"
-                    title={`${p.author.display_name} ${new Date(p.created_at).toLocaleDateString()}`}
-                  >
+                <div
+                  className="mt-2.5 min-w-0 text-xs leading-tight text-chess-muted/90 sm:text-[13px]"
+                  title={`${p.author.display_name} · ${new Date(p.created_at).toLocaleDateString()}`}
+                >
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <AuthorNameLink
                       author={p.author}
-                      className="font-medium text-chess-primary hover:text-chess-accent hover:underline underline-offset-2"
-                    />{" "}
-                    {new Date(p.created_at).toLocaleDateString()}
-                  </p>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-                    <span className="inline-flex items-center gap-0.5 tabular-nums" aria-label={`좋아요 ${p.like_count}`}>
-                      ❤️ {p.like_count}
+                      avatarSize={22}
+                      className="min-w-0 max-w-[min(100%,14rem)] font-medium text-chess-primary hover:text-chess-accent hover:underline underline-offset-2"
+                    />
+                    <span className="shrink-0 tabular-nums text-chess-muted/80">
+                      {new Date(p.created_at).toLocaleDateString()}
                     </span>
-                    <span className="inline-flex items-center gap-0.5 tabular-nums" aria-label={`댓글 ${p.comment_count}`}>
-                      💬 {p.comment_count}
+                  </div>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                    <span className="inline-flex items-center gap-1 tabular-nums" aria-label={`좋아요 ${p.like_count}`}>
+                      <PixelHeartGlyph className="text-red-500 dark:text-red-400" size={14} />
+                      {p.like_count}
+                    </span>
+                    <span className="inline-flex items-center gap-1 tabular-nums" aria-label={`댓글 ${p.comment_count}`}>
+                      <PixelChatGlyph size={14} />
+                      {p.comment_count}
                     </span>
                   </p>
                 </div>

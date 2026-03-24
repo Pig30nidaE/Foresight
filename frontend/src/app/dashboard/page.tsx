@@ -8,6 +8,20 @@ import { Suspense, useState, useEffect } from "react";
 import GameHistorySection from "@/features/dashboard/components/GameHistorySection";
 import AnalysisSection from "@/features/dashboard/components/AnalysisSection";
 import { useTranslation } from "@/shared/lib/i18n";
+import { DashboardPixelMascot } from "@/shared/components/ui/DashboardPixelMascot";
+import { PixelSearchIcon } from "@/shared/components/ui/PixelHudIcons";
+import type { PixelGlyphComponent } from "@/shared/components/ui/PixelGlyphs";
+import {
+  PixelBarrierGlyph,
+  PixelBoltGlyph,
+  PixelBookGlyph,
+  PixelBulletGlyph,
+  PixelClockGlyph,
+  PixelFolderGlyph,
+  PixelMagnifyGlyph,
+  PixelPawnGlyph,
+} from "@/shared/components/ui/PixelGlyphs";
+import { resolveAvatarUrl } from "@/shared/lib/avatarUrl";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
 
@@ -19,12 +33,12 @@ type TimeClassLabelKey =
 
 const TIME_CLASS_META: Record<
   TimeClass,
-  { emoji: string; key: TimeClassLabelKey }
+  { Icon: PixelGlyphComponent; key: TimeClassLabelKey }
 > = {
-  bullet:    { emoji: "🔫", key: "dh.tc.bullet" },
-  blitz:     { emoji: "⚡", key: "dh.tc.blitz" },
-  rapid:     { emoji: "⏱", key: "dh.tc.rapid" },
-  classical: { emoji: "📚", key: "dh.tc.classical" },
+  bullet:    { Icon: PixelBulletGlyph, key: "dh.tc.bullet" },
+  blitz:     { Icon: PixelBoltGlyph, key: "dh.tc.blitz" },
+  rapid:     { Icon: PixelClockGlyph, key: "dh.tc.rapid" },
+  classical: { Icon: PixelBookGlyph, key: "dh.tc.classical" },
 };
 
 function DashboardContent() {
@@ -109,14 +123,16 @@ function DashboardContent() {
   };
 
   // ── 현재 적용된 필터 칩 요약 (모바일 검색창 아래 표시)
+  const SummaryTcIcon = TIME_CLASS_META[timeClass].Icon;
   const appliedFilterSummary = (
     <div className="md:hidden flex items-center gap-2 px-1 mt-2">
       <span className="text-[11px] text-chess-muted">
         {platform === "chess.com" ? "Chess.com" : "Lichess"}
       </span>
       <span className="text-chess-muted/40 text-xs">·</span>
-      <span className="text-[11px] text-chess-muted">
-        {TIME_CLASS_META[timeClass].emoji} {t(TIME_CLASS_META[timeClass].key)}
+      <span className="text-[11px] text-chess-muted inline-flex items-center gap-1">
+        <SummaryTcIcon size={12} className="shrink-0 opacity-80" />
+        {t(TIME_CLASS_META[timeClass].key)}
         {tcGameCount(timeClass) != null ? ` (${tcGameCount(timeClass)})` : ""}
       </span>
     </div>
@@ -127,8 +143,8 @@ function DashboardContent() {
 
       {/* Lichess 배너 */}
       {platform === "lichess" && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-chess-surface border border-amber-500/40">
-          <span className="text-xl shrink-0 select-none">🚧</span>
+        <div className="pixel-frame flex items-start gap-3 px-4 py-3 bg-chess-surface border-amber-600/50">
+          <PixelBarrierGlyph className="shrink-0" size={22} />
           <div className="min-w-0 space-y-0.5">
             <p className="text-sm font-bold text-chess-primary">{t("lichess.comingSoon.title")}</p>
             <p className="text-xs text-chess-muted leading-relaxed">{t("lichess.comingSoon.desc")}</p>
@@ -137,27 +153,28 @@ function DashboardContent() {
       )}
 
       {/* ── Search Card ── */}
-      <div className="bg-chess-surface/40 dark:bg-chess-surface/25 border border-chess-border/60 dark:border-chess-border rounded-2xl shadow-sm dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] overflow-hidden">
+      <div className="pixel-frame pixel-hud-fill relative overflow-hidden">
+        <div className="absolute right-1.5 top-1.5 sm:right-2 sm:top-2 z-[1]" aria-hidden>
+          <DashboardPixelMascot />
+        </div>
 
         {/* 모바일: 검색 + 필터 버튼 한 줄 */}
         <div className="md:hidden flex gap-2 p-4">
           <div className="relative flex-1 min-w-0">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-chess-muted pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
+            <PixelSearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px]" />
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleSearch(e as unknown as React.FormEvent); }}
               placeholder={t("dh.searchPlaceholder")}
-              className="w-full pl-9 pr-3 py-2.5 bg-chess-surface border border-chess-border rounded-xl text-sm text-chess-primary placeholder-chess-muted focus:outline-none focus:ring-2 focus:ring-chess-accent/30 focus:border-chess-accent transition-all"
+              className="pixel-input font-pixel w-full pl-9 pr-3 py-2.5 text-base text-chess-primary placeholder-chess-muted"
             />
           </div>
           {/* 필터 버튼 */}
           <button
             type="button"
             onClick={openFilter}
-            className="flex items-center justify-center w-11 h-11 rounded-xl border border-chess-border bg-chess-surface text-chess-muted hover:text-chess-primary hover:border-chess-primary/40 transition-all shrink-0"
+            className="pixel-btn flex items-center justify-center w-11 h-11 bg-chess-surface text-chess-muted hover:text-chess-primary shrink-0"
             aria-label="필터"
           >
             <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -169,7 +186,7 @@ function DashboardContent() {
             type="button"
             onClick={handleSearch}
             disabled={platform === "lichess"}
-            className="px-4 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
+            className="font-pixel pixel-btn px-4 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold shrink-0"
           >
             {t("dh.startAnalysis")}
           </button>
@@ -185,20 +202,18 @@ function DashboardContent() {
           {/* 검색 행 */}
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-chess-muted pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-              </svg>
+              <PixelSearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px]" />
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder={t("dh.searchPlaceholder")}
-                className="w-full pl-10 pr-4 py-2.5 bg-chess-surface border border-chess-border rounded-xl text-sm text-chess-primary placeholder-chess-muted focus:outline-none focus:ring-2 focus:ring-chess-accent/30 focus:border-chess-accent transition-all"
+                className="pixel-input font-pixel w-full pl-10 pr-4 py-2.5 text-base text-chess-primary placeholder-chess-muted"
               />
             </div>
             <button
               type="submit"
               disabled={platform === "lichess"}
-              className="px-6 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
+              className="font-pixel pixel-btn px-6 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold shrink-0"
             >
               {t("dh.startAnalysis")}
             </button>
@@ -218,10 +233,10 @@ function DashboardContent() {
                   key={p}
                   type="button"
                   onClick={() => setPlatform(p)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all border-2 ${
+                  className={`font-pixel pixel-btn px-4 py-1.5 text-sm font-medium ${
                     platform === p
-                      ? "border-chess-accent bg-chess-accent text-white shadow-sm dark:bg-chess-accent/20 dark:text-chess-accent dark:border-chess-accent/45"
-                      : "border-chess-border bg-chess-elevated/25 dark:bg-transparent text-chess-muted hover:border-chess-accent/35 hover:text-chess-primary"
+                      ? "border-chess-accent bg-chess-accent text-white dark:bg-chess-accent/25 dark:text-chess-accent"
+                      : "bg-chess-elevated/25 dark:bg-transparent text-chess-muted hover:text-chess-primary"
                   }`}
                 >
                   {p === "chess.com" ? "Chess.com" : "Lichess"}
@@ -239,19 +254,20 @@ function DashboardContent() {
               {TIME_CLASSES.map((tc) => {
                 const count = tcGameCount(tc);
                 const meta = TIME_CLASS_META[tc];
+                const TcIcon = meta.Icon;
                 const active = timeClass === tc;
                 return (
                   <button
                     key={tc}
                     type="button"
                     onClick={() => setTimeClass(tc)}
-                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full border-2 text-sm font-medium transition-all ${
+                    className={`font-pixel pixel-btn flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium ${
                       active
-                        ? "border-chess-inverse bg-chess-inverse text-white shadow-sm dark:shadow-[0_0_20px_-4px_rgba(196,165,116,0.35)]"
-                        : "border-chess-border bg-chess-elevated/30 dark:bg-transparent text-chess-muted hover:border-chess-accent/35 hover:text-chess-primary"
+                        ? "border-chess-inverse bg-chess-inverse text-white"
+                        : "bg-chess-elevated/30 dark:bg-transparent text-chess-muted hover:text-chess-primary"
                     }`}
                   >
-                    <span>{meta.emoji}</span>
+                    <TcIcon size={14} className="shrink-0 opacity-90" />
                     <span>{t(meta.key)}</span>
                     {count != null && (
                       <span className={`text-xs font-normal ${active ? "text-white/75" : "text-chess-muted/70"}`}>
@@ -271,14 +287,14 @@ function DashboardContent() {
         <>
           {/* 백드롭 */}
           <div
-            className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            className="md:hidden fixed inset-0 z-40 bg-black/55"
             onClick={() => setFilterOpen(false)}
           />
           {/* 시트 */}
-          <div className="md:hidden fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-chess-surface dark:bg-chess-elevated border-t border-chess-border shadow-2xl dark:shadow-[0_-12px_40px_rgba(0,0,0,0.45)]">
+          <div className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-chess-surface dark:bg-chess-elevated border-t-[3px] border-chess-border shadow-[0_-4px_0_0_color-mix(in_srgb,var(--color-chess-primary)_12%,transparent)] dark:shadow-[0_-4px_0_0_rgba(0,0,0,0.6)]">
             {/* 핸들 */}
             <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-chess-border" />
+              <div className="w-10 h-1.5 bg-chess-border border border-chess-primary/20" />
             </div>
 
             <div className="px-5 pb-6 pt-3 space-y-5">
@@ -295,10 +311,10 @@ function DashboardContent() {
                       key={p}
                       type="button"
                       onClick={() => setDraftPlatform(p)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all border-2 ${
+                      className={`font-pixel pixel-btn px-4 py-2 text-sm font-medium ${
                         draftPlatform === p
-                          ? "border-chess-accent bg-chess-accent text-white dark:bg-chess-accent/20 dark:text-chess-accent dark:border-chess-accent/45"
-                          : "border-chess-border bg-chess-elevated/40 dark:bg-transparent text-chess-muted"
+                          ? "border-chess-accent bg-chess-accent text-white dark:bg-chess-accent/25 dark:text-chess-accent"
+                          : "bg-chess-elevated/40 dark:bg-transparent text-chess-muted"
                       }`}
                     >
                       {p === "chess.com" ? "Chess.com" : "Lichess"}
@@ -316,19 +332,20 @@ function DashboardContent() {
                   {TIME_CLASSES.map((tc) => {
                     const count = tcGameCount(tc);
                     const meta = TIME_CLASS_META[tc];
+                    const TcIcon = meta.Icon;
                     const active = draftTimeClass === tc;
                     return (
                       <button
                         key={tc}
                         type="button"
                         onClick={() => setDraftTimeClass(tc)}
-                        className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
+                        className={`font-pixel pixel-btn flex items-center gap-2 px-4 py-3 text-sm font-medium ${
                           active
                             ? "border-chess-inverse bg-chess-inverse text-white"
-                            : "border-chess-border bg-chess-elevated/30 dark:bg-transparent text-chess-muted"
+                            : "bg-chess-elevated/30 dark:bg-transparent text-chess-muted"
                         }`}
                       >
-                        <span className="text-base">{meta.emoji}</span>
+                        <TcIcon size={16} className="shrink-0 opacity-90" />
                         <span className="flex-1 text-left">{t(meta.key)}</span>
                         {count != null && (
                           <span className={`text-xs font-normal ${active ? "text-white/75" : "text-chess-muted/60"}`}>
@@ -345,7 +362,7 @@ function DashboardContent() {
               <button
                 type="button"
                 onClick={applyFilter}
-                className="w-full py-3 bg-chess-inverse text-white font-semibold rounded-xl text-sm transition-colors hover:bg-chess-inverse/90"
+                className="font-pixel pixel-btn w-full py-3 bg-chess-inverse text-white font-semibold text-sm hover:bg-chess-inverse/90"
               >
                 적용하기
               </button>
@@ -356,7 +373,7 @@ function DashboardContent() {
 
       {!submitted && (
         <div className="flex flex-col items-center py-16 sm:py-24 gap-3 text-chess-muted">
-          <span className="text-5xl select-none">♟️</span>
+          <PixelPawnGlyph className="opacity-60" size={56} />
           <p className="text-sm">{t("dh.emptyState")}</p>
         </div>
       )}
@@ -365,39 +382,39 @@ function DashboardContent() {
         <>
           {profile && (
             <div className="flex items-center gap-3 sm:gap-5 px-1 animate-fade-in">
-              {profile.avatar_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={profile.avatar_url}
-                  alt={submitted}
-                  className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-chess-border shrink-0"
-                />
-              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolveAvatarUrl(profile.avatar_url)}
+                alt={submitted}
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-[var(--pixel-radius)] border-2 border-chess-border shrink-0 object-cover"
+                style={{ imageRendering: "pixelated" }}
+                referrerPolicy="no-referrer"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl sm:text-2xl font-bold text-chess-primary truncate">{submitted}</h2>
-                  <span className="text-xs sm:text-sm text-chess-muted bg-chess-surface dark:bg-chess-elevated dark:text-chess-muted px-2 py-0.5 rounded-full capitalize border border-chess-border/40 dark:border-chess-border/60">
+                  <span className="font-pixel text-xs sm:text-sm text-chess-muted bg-chess-surface dark:bg-chess-elevated dark:text-chess-muted px-2 py-0.5 capitalize border-2 border-chess-border/60 dark:border-chess-border/60">
                     {submittedPlatform}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2 sm:gap-3 text-sm text-chess-muted mt-1">
                   {profile.rating_bullet != null && (
                     <span className="flex items-center gap-1">
-                      <span className="text-yellow-500">🔫</span>
+                      <PixelBulletGlyph className="text-yellow-600 dark:text-yellow-400" size={14} />
                       <span className="hidden sm:inline text-chess-muted">Bullet</span>
                       <span className="text-chess-primary font-semibold">{profile.rating_bullet}</span>
                     </span>
                   )}
                   {profile.rating_blitz != null && (
                     <span className="flex items-center gap-1">
-                      <span className="text-orange-400">⚡</span>
+                      <PixelBoltGlyph className="text-orange-500 dark:text-orange-400" size={14} />
                       <span className="hidden sm:inline text-chess-muted">Blitz</span>
                       <span className="text-chess-primary font-semibold">{profile.rating_blitz}</span>
                     </span>
                   )}
                   {profile.rating_rapid != null && (
                     <span className="flex items-center gap-1">
-                      <span className="text-blue-400">⏱</span>
+                      <PixelClockGlyph className="text-blue-500 dark:text-blue-400" size={14} />
                       <span className="hidden sm:inline text-chess-muted">Rapid</span>
                       <span className="text-chess-primary font-semibold">{profile.rating_rapid}</span>
                     </span>
@@ -409,25 +426,29 @@ function DashboardContent() {
 
           <div className="flex gap-1 border-b border-chess-border">
             {([
-              { value: "games",    label: t("dh.tab.games") },
-              { value: "analysis", label: t("dh.tab.analysis") },
-            ] as const).map((tab) => (
+              { value: "games" as const,    label: t("dh.tab.games"), Icon: PixelFolderGlyph },
+              { value: "analysis" as const, label: t("dh.tab.analysis"), Icon: PixelMagnifyGlyph },
+            ] as const).map((tab) => {
+              const TabIc = tab.Icon;
+              return (
               <button
                 key={tab.value}
                 onClick={() => setActiveTab(tab.value)}
-                className={`px-4 sm:px-5 py-2.5 text-sm font-medium transition-colors -mb-px border-b-2 ${
+                type="button"
+                className={`font-pixel inline-flex items-center gap-1.5 px-4 sm:px-5 py-2.5 text-sm font-medium -mb-px border-b-[3px] ${
                   activeTab === tab.value
                     ? "border-chess-accent text-chess-accent"
                     : "border-transparent text-chess-muted hover:text-chess-primary"
                 }`}
               >
+                <TabIc size={15} className="shrink-0 opacity-90" />
                 {tab.label}
               </button>
-            ))}
+            );})}
           </div>
 
           <section
-            className={`bg-chess-bg/85 dark:bg-chess-elevated/12 border border-chess-border/55 dark:border-chess-border/50 rounded-2xl p-3 sm:p-5 shadow-sm dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] ${
+            className={`pixel-frame bg-chess-bg/90 dark:bg-chess-elevated/12 p-3 sm:p-5 ${
               activeTab !== "games" ? "hidden" : ""
             }`}
             aria-hidden={activeTab !== "games"}

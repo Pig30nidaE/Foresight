@@ -128,6 +128,12 @@ class SignupEmailCodeVerify(BaseModel):
 class ProfileUpdateRequest(BaseModel):
     display_name: str | None = Field(None, min_length=2, max_length=50)
     profile_public: bool | None = None
+    # Set to uploaded image URL (e.g. from POST /forum/upload). Omit for no change.
+    avatar_url: str | None = Field(None, max_length=2048)
+    # Use site default image (frontend); clears DB URL and stops OAuth overwrite.
+    use_site_default_avatar: bool | None = None
+    # Restore avatar from OAuth claims in the current JWT.
+    restore_oauth_avatar: bool | None = None
 
 
 class MyPostListItem(BaseModel):

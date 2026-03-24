@@ -1,12 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { VT323 } from "next/font/google";
 import "./globals.css";
 import Providers from "@/shared/components/layout/Providers";
 import Navbar from "@/shared/components/layout/Navbar";
 import { Analytics } from "@vercel/analytics/next";
 import { resolveApiBaseUrl } from "@/shared/lib/apiBaseUrl";
 
-const inter = Inter({ subsets: ["latin"] });
+const vt323 = VT323({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-pixel",
+});
 
 export const viewport: Viewport = {
   viewportFit: "cover",
@@ -15,8 +19,8 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://fsight.app"),
   title: {
-    default: "Foresight ♟️ | Chess Analytics for Competitors",
-    template: "%s | Foresight ♟️",
+    default: "foresight-chess | Chess Analytics for Competitors",
+    template: "%s | foresight-chess",
   },
   description:
     "체스 유저를 위한 분석 플랫폼. 오프닝 티어, 승률 분석, 게임 히스토리 등 경쟁력 있는 체스를 위한 데이터 인사이트를 제공합니다.",
@@ -28,20 +32,20 @@ export const metadata: Metadata = {
     "opening tier",
     "chess.com",
     "lichess",
-    "foresight",
+    "foresight-chess",
   ],
   openGraph: {
     type: "website",
     locale: "ko_KR",
     url: "https://fsight.app",
-    siteName: "Foresight",
-    title: "Foresight ♟️ | Chess Analytics for Competitors",
+    siteName: "foresight-chess",
+    title: "foresight-chess | Chess Analytics for Competitors",
     description:
       "체스 유저를 위한 분석 플랫폼. 오프닝 티어, 승률 분석, 게임 히스토리 등 경쟁력 있는 체스를 위한 데이터 인사이트를 제공합니다.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Foresight ♟️ | Chess Analytics for Competitors",
+    title: "foresight-chess | Chess Analytics for Competitors",
     description:
       "체스 유저를 위한 분석 플랫폼. 오프닝 티어, 승률 분석, 게임 히스토리 등 경쟁력 있는 체스를 위한 데이터 인사이트를 제공합니다.",
   },
@@ -68,11 +72,13 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body
-        className={`${inter.className} min-h-screen bg-[var(--background)] text-[var(--foreground)]`}
+        className={`${vt323.variable} min-h-screen bg-[var(--background)] text-[var(--foreground)]`}
       >
         <Providers apiBaseUrl={apiBaseUrl}>
           <Navbar />
-          <main className="max-w-screen-2xl mx-auto px-4 py-6 sm:px-6 sm:py-10">{children}</main>
+          <main className="relative z-0 max-w-screen-2xl mx-auto px-4 py-6 sm:px-6 sm:py-10">
+            {children}
+          </main>
         </Providers>
         <Analytics />
       </body>

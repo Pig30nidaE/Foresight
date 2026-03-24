@@ -4,6 +4,21 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { TacticalPattern, PatternGameItem } from "@/features/dashboard/types";
 import SacrificePatternModal from "@/features/dashboard/components/modals/SacrificePatternModal";
+import type { PixelGlyphComponent } from "@/shared/components/ui/PixelGlyphs";
+import {
+  PixelBookGlyph,
+  PixelCaretDownGlyph,
+  PixelChartGlyph,
+  PixelCheckGlyph,
+  PixelCrossMarkGlyph,
+  PixelMicroscopeGlyph,
+  PixelPawnGlyph,
+  PixelSwordsGlyph,
+  PixelTrophyGlyph,
+  PixelWarnGlyph,
+  PixelXGlyph,
+  PixelStarGlyph,
+} from "@/shared/components/ui/PixelGlyphs";
 
 // Chess.com 게임 URL → 분석 URL 변환
 function toAnalysisUrl(url: string): string {
@@ -54,10 +69,13 @@ const DEFAULT_CONFIG: PatternDisplayConfig = {
 };
 
 // ─── 분석 타입 배지 ─────────────────────────────────────────
-const ANALYSIS_TYPE_META: Record<PatternDisplayConfig["analysisType"], { label: string; cls: string; icon: string }> = {
-  win_rate:   { icon: "🏆", label: "승률 기반",    cls: "border-emerald-700/35 bg-emerald-700/8 text-chess-win" },
-  quality:    { icon: "🔬", label: "수 품질 기반", cls: "border-blue-700/30 bg-blue-700/8 text-blue-700" },
-  occurrence: { icon: "📊", label: "발생 빈도 기반", cls: "border-purple-700/30 bg-purple-700/8 text-purple-700" },
+const ANALYSIS_TYPE_META: Record<
+  PatternDisplayConfig["analysisType"],
+  { label: string; cls: string; Icon: PixelGlyphComponent }
+> = {
+  win_rate:   { Icon: PixelTrophyGlyph, label: "승률 기반", cls: "border-emerald-700/35 bg-emerald-700/8 text-chess-win" },
+  quality:    { Icon: PixelMicroscopeGlyph, label: "수 품질 기반", cls: "border-blue-700/30 bg-blue-700/8 text-blue-700" },
+  occurrence: { Icon: PixelChartGlyph, label: "발생 빈도 기반", cls: "border-purple-700/30 bg-purple-700/8 text-purple-700" },
 };
 
 // ─── 결과 스타일 ─────────────────────────────────────────────
@@ -119,7 +137,10 @@ function AdvantageBreakdown({ data }: { data: AdvantageBreakdownData }) {
 
   return (
     <div className="rounded-xl border border-chess-border bg-chess-bg/60 p-4 space-y-3">
-      <p className="text-xs font-bold text-chess-primary uppercase tracking-wide">📊 우위게임 역전 분석</p>
+      <p className="text-xs font-bold text-chess-primary uppercase tracking-wide inline-flex items-center gap-1.5">
+        <PixelChartGlyph size={14} className="shrink-0 opacity-90" />
+        우위게임 역전 분석
+      </p>
 
       {/* 스택 바 */}
       <div className="w-full flex h-3 rounded-full overflow-hidden gap-px">
@@ -296,9 +317,13 @@ function StatSummary({ games, config }: { games: PatternGameItem[]; config: Patt
         <>
           <span className="text-chess-muted text-xs">|</span>
           <div className="flex items-center gap-1 text-xs">
-            <span className="text-chess-win">✓ {successes}</span>
+            <span className="text-chess-win inline-flex items-center gap-0.5">
+              <PixelCheckGlyph size={12} /> {successes}
+            </span>
             <span className="text-chess-muted">/</span>
-            <span className="text-chess-loss">✗ {failures}</span>
+            <span className="text-chess-loss inline-flex items-center gap-0.5">
+              <PixelCrossMarkGlyph size={12} /> {failures}
+            </span>
           </div>
         </>
       )}
@@ -410,6 +435,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
     : [];
   const cfg = (pattern.situation_id && PATTERN_CONFIG[pattern.situation_id]) || DEFAULT_CONFIG;
   const typeMeta = ANALYSIS_TYPE_META[cfg.analysisType];
+  const TypeMetaIcon = typeMeta.Icon;
   const castleBreakdown = isOppositeCastle ? parseOppositeCastleDetail(pattern.detail ?? "") : null;
   const iqpBreakdown = isIQPStructure && pattern.chart_data?.type === "iqp_comparison"
     ? pattern.chart_data
@@ -442,17 +468,18 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               : "bg-chess-bg/70"
         }`}>
           <div className="flex items-start gap-3 min-w-0">
-            <span className="text-2xl leading-none">{pattern.icon}</span>
+            <PixelChartGlyph size={26} className="text-chess-accent shrink-0 mt-0.5 opacity-90" />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-chess-primary leading-snug">{pattern.label}</h2>
                 {pattern.is_strength
-                  ? <span className="text-xs text-chess-win font-bold">★ 강점</span>
-                  : <span className="text-xs text-chess-loss font-bold">▼ 약점</span>
+                  ? <span className="text-xs text-chess-win font-bold inline-flex items-center gap-1"><PixelStarGlyph size={11} /> 강점</span>
+                  : <span className="text-xs text-chess-loss font-bold inline-flex items-center gap-0.5"><PixelCaretDownGlyph size={11} className="text-chess-loss" />약점</span>
                 }
                 {/* 분석 타입 배지 */}
-                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${typeMeta.cls}`}>
-                  {typeMeta.icon} {typeMeta.label}
+                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold inline-flex items-center gap-1 ${typeMeta.cls}`}>
+                  <TypeMetaIcon size={12} className="shrink-0" />
+                  {typeMeta.label}
                 </span>
               </div>
               {/* 분석 기준 설명 */}
@@ -466,22 +493,27 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               )}
               {isOppositeCastle && (
                 <div className="mt-2 inline-flex items-center gap-2 text-[10px] font-semibold px-2 py-1 rounded-full border border-orange-500/30 bg-orange-500/10 text-orange-200">
-                  ⚔️ 캐슬링 방향 대결 지표
+                  <PixelSwordsGlyph size={12} className="shrink-0 text-orange-200" />
+                  캐슬링 방향 대결 지표
                 </div>
               )}
               {isIQPStructure && (
                 <div className="mt-2 inline-flex items-center gap-2 text-[10px] font-semibold px-2 py-1 rounded-full border border-cyan-600/30 bg-cyan-600/10 text-cyan-200">
-                  ♟️ IQP 구조 운용 비교 지표
+                  <PixelPawnGlyph size={12} className="shrink-0 text-cyan-200" />
+                  IQP 구조 운용 비교 지표
                 </div>
               )}
               {isOpeningFamiliarity && (
                 <div className="mt-2 inline-flex items-center gap-2 text-[10px] font-semibold px-2 py-1 rounded-full border border-emerald-600/30 bg-emerald-600/10 text-chess-win dark:text-emerald-200">
-                  📚 오프닝 친숙도 비교 지표
+                  <PixelBookGlyph size={12} className="shrink-0 opacity-90" />
+                  오프닝 친숙도 비교 지표
                 </div>
               )}
             </div>
           </div>
-          <button onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary transition-colors text-xl leading-none p-1">✕</button>
+          <button type="button" onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary transition-colors p-1" aria-label="닫기">
+            <PixelXGlyph size={18} />
+          </button>
         </div>
 
         {/* ── 본문: 좌측 기존 항목 / 우측 경기 기록 ── */}
@@ -610,8 +642,8 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               {/* 방향별 탭 네비게이션 */}
               <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-3">
                 {([
-                  ["opposite", "⚔️ 반대 방향", pattern.chart_data.opposite_games.length],
-                  ["same",     "🤝 같은 방향",  pattern.chart_data.same_games.length],
+                  ["opposite", "반대 방향", pattern.chart_data.opposite_games.length],
+                  ["same",     "같은 방향",  pattern.chart_data.same_games.length],
                 ] as ["opposite" | "same", string, number][]).map(([id, label, cnt]) => (
                   <button
                     key={id}
@@ -650,8 +682,8 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               {/* 오프닝 친숙도 탭 네비게이션 */}
               <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-3">
                 {([
-                  ["main", "📘 주력 오프닝", pattern.chart_data.main_games.length],
-                  ["unfamiliar", "🧪 생소 오프닝", pattern.chart_data.unfamiliar_games.length],
+                  ["main", "주력 오프닝", pattern.chart_data.main_games.length],
+                  ["unfamiliar", "생소 오프닝", pattern.chart_data.unfamiliar_games.length],
                 ] as ["main" | "unfamiliar", string, number][]).map(([id, label, cnt]) => (
                   <button
                     key={id}
@@ -690,9 +722,9 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               {/* IQP 구조 탭 네비게이션 */}
               <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-3">
                 {([
-                  ["my", "♟️ 내 IQP", pattern.chart_data.my_iqp_games.length],
-                  ["opp", "🎯 상대 IQP", pattern.chart_data.opp_iqp_games.length],
-                  ["none", "▫️ 무IQP", pattern.chart_data.none_iqp_games.length],
+                  ["my", "내 IQP", pattern.chart_data.my_iqp_games.length],
+                  ["opp", "상대 IQP", pattern.chart_data.opp_iqp_games.length],
+                  ["none", "무IQP", pattern.chart_data.none_iqp_games.length],
                 ] as ["my" | "opp" | "none", string, number][]).map(([id, label, cnt]) => (
                   <button
                     key={id}
@@ -755,8 +787,8 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                         <StatSummary games={games} config={cfg} />
                         <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-1">
                           {([
-                            ["kept", "✅ 우위 유지 성공", advantageKeptGames.length],
-                            ["blown", "⚠️ 역전·실패", advantageBlownGames.length],
+                            ["kept", "우위 유지 성공", advantageKeptGames.length],
+                            ["blown", "역전·실패", advantageBlownGames.length],
                           ] as ["kept" | "blown", string, number][]).map(([id, label, cnt]) => (
                             <button
                               key={id}
@@ -804,8 +836,8 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                       {/* 방향별 탭 네비게이션 */}
                       <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-3">
                         {([
-                          ["opposite", "⚔️ 반대 방향", pattern.chart_data.opposite_games.length],
-                          ["same",     "🤝 같은 방향",  pattern.chart_data.same_games.length],
+                          ["opposite", "반대 방향", pattern.chart_data.opposite_games.length],
+                          ["same",     "같은 방향",  pattern.chart_data.same_games.length],
                         ] as ["opposite" | "same", string, number][]).map(([id, label, cnt]) => (
                           <button
                             key={id}
@@ -844,8 +876,8 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                       {/* 오프닝 친숙도 탭 네비게이션 */}
                       <div className="flex border-b border-chess-border -mx-6 px-6 pb-0 mb-3">
                         {([
-                          ["main", "📘 주력 오프닝", pattern.chart_data.main_games.length],
-                          ["unfamiliar", "🧪 생소 오프닝", pattern.chart_data.unfamiliar_games.length],
+                          ["main", "주력 오프닝", pattern.chart_data.main_games.length],
+                          ["unfamiliar", "생소 오프닝", pattern.chart_data.unfamiliar_games.length],
                         ] as ["main" | "unfamiliar", string, number][]).map(([id, label, cnt]) => (
                           <button
                             key={id}

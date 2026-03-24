@@ -25,12 +25,15 @@ export default function CpLineChart({ cpList, currentMove }: CpLineChartProps) {
         label: 'CP 변화',
         data: cpList,
         fill: true,
-        borderColor: '#fbbf24',
-        backgroundColor: 'rgba(251,191,36,0.08)',
-        pointRadius: cpList.map((_, i) => (i === currentMove ? 6 : 2)),
-        pointBackgroundColor: cpList.map((_, i) => (i === currentMove ? '#ef4444' : '#fbbf24')),
-        pointBorderColor: cpList.map((_, i) => (i === currentMove ? '#ef4444' : '#fbbf24')),
-        tension: 0.25,
+        borderColor: '#d97706',
+        backgroundColor: 'rgba(217,119,6,0.12)',
+        borderWidth: 2,
+        pointRadius: cpList.map((_, i) => (i === currentMove ? 5 : 0)),
+        pointHoverRadius: 5,
+        pointBackgroundColor: cpList.map((_, i) => (i === currentMove ? '#dc2626' : '#d97706')),
+        pointBorderColor: cpList.map((_, i) => (i === currentMove ? '#1a1714' : '#1a1714')),
+        pointBorderWidth: 1,
+        tension: 0,
       },
     ],
   };
@@ -47,12 +50,16 @@ export default function CpLineChart({ cpList, currentMove }: CpLineChartProps) {
       y: {
         display: true,
         title: { display: true, text: 'CP' },
-        grid: { color: 'rgba(0,0,0,0.08)' },
+        grid: { color: 'rgba(185,189,180,0.55)', lineWidth: 1 },
+        border: { display: true, color: '#b9bdb4' },
       },
     },
     elements: {
       point: {
-        hoverRadius: 8,
+        hoverRadius: 5,
+      },
+      line: {
+        borderJoinStyle: 'miter' as const,
       },
     },
   } as const;

@@ -14,6 +14,22 @@ import TierDonutChart from "./charts/TierDonutChart";
 import ChessBoard from "./ChessBoard";
 import { useTranslation, I18nKey } from "@/shared/lib/i18n";
 import { useSettings } from "@/shared/components/settings/SettingsContext";
+import {
+  PixelCaretDownGlyph,
+  PixelCaretLeftGlyph,
+  PixelCaretRightGlyph,
+  PixelChartGlyph,
+  PixelCheckGlyph,
+  PixelInboxGlyph,
+  PixelKingBlackGlyph,
+  PixelKingWhiteGlyph,
+  PixelLinkGlyph,
+  PixelPawnGlyph,
+  PixelTargetGlyph,
+  PixelWarnGlyph,
+  PixelXGlyph,
+  PixelHourglassGlyph,
+} from "@/shared/components/ui/PixelGlyphs";
 
 // ─────────────────────────────────────────────
 // PGN 파서 유틸
@@ -201,8 +217,16 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
       return { ...state, status: "queued" };
     case "INIT":
       return { ...state, status: "streaming", totalMoves: action.payload.total_moves, currentMove: 0, moves: [] };
-    case "MOVE":
+    case "MOVE": {
+      const half = action.payload.halfmove;
+      const idx = state.moves.findIndex((m) => m.halfmove === half);
+      if (idx >= 0) {
+        const nextMoves = [...state.moves];
+        nextMoves[idx] = action.payload;
+        return { ...state, moves: nextMoves };
+      }
       return { ...state, currentMove: state.currentMove + 1, moves: [...state.moves, action.payload] };
+    }
     case "COMPLETE": {
       const result = buildAnalysisResult(state, action.payload);
       return { ...state, status: "complete", result };
@@ -330,8 +354,8 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
 
   const isWhite = game.white.toLowerCase() === username.toLowerCase();
   const myColor  = isWhite ? t("gh.card.white") : t("gh.card.black");
-  const myIcon   = isWhite ? "♔" : "♚";
-  const oppIcon  = isWhite ? "♚" : "♔";
+  const MyKingGlyph   = isWhite ? PixelKingWhiteGlyph : PixelKingBlackGlyph;
+  const OppKingGlyph  = isWhite ? PixelKingBlackGlyph : PixelKingWhiteGlyph;
   const opponent = isWhite ? game.black : game.white;
 
   const myRating  = isWhite ? game.rating_white  : game.rating_black;
@@ -360,14 +384,20 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
 
   const resultLabel = { win: t("gh.card.win"), loss: t("gh.card.loss"), draw: t("gh.card.draw") }[game.result];
 
-  /** 펼침: 결과색 살짝만 (회색 띠·흐린 초록 방지) */
-  const resultBgGradient = {
+  /** 펼침: 단색 틴트 (픽셀 UI — 그라데이션 없음) */
+  const resultOpenShell = {
     win:
-      "from-chess-bg via-chess-win/5 to-chess-surface/90 border-chess-border/65 dark:from-chess-elevated/25 dark:via-chess-win/10 dark:to-chess-bg/55 dark:border-chess-border/50",
+      "border-2 border-emerald-700/40 dark:border-emerald-500/35 bg-emerald-50/55 dark:bg-emerald-950/22",
     loss:
-      "from-chess-bg via-chess-loss/5 to-chess-surface/90 border-chess-border/65 dark:from-chess-elevated/22 dark:via-chess-loss/8 dark:to-chess-bg/55 dark:border-chess-border/50",
+      "border-2 border-rose-700/40 dark:border-rose-500/35 bg-rose-50/50 dark:bg-rose-950/20",
     draw:
-      "from-chess-bg via-amber-100/50 to-chess-surface/90 border-chess-border/65 dark:from-chess-elevated/22 dark:via-amber-950/15 dark:to-chess-bg/55 dark:border-chess-border/50",
+      "border-2 border-amber-700/45 dark:border-amber-500/35 bg-amber-50/60 dark:bg-amber-950/18",
+  }[game.result];
+
+  const resultOpenBand = {
+    win: "bg-emerald-50/50 dark:bg-emerald-950/18",
+    loss: "bg-rose-50/45 dark:bg-rose-950/15",
+    draw: "bg-amber-50/55 dark:bg-amber-950/14",
   }[game.result];
 
   /** 접힘: 종이 카드 + 아주 옅은 결과 악센트 */
@@ -378,15 +408,15 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
   }[game.result];
 
   const collapsedShell =
-    "border border-chess-border/65 dark:border-chess-border/50 " +
+    "border-2 border-chess-border/65 dark:border-chess-border/50 " +
     resultCollapsedAccent +
     " bg-chess-bg/95 dark:bg-chess-elevated/14 " +
-    "shadow-sm hover:shadow-md transition-shadow";
+    "rounded-[var(--pixel-radius)] transition-all hover:brightness-[1.015]";
 
   return (
     <div
-      className={`rounded-2xl overflow-hidden transition-all duration-300 ${
-        open ? `border bg-gradient-to-br ${resultBgGradient} shadow-md` : collapsedShell
+      className={`overflow-hidden transition-all duration-300 rounded-[var(--pixel-radius)] ${
+        open ? resultOpenShell : collapsedShell
       }`}
     >
       {/* ── 헤더 ── */}
@@ -406,7 +436,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
             <div className="flex items-center gap-2 sm:gap-3 mb-1.5 flex-wrap">
               <span className={`text-base sm:text-lg font-bold ${resultColor}`}>{resultLabel}</span>
               {ratingDiff !== null && (
-                <span className={`text-xs sm:text-sm font-semibold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full bg-chess-bg/60 border ${
+                <span className={`text-xs sm:text-sm font-semibold px-1.5 sm:px-2 py-0.5 sm:py-1 border-2 bg-chess-bg/60 ${
                   ratingDiff > 0
                     ? "text-chess-win border-chess-win/45 dark:border-chess-win/35"
                     : ratingDiff < 0
@@ -424,13 +454,13 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
               </p>
               <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-chess-muted flex-wrap">
                 <span className="flex items-center gap-1">
-                  <span>{myIcon}</span>
+                  <MyKingGlyph size={14} className={isWhite ? "text-chess-primary" : "text-chess-muted"} />
                   <span className="font-medium text-chess-primary truncate max-w-[80px] sm:max-w-none">{username}</span>
                   {myRating != null && <span className="text-chess-muted hidden sm:inline">({myRating})</span>}
                 </span>
                 <span className="text-chess-muted/55">vs</span>
                 <span className="flex items-center gap-1">
-                  <span>{oppIcon}</span>
+                  <OppKingGlyph size={14} className={!isWhite ? "text-chess-primary" : "text-chess-muted"} />
                   <span className="font-medium text-chess-primary truncate max-w-[80px] sm:max-w-none">{opponent}</span>
                   {oppRating != null && <span className="text-chess-muted hidden sm:inline">({oppRating})</span>}
                 </span>
@@ -444,8 +474,8 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
             <div className="text-chess-muted/70 text-[10px] sm:text-xs hidden sm:block">{timeStr}</div>
           </div>
 
-          <span className={`text-chess-muted transition-transform duration-200 shrink-0 ${open ? "rotate-180" : ""}`}>
-            ▼
+          <span className={`inline-flex text-chess-muted transition-transform duration-200 shrink-0 ${open ? "rotate-180" : ""}`}>
+            <PixelCaretDownGlyph size={14} />
           </span>
         </div>
       </button>
@@ -454,11 +484,11 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
       {open && (
         <div className="border-t border-chess-border/30 dark:border-chess-border/50 bg-chess-surface/30 dark:bg-chess-elevated/20">
           {/* 결과 요약 */}
-          <div className={`px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r ${resultBgGradient}`}>
+          <div className={`px-4 sm:px-6 py-3 sm:py-4 border-t border-chess-border/25 ${resultOpenBand}`}>
             <div className="flex items-center justify-between gap-2">
               {/* 나 */}
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                <span className={`text-xl sm:text-2xl ${isWhite ? "text-chess-primary" : "text-chess-muted"}`}>{myIcon}</span>
+                <MyKingGlyph size={22} className={`shrink-0 ${isWhite ? "text-chess-primary" : "text-chess-muted"}`} />
                 <div className="min-w-0">
                   <p className="text-sm sm:text-base font-bold text-chess-accent truncate">{username}</p>
                   <p className="text-xs sm:text-sm text-chess-muted">{myColor}{myRating != null ? ` · ${myRating}` : ""}</p>
@@ -489,7 +519,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                   <p className="text-sm sm:text-base font-bold text-chess-primary truncate">{opponent}</p>
                   <p className="text-xs sm:text-sm text-chess-muted">{isWhite ? t("gh.card.black") : t("gh.card.white")}{oppRating != null ? ` · ${oppRating}` : ""}</p>
                 </div>
-                <span className={`text-xl sm:text-2xl ${!isWhite ? "text-chess-primary" : "text-chess-muted"}`}>{oppIcon}</span>
+                <OppKingGlyph size={22} className={`shrink-0 ${!isWhite ? "text-chess-primary" : "text-chess-muted"}`} />
               </div>
             </div>
           </div>
@@ -542,8 +572,9 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                 href={toAnalysisUrl(game.url, game.platform, game.game_id) ?? game.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-chess-accent/10 hover:bg-chess-accent/20 text-chess-accent hover:text-chess-accent/80 border border-chess-accent/30 hover:border-chess-accent/50 rounded-lg transition-all duration-200 font-medium text-sm"
+                className="font-pixel pixel-btn inline-flex items-center gap-2 px-4 py-2 bg-chess-accent/15 hover:bg-chess-accent/25 text-chess-accent border-chess-accent/50 font-medium text-sm"
               >
+                <PixelLinkGlyph size={14} />
                 {t("gh.card.watchLink")} ({game.platform === "chess.com" ? "Chess.com" : "Lichess"})
                 <span className="text-xs opacity-70">→</span>
               </a>
@@ -563,26 +594,26 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                   stream.start();
                 }}
                 disabled={isAnalyzing}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-chess-accent/20 to-chess-accent/10 hover:from-chess-accent/30 hover:to-chess-accent/20 text-chess-accent border border-chess-accent/40 hover:border-chess-accent/60 rounded-xl transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                className="font-pixel pixel-btn w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-chess-accent/20 hover:bg-chess-accent/30 text-chess-accent border-chess-accent/55 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isAnalyzing ? (
                   <>
-                    <span className="animate-spin">⏳</span>
+                    <PixelHourglassGlyph className="animate-pulse text-chess-accent" size={18} />
                     <span>{t("gh.btn.analyzing")}</span>
                   </>
                 ) : isAnalyzedAtCurrentDepth && showAnalysis ? (
                   <>
-                    <span>✅</span>
+                    <PixelXGlyph className="text-chess-accent" size={16} />
                     <span>분석 닫기</span>
                   </>
                 ) : isAnalyzedAtCurrentDepth ? (
                   <>
-                    <span>✅</span>
+                    <PixelCheckGlyph size={16} />
                     <span>{t("gh.btn.reviewAnalysis")}</span>
                   </>
                 ) : (
                   <>
-                    <span>🎯</span>
+                    <PixelTargetGlyph className="text-chess-accent" size={16} />
                     <span>{t("gh.btn.analyze")}</span>
                   </>
                 )}
@@ -594,20 +625,20 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
           {showAnalysis && (
             <div className="px-1 sm:px-6 pb-2 sm:pb-6">
               {!isAnalyzing && !isAnalysisError && !analysisData && game.pgn && (
-                <div className="mb-4 p-3 rounded-xl border border-chess-accent/30 bg-chess-accent/5 text-sm text-chess-primary">
+                <div className="mb-4 p-3 pixel-frame border-chess-accent/40 bg-chess-accent/8 text-sm text-chess-primary">
                   {t("gh.analyze.depthChangedHint")}
                 </div>
               )}
               {isAnalyzing && (
-                <div className="mb-4 p-4 rounded-xl border border-chess-border bg-chess-surface/80 dark:bg-chess-surface/40">
+                <div className="mb-4 p-4 pixel-frame bg-chess-surface/85 dark:bg-chess-surface/40">
                   <p className="text-sm font-semibold text-chess-primary">
                     {stream.status === "queued" ? t("gh.analyze.queued") : t("gh.analyze.progressTitle")}
                   </p>
                   {stream.status === "streaming" && stream.totalMoves > 0 ? (
                     <>
-                      <div className="mt-3 h-2 w-full rounded-full bg-chess-border overflow-hidden">
+                      <div className="mt-3 h-2.5 w-full border border-chess-border bg-chess-bg overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-chess-accent transition-all duration-300 ease-out"
+                          className="h-full bg-chess-accent transition-all duration-300 ease-out"
                           style={{ width: `${Math.round((stream.currentMove / stream.totalMoves) * 100)}%` }}
                         />
                       </div>
@@ -618,14 +649,14 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                       </p>
                     </>
                   ) : (
-                    <div className="mt-3 h-2 w-full rounded-full bg-chess-border overflow-hidden">
-                      <div className="h-full w-1/3 rounded-full bg-chess-accent animate-loading-slide will-change-transform" />
+                    <div className="mt-3 h-2.5 w-full border border-chess-border bg-chess-bg overflow-hidden">
+                      <div className="h-full w-1/3 bg-chess-accent animate-loading-slide will-change-transform" />
                     </div>
                   )}
                 </div>
               )}
               {isAnalysisError && (
-                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-chess-loss text-sm">
+                <div className="p-4 pixel-frame border-red-500/45 bg-red-500/10 text-chess-loss text-sm">
                   {stream.error || t("gh.analyze.error")}
                 </div>
               )}
@@ -788,20 +819,21 @@ function GameAnalysisPanel({
       {/* 헤더 */}
       <div className="flex items-center justify-between border-b border-chess-border/60 pb-3">
         <h4 className="text-base font-bold text-chess-primary flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-chess-accent inline-block" />
+          <PixelChartGlyph className="text-chess-accent shrink-0" size={18} />
           {t("ga.title")}
         </h4>
         <button
           onClick={onClose}
-          className="text-chess-muted hover:text-chess-primary transition-colors text-sm px-3 py-1 rounded border border-chess-border hover:border-chess-muted"
+          className="text-chess-muted hover:text-chess-primary transition-colors text-sm px-3 py-1 rounded border border-chess-border hover:border-chess-muted inline-flex items-center gap-1.5"
         >
+          <PixelXGlyph size={14} />
           {t("ga.close")}
         </button>
       </div>
 
       {/* 오프닝 (TH) */}
       {(openingName || openingEco || thFullMoves != null) && (
-        <div className="rounded-xl border border-chess-border/40 dark:border-chess-border/60 bg-chess-surface/40 dark:bg-chess-elevated/25 px-3 sm:px-4 py-2 sm:py-3 text-sm">
+        <div className="pixel-frame bg-chess-surface/50 dark:bg-chess-elevated/25 px-3 sm:px-4 py-2 sm:py-3 text-sm">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-semibold text-chess-primary">{t("ga.opening")}</span>
             <span className="text-chess-muted truncate">
@@ -857,7 +889,7 @@ function GameAnalysisPanel({
                   className="w-8 h-8 flex items-center justify-center rounded-lg border border-chess-border bg-chess-surface dark:bg-chess-bg text-chess-primary hover:bg-chess-border/50 dark:hover:bg-chess-elevated/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold"
                   aria-label="이전 수"
                 >
-                  ◀
+                  <PixelCaretLeftGlyph size={14} className="text-chess-primary" />
                 </button>
                 <button
                   type="button"
@@ -866,9 +898,13 @@ function GameAnalysisPanel({
                   className="w-8 h-8 flex items-center justify-center rounded-lg border border-chess-border bg-chess-surface dark:bg-chess-bg text-chess-primary hover:bg-chess-border/50 dark:hover:bg-chess-elevated/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-bold"
                   aria-label="다음 수"
                 >
-                  ▶
+                  <PixelCaretRightGlyph size={14} className="text-chess-primary" />
                 </button>
-                <span className="text-[11px] text-chess-primary/70 border border-chess-border/60 bg-chess-surface dark:bg-chess-elevated/35 rounded px-2 py-0.5 font-mono font-medium ml-1">←/→</span>
+                <span className="text-[11px] text-chess-primary/70 border border-chess-border/60 bg-chess-surface dark:bg-chess-elevated/35 rounded px-2 py-0.5 font-medium ml-1 inline-flex items-center gap-0.5">
+                  <PixelCaretLeftGlyph size={10} />
+                  <span className="font-pixel opacity-80">/</span>
+                  <PixelCaretRightGlyph size={10} />
+                </span>
               </div>
             </div>
 
@@ -898,12 +934,12 @@ function GameAnalysisPanel({
 
             {/* 엔진 평가 바 */}
             {selectedMove && (
-              <div className="w-full max-w-[400px] xl:mx-0 flex items-stretch gap-3 rounded-xl bg-chess-surface dark:bg-chess-elevated/25 border border-chess-border/80 dark:border-chess-border shadow-sm dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] p-2 sm:p-3">
+              <div className="w-full max-w-[400px] xl:mx-0 flex items-stretch gap-3 pixel-frame bg-chess-surface dark:bg-chess-elevated/25 p-2 sm:p-3">
                 <div className="flex flex-col justify-center min-w-0">
                   <span className="text-[10px] uppercase tracking-widest text-chess-primary/70 font-bold mb-0.5">{t("ga.eval")}</span>
-                  <span className="text-sm font-bold text-chess-primary font-mono whitespace-nowrap">
+                  <span className="text-sm font-bold text-chess-primary font-mono whitespace-nowrap inline-flex items-center gap-1">
                     {selectedMove.cp_before !== null ? `${selectedMove.cp_before > 0 ? "+" : ""}${selectedMove.cp_before}` : "?"}
-                    &nbsp;→&nbsp;
+                    <PixelCaretRightGlyph size={12} className="text-chess-muted shrink-0" />
                     {selectedMove.cp_after !== null ? `${selectedMove.cp_after > 0 ? "+" : ""}${selectedMove.cp_after}` : "?"}
                   </span>
                 </div>
@@ -933,26 +969,26 @@ function GameAnalysisPanel({
                 onPointerDown={(e) => { e.preventDefault(); goToPrev(); }}
                 disabled={filteredMoves.length === 0}
                 style={{ touchAction: "manipulation" }}
-                className="flex-1 py-3 flex items-center justify-center rounded-xl border-2 border-chess-border bg-chess-surface dark:bg-chess-bg text-chess-primary active:bg-chess-border/40 dark:active:bg-chess-elevated/35 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-lg font-bold shadow-sm select-none"
+                className="font-pixel pixel-btn flex-1 py-3 flex items-center justify-center bg-chess-surface dark:bg-chess-bg text-chess-primary active:bg-chess-border/40 dark:active:bg-chess-elevated/35 disabled:opacity-30 disabled:cursor-not-allowed text-lg font-bold select-none"
                 aria-label="이전 수"
               >
-                ◀
+                <PixelCaretLeftGlyph size={18} className="text-chess-primary" />
               </button>
               <button
                 type="button"
                 onPointerDown={(e) => { e.preventDefault(); goToNext(); }}
                 disabled={filteredMoves.length === 0}
                 style={{ touchAction: "manipulation" }}
-                className="flex-1 py-3 flex items-center justify-center rounded-xl border-2 border-chess-border bg-chess-surface dark:bg-chess-bg text-chess-primary active:bg-chess-border/40 dark:active:bg-chess-elevated/35 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-lg font-bold shadow-sm select-none"
+                className="font-pixel pixel-btn flex-1 py-3 flex items-center justify-center bg-chess-surface dark:bg-chess-bg text-chess-primary active:bg-chess-border/40 dark:active:bg-chess-elevated/35 disabled:opacity-30 disabled:cursor-not-allowed text-lg font-bold select-none"
                 aria-label="다음 수"
               >
-                ▶
+                <PixelCaretRightGlyph size={18} className="text-chess-primary" />
               </button>
             </div>
           </div>
 
           {/* 기보 패널 */}
-          <div className="flex-1 flex flex-col min-w-0 bg-chess-surface/60 dark:bg-chess-elevated/15 rounded-2xl border border-chess-border/80 dark:border-chess-border shadow-sm dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] overflow-hidden">
+          <div className="flex-1 flex flex-col min-w-0 pixel-frame bg-chess-surface/65 dark:bg-chess-elevated/15 overflow-hidden">
             {/* 티어 필터 탭: 모바일=가로 스크롤 1줄 + 느낌표 고정, PC=줄바꿈 */}
             <div className="border-b border-chess-border/80 dark:border-chess-border bg-chess-surface dark:bg-chess-bg/60">
               <div className="flex items-center gap-2 p-2 sm:p-3">
@@ -961,10 +997,10 @@ function GameAnalysisPanel({
                   <div className="flex sm:flex-wrap gap-1.5">
                     <button
                       onClick={() => setSelectedTier("all")}
-                      className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm ${
+                      className={`font-pixel shrink-0 px-3 py-1.5 text-xs font-bold pixel-btn ${
                         selectedTier === "all"
-                          ? "bg-chess-inverse text-white"
-                          : "bg-chess-bg dark:bg-chess-elevated/25 text-chess-muted hover:bg-chess-border/40 dark:hover:bg-chess-elevated/40 hover:text-chess-primary border border-chess-border/50 dark:border-chess-border/70"
+                          ? "bg-chess-inverse text-white border-chess-inverse"
+                          : "bg-chess-bg dark:bg-chess-elevated/25 text-chess-muted hover:text-chess-primary"
                       }`}
                     >
                       {typeof t === "function" ? t("ga.all") : "전체"}
@@ -977,8 +1013,8 @@ function GameAnalysisPanel({
                         <button
                           key={tier}
                           onClick={() => setSelectedTier(tier)}
-                          className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-bold transition-all border shadow-sm ${
-                            sel ? "border-transparent text-white" : "bg-chess-bg dark:bg-chess-elevated/25 border-chess-border/50 dark:border-chess-border/70 text-chess-muted hover:bg-chess-border/40 dark:hover:bg-chess-elevated/40 hover:text-chess-primary"
+                          className={`font-pixel shrink-0 px-3 py-1.5 text-xs font-bold pixel-btn ${
+                            sel ? "text-white border-transparent" : "bg-chess-bg dark:bg-chess-elevated/25 text-chess-muted hover:text-chess-primary"
                           }`}
                           style={sel ? { backgroundColor: cfg.color } : {}}
                         >
@@ -992,10 +1028,10 @@ function GameAnalysisPanel({
                 <button
                   type="button"
                   onClick={() => setShowTierInfo((v) => !v)}
-                  className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-sm sm:text-xs font-black transition-all shadow-sm select-none ${
+                  className={`font-pixel shrink-0 w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center text-sm sm:text-xs font-black pixel-btn select-none ${
                     showTierInfo
-                      ? "bg-chess-accent text-white border-2 border-chess-accent"
-                      : "bg-chess-primary dark:bg-chess-muted text-white border-2 border-chess-primary dark:border-chess-muted hover:bg-chess-muted dark:hover:bg-chess-border"
+                      ? "bg-chess-accent text-white border-chess-accent"
+                      : "bg-chess-primary dark:bg-chess-muted text-white border-chess-primary dark:border-chess-muted hover:bg-chess-muted dark:hover:bg-chess-border"
                   }`}
                   aria-label="등급 설명 보기"
                 >
@@ -1032,7 +1068,7 @@ function GameAnalysisPanel({
             <div ref={moveListRef} className="overflow-y-auto divide-y divide-chess-border/40 max-h-[200px] sm:max-h-[480px]">
               {filteredMoves.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-chess-primary/70 text-sm gap-3">
-                  <span className="text-4xl opacity-50">📭</span>
+                  <PixelInboxGlyph size={40} className="opacity-40" />
                   <span className="font-semibold">{typeof t === "function" ? t("ga.noMoves") : "해당 등급의 수가 없습니다."}</span>
                 </div>
               ) : (
@@ -1110,18 +1146,18 @@ function GameAnalysisPanel({
         {/* 모바일 전용: 정확도 요약 (세로 2줄) */}
         <div className="flex sm:hidden flex-col gap-2">
           {/* 백 */}
-          <div className="rounded-xl border border-chess-border/80 dark:border-chess-border bg-chess-surface/50 dark:bg-chess-elevated/20 shadow-sm px-3 py-2.5 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded bg-chess-surface dark:bg-chess-bg flex items-center justify-center border border-chess-border shrink-0 text-base leading-none text-chess-primary">
-              ♔
+          <div className="pixel-frame bg-chess-surface/55 dark:bg-chess-elevated/20 px-3 py-2.5 flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-[var(--pixel-radius)] bg-chess-surface dark:bg-chess-bg flex items-center justify-center border-2 border-chess-border shrink-0 text-chess-primary">
+              <PixelKingWhiteGlyph size={16} />
             </div>
             <span className="text-xs font-bold text-chess-primary truncate flex-1 min-w-0">{data.white_player}</span>
             <span className="text-[10px] text-chess-primary/60 uppercase shrink-0">{t("ga.white")}</span>
             <span className="text-base font-black text-chess-accent shrink-0 tabular-nums">{white.accuracy.toFixed(1)}%</span>
           </div>
           {/* 흑 */}
-          <div className="rounded-xl border border-chess-border/80 dark:border-chess-border bg-chess-surface/50 dark:bg-chess-elevated/20 shadow-sm px-3 py-2.5 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded bg-chess-inverse flex items-center justify-center border border-chess-inverse/80 shrink-0 text-base leading-none text-white">
-              ♚
+          <div className="pixel-frame bg-chess-surface/55 dark:bg-chess-elevated/20 px-3 py-2.5 flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-[var(--pixel-radius)] bg-chess-inverse flex items-center justify-center border-2 border-chess-inverse/80 shrink-0 text-white">
+              <PixelKingBlackGlyph size={16} className="text-white" />
             </div>
             <span className="text-xs font-bold text-chess-primary truncate flex-1 min-w-0">{data.black_player}</span>
             <span className="text-[10px] text-chess-primary/60 uppercase shrink-0">{t("ga.black")}</span>
@@ -1132,10 +1168,10 @@ function GameAnalysisPanel({
         {/* PC 전용: 도넛 차트 포함 전체 카드 */}
         <div className="hidden sm:grid sm:grid-cols-2 gap-4">
           {/* 백 */}
-          <div className="rounded-2xl border border-chess-border/80 dark:border-chess-border bg-chess-surface/40 dark:bg-chess-elevated/15 shadow-sm dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] p-6 flex flex-col items-center">
+          <div className="pixel-frame bg-chess-surface/45 dark:bg-chess-elevated/15 p-6 flex flex-col items-center">
             <div className="flex items-center gap-3 w-full mb-6">
-              <div className="w-10 h-10 rounded bg-chess-surface dark:bg-chess-bg flex items-center justify-center shadow-sm shrink-0 border border-chess-border dark:border-chess-border">
-                <span className="text-chess-primary text-xl leading-none">♔</span>
+              <div className="w-10 h-10 rounded-[var(--pixel-radius)] bg-chess-surface dark:bg-chess-bg flex items-center justify-center shrink-0 border-2 border-chess-border dark:border-chess-border text-chess-primary">
+                <PixelKingWhiteGlyph size={22} />
               </div>
               <div className="min-w-0">
                 <p className="text-base font-bold text-chess-primary truncate">{data.white_player}</p>
@@ -1156,10 +1192,10 @@ function GameAnalysisPanel({
           </div>
 
           {/* 흑 */}
-          <div className="rounded-2xl border border-chess-border/80 dark:border-chess-border bg-chess-surface/40 dark:bg-chess-elevated/15 shadow-sm dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] p-6 flex flex-col items-center">
+          <div className="pixel-frame bg-chess-surface/45 dark:bg-chess-elevated/15 p-6 flex flex-col items-center">
             <div className="flex items-center gap-3 w-full mb-6">
-              <div className="w-10 h-10 rounded bg-chess-inverse flex items-center justify-center shadow-sm shrink-0 border border-chess-inverse/80">
-                <span className="text-white text-xl leading-none">♚</span>
+              <div className="w-10 h-10 rounded-[var(--pixel-radius)] bg-chess-inverse flex items-center justify-center shrink-0 border-2 border-chess-inverse/80 text-white">
+                <PixelKingBlackGlyph size={22} className="text-white" />
               </div>
               <div className="min-w-0">
                 <p className="text-base font-bold text-chess-primary truncate">{data.black_player}</p>
@@ -1192,9 +1228,9 @@ function GameListSkeleton() {
   return (
     <div className="space-y-4">
       {[...Array(6)].map((_, i) => (
-        <div key={i} className="rounded-2xl bg-chess-surface/90 border border-chess-border/50 p-4">
+        <div key={i} className="pixel-frame bg-chess-surface/90 p-4">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-chess-border/30 animate-pulse" />
+            <div className="w-10 h-10 rounded-[var(--pixel-radius)] bg-chess-border/30 animate-pulse" />
             <div className="flex-1 space-y-2">
               <div className="h-4 bg-chess-border/20 rounded animate-pulse w-3/4" />
               <div className="h-3 bg-chess-border/15 rounded animate-pulse w-1/2" />
@@ -1251,7 +1287,7 @@ export default function GameHistorySection({
   if (!username) {
     return (
       <div className="flex flex-col items-center py-24 gap-3 text-chess-muted">
-        <span className="text-5xl select-none">♟️</span>
+        <PixelPawnGlyph className="opacity-50" size={52} />
         <p className="text-sm">{t("dh.emptyState")}</p>
       </div>
     );
@@ -1262,7 +1298,7 @@ export default function GameHistorySection({
   if (isError) {
     return (
       <div className="flex flex-col items-center py-16 gap-3 text-chess-muted">
-        <span className="text-4xl select-none">⚠️</span>
+        <PixelWarnGlyph className="text-chess-warn" size={40} />
         <p className="text-sm">{t("gh.error")}</p>
         <button onClick={() => refetch()} className="text-xs text-chess-accent hover:underline">
           {t("gh.retry")}
@@ -1274,7 +1310,7 @@ export default function GameHistorySection({
   if (!games || games.length === 0) {
     return (
       <div className="flex flex-col items-center py-16 gap-3 text-chess-muted">
-        <span className="text-4xl select-none">📭</span>
+        <PixelInboxGlyph size={40} className="opacity-45" />
         <p className="text-sm">{t("gh.noGamesPeriod")}</p>
       </div>
     );
@@ -1287,7 +1323,7 @@ export default function GameHistorySection({
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 결과 요약 헤더 */}
-      <div className="bg-chess-bg/90 dark:bg-chess-elevated/20 border border-chess-border/60 dark:border-chess-border/50 rounded-2xl p-4 sm:p-5 shadow-sm">
+      <div className="pixel-frame bg-chess-bg/92 dark:bg-chess-elevated/20 p-4 sm:p-5">
         <div className="flex flex-col sm:flex-row items-start justify-between gap-4 sm:gap-5">
           <div>
             <h3 className="text-base sm:text-lg font-bold text-chess-primary mb-2">{t("gh.summary.title")}</h3>
@@ -1318,7 +1354,7 @@ export default function GameHistorySection({
           <div className="text-right w-full sm:w-auto">
             <div className="text-xs sm:text-sm text-chess-muted mb-1.5 sm:mb-2">{t("gh.summary.winRate")}</div>
             <div className="flex items-center gap-3">
-              <div className="flex flex-row flex-1 sm:flex-none sm:w-48 h-2.5 rounded-full overflow-hidden bg-chess-elevated/80 dark:bg-chess-bg/60 ring-1 ring-chess-border/40">
+              <div className="flex flex-row flex-1 sm:flex-none sm:w-48 h-2.5 overflow-hidden bg-chess-elevated/80 dark:bg-chess-bg/60 border border-chess-border/50">
                 {wins > 0  && <div style={{ width: `${wins  / games.length * 100}%` }} className="h-full shrink-0 bg-emerald-700 dark:bg-emerald-600/90 transition-all duration-500" />}
                 {draws > 0 && <div style={{ width: `${draws / games.length * 100}%` }} className="h-full shrink-0 bg-amber-700 dark:bg-amber-600/90 transition-all duration-500" />}
                 {losses > 0 && <div style={{ width: `${losses / games.length * 100}%` }} className="h-full shrink-0 bg-red-700 dark:bg-red-600/90 transition-all duration-500" />}
@@ -1344,7 +1380,7 @@ export default function GameHistorySection({
           <button
             type="button"
             onClick={() => setMaxGames((p) => p + 30)}
-            className="group px-6 py-2.5 rounded-xl text-sm font-medium text-chess-primary border border-chess-border bg-chess-surface/80 dark:bg-chess-elevated/25 hover:bg-chess-elevated dark:hover:bg-chess-elevated/40 hover:border-chess-border transition-colors shadow-sm"
+            className="group font-pixel pixel-btn px-6 py-2.5 text-sm font-medium text-chess-primary bg-chess-surface/85 dark:bg-chess-elevated/25 hover:bg-chess-elevated dark:hover:bg-chess-elevated/40"
           >
             <span className="flex items-center gap-2">
               <span>{t("gh.btn.loadMore")}</span>

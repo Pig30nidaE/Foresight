@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useState, useId } from "react";
 import type { MoveTier } from "@/shared/types";
 import { useTranslation, type I18nKey } from "@/shared/lib/i18n";
 
@@ -45,6 +45,7 @@ export default function TierDonutChart({
   strokeWidth = 24,
 }: TierDonutChartProps) {
   const { t } = useTranslation();
+  const uid = useId().replace(/:/g, "");
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const center = size / 2;
@@ -94,8 +95,28 @@ export default function TierDonutChart({
           width={size}
           height={size}
           className="transform -rotate-90"
-          style={{ filter: "drop-shadow(0 10px 22px rgba(0,0,0,0.18))" }}
+          style={{ filter: "drop-shadow(3px 3px 0 rgba(0,0,0,0.4))" }}
         >
+          <defs>
+            <pattern id={`${uid}-track`} width="4" height="4" patternUnits="userSpaceOnUse">
+              <rect width="4" height="4" fill="rgba(120,120,120,0.2)" />
+              <rect x="0" y="0" width="1" height="1" fill="rgba(0,0,0,0.2)" />
+              <rect x="2" y="2" width="1" height="1" fill="rgba(0,0,0,0.2)" />
+            </pattern>
+            {segments.map((s) => (
+              <pattern
+                key={`pat-${s.tier}`}
+                id={`${uid}-seg-${s.tier}`}
+                width="4"
+                height="4"
+                patternUnits="userSpaceOnUse"
+              >
+                <rect width="4" height="4" fill={s.stroke} />
+                <rect x="0" y="0" width="2" height="2" fill="rgba(0,0,0,0.18)" />
+                <rect x="2" y="2" width="2" height="2" fill="rgba(255,255,255,0.1)" />
+              </pattern>
+            ))}
+          </defs>
 
           {/* Background Track */}
           <circle
@@ -103,7 +124,7 @@ export default function TierDonutChart({
             cy={center}
             r={radius}
             fill="none"
-            stroke="rgba(255, 255, 255, 0.07)"
+            stroke={`url(#${uid}-track)`}
             strokeWidth={strokeWidth}
           />
           
@@ -117,11 +138,11 @@ export default function TierDonutChart({
                 cy={center}
                 r={radius}
                 fill="none"
-                stroke={segment.stroke}
+                stroke={`url(#${uid}-seg-${segment.tier})`}
                 strokeWidth={strokeWidth}
                 strokeDasharray={segment.strokeDasharray}
                 strokeDashoffset={mounted ? segment.offset : segment.startOffset}
-                strokeLinecap="round"
+                strokeLinecap="butt"
                 className="transition-all duration-[1200ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] origin-center"
               />
             );
@@ -131,18 +152,18 @@ export default function TierDonutChart({
         {/* Center content (Accuracy) */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <div
-            className="flex flex-col items-center rounded-full border border-chess-border/70 bg-chess-bg/60 backdrop-blur-md shadow-sm"
+            className="flex flex-col items-center border-[3px] border-chess-border bg-chess-bg pixel-hud-fill shadow-[inset_2px_2px_0_rgba(255,255,255,0.1),2px_2px_0_rgba(0,0,0,0.2)]"
             style={{
               width: size - strokeWidth * 2 - 14,
               height: size - strokeWidth * 2 - 14,
               justifyContent: "center",
             }}
           >
-            <span className="text-3xl font-black text-chess-primary tracking-tight">
+            <span className="font-pixel text-3xl font-bold text-chess-primary tracking-tight">
               {accuracy.toFixed(1)}
               <span className="text-lg text-chess-muted/80">%</span>
             </span>
-            <span className="text-[10px] sm:text-xs font-semibold text-chess-muted tracking-wide uppercase mt-1">
+            <span className="font-pixel text-[10px] sm:text-xs font-bold text-chess-muted mt-1">
               {t("chart.accuracy")}
             </span>
           </div>
@@ -157,17 +178,20 @@ export default function TierDonutChart({
           return (
             <div 
               key={segment.tier} 
-              className={`flex flex-col items-center p-2 rounded-xl border transition-all duration-300 ${
+              className={`flex flex-col items-center p-2 transition-colors duration-200 ${
                 isEmpty
-                  ? "opacity-40 border-transparent bg-transparent"
-                  : "bg-chess-surface/35 border-chess-border/60 hover:bg-chess-surface/55 hover:scale-[1.02]"
+                  ? "opacity-40 border-2 border-transparent"
+                  : "pixel-frame pixel-hud-fill hover:brightness-[1.03]"
               }`}
             >
               <div
-                className="w-10 h-1 rounded-full mb-2"
-                style={{ backgroundColor: segment.stroke }}
+                className="w-10 h-2 mb-2 border-2 border-chess-primary/25"
+                style={{
+                  backgroundColor: segment.stroke,
+                  backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 3px)`,
+                }}
               />
-              <span className="text-xs font-bold text-chess-primary tracking-wide">
+              <span className="font-pixel text-xs font-bold text-chess-primary">
                 {segment.tier} {t(meta.labelKey)}
               </span>
               <span className="text-[10px] text-chess-muted font-medium mt-0.5">
