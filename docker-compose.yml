@@ -1,9 +1,24 @@
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: foresight
+      POSTGRES_PASSWORD: foresight
+      POSTGRES_DB: foresight
+    ports:
+      - "5432:5432"
+    volumes:
+      - foresight_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foresight -d foresight"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: foresight-backend
     working_dir: /app
     ports:
       - "8000:8000"
@@ -17,7 +32,10 @@ services:
       PYTHONPATH: "/app"
     env_file:
       - .env
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "alembic -c alembic.ini upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -29,7 +47,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    container_name: foresight-frontend
     working_dir: /app
     ports:
       - "3000:3000"
@@ -51,4 +68,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    command: npm run dev -- --hostname 0.0.0.0 --port 3000 --turbopack
+    command: npm run dev -- --hostname 0.0.0.0 --port 3000
+
+volumes:
+  foresight_pgdata:

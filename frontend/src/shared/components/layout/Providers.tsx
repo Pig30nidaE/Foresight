@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SessionProvider } from "next-auth/react";
 import { useState } from "react";
 import { SettingsProvider } from "../settings/SettingsContext";
 import { setApiRuntimeBaseUrl } from "@/shared/lib/api";
@@ -31,8 +32,10 @@ export default function Providers({
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SettingsProvider>{children}</SettingsProvider>
-    </QueryClientProvider>
+    <SessionProvider>
+      <QueryClientProvider client={queryClient}>
+        <SettingsProvider>{children}</SettingsProvider>
+      </QueryClientProvider>
+    </SessionProvider>
   );
 }
