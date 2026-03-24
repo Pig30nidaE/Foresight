@@ -9,7 +9,7 @@ ENV PYTHONPATH=/app \
 # stockfish: Debian apt → /usr/games/stockfish
 # game_analyzer.py 의 _find_stockfish() 가 /usr/games/stockfish 를 먼저 찾습니다.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends stockfish \
+    && apt-get install -y --no-install-recommends stockfish libmagic1 \
     && rm -rf /var/lib/apt/lists/* \
     && /usr/games/stockfish --version 2>/dev/null || true
 
