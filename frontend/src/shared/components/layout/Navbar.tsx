@@ -1,25 +1,35 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Settings, Menu, X, Search } from "lucide-react";
+import { Menu, X, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import SettingsModal from "../settings/SettingsModal";
+import { signOut, useSession } from "next-auth/react";
 import { useTranslation } from "../../lib/i18n";
+import api from "@/shared/lib/api";
+import { clearBackendJwtCache, getBackendJwt } from "@/shared/lib/backendJwt";
 
 const NAV_ITEMS = [
   { href: "/opening-tier", labelKey: "nav.openingTier" as const },
-  { href: "/dashboard",    labelKey: "nav.dashboard" as const },
+  { href: "/dashboard", labelKey: "nav.dashboard" as const },
+  { href: "/forum", labelKey: "nav.forum" as const },
+  { href: "/board", labelKey: "nav.board" as const },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [username, setUsername] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [forumDisplayName, setForumDisplayName] = useState<string | null>(null);
   const { t } = useTranslation();
+  const { status: authStatus, data: session } = useSession();
   const drawerRef = useRef<HTMLDivElement>(null);
+
+  const handleSignOut = () => {
+    clearBackendJwtCache();
+    void signOut({ callbackUrl: "/" });
+  };
 
   // 경로 변경 시 드로어 닫기
   useEffect(() => {
@@ -43,6 +53,36 @@ export default function Navbar() {
     document.body.style.overflow = menuOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [menuOpen]);
+
+  useEffect(() => {
+    const loadDisplayName = async () => {
+      if (authStatus !== "authenticated") {
+        setForumDisplayName(null);
+        return;
+      }
+      try {
+        const token = await getBackendJwt();
+        if (!token) {
+          setForumDisplayName("로그인 연동 중");
+          return;
+        }
+        const { data } = await api.get<{
+          display_name?: string;
+          signup_completed?: boolean;
+        }>("/forum/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (data?.signup_completed) {
+          setForumDisplayName(data.display_name ?? "닉네임");
+        } else {
+          setForumDisplayName("가입 필요");
+        }
+      } catch {
+        setForumDisplayName("프로필");
+      }
+    };
+    void loadDisplayName();
+  }, [authStatus, session?.user?.name, pathname]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +112,12 @@ export default function Navbar() {
             {/* ── 데스크톱 전용 (md 이상) ── */}
             <nav className="hidden md:flex items-center gap-1 text-sm shrink-0">
               {NAV_ITEMS.map(({ href, labelKey }) => {
-                const active = pathname.startsWith(href);
+                const active =
+                  href === "/forum"
+                    ? pathname.startsWith("/forum")
+                    : href === "/board"
+                      ? pathname.startsWith("/board")
+                      : pathname.startsWith(href);
                 return (
                   <Link
                     key={href}
@@ -92,14 +137,30 @@ export default function Navbar() {
 
           {/* ── 데스크톱 검색 + 설정 (md 이상) ── */}
           <div className="hidden md:flex items-center gap-3 shrink-0">
-            <button
-              type="button"
-              className="p-2 rounded-full hover:bg-chess-border/40 dark:hover:bg-chess-elevated/60 text-chess-primary transition-colors"
-              aria-label="설정"
-              onClick={() => setSettingsOpen((v) => !v)}
-            >
-              <Settings size={20} className="opacity-90" />
-            </button>
+            {authStatus === "authenticated" ? (
+              <div className="flex items-center gap-1">
+                <Link
+                  href="/mypage"
+                  className="text-sm font-semibold text-chess-primary hover:text-chess-accent px-2 py-1 rounded-md"
+                >
+                  {forumDisplayName ?? "My"}
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="text-sm font-medium text-chess-muted hover:text-chess-primary px-2 py-1 rounded-md"
+                >
+                  {t("nav.signOut")}
+                </button>
+              </div>
+            ) : (
+              <a
+                href="/api/auth/signin?callbackUrl=%2Fpost-login"
+                className="text-sm font-medium text-chess-accent hover:underline px-2 py-1"
+              >
+                {t("nav.signIn")}
+              </a>
+            )}
 
             <form onSubmit={handleSearch} className="flex items-center gap-1.5">
               <input
@@ -120,14 +181,6 @@ export default function Navbar() {
 
           {/* ── 모바일 우측 아이콘 (md 미만) ── */}
           <div className="flex md:hidden items-center gap-1 shrink-0">
-            <button
-              type="button"
-              className="p-2.5 rounded-full hover:bg-chess-border/40 dark:hover:bg-chess-elevated/60 text-chess-primary transition-colors"
-              aria-label="설정"
-              onClick={() => setSettingsOpen((v) => !v)}
-            >
-              <Settings size={20} className="opacity-90" />
-            </button>
             <button
               type="button"
               className="p-2.5 rounded-full hover:bg-chess-border/40 transition-colors"
@@ -170,10 +223,47 @@ export default function Navbar() {
               </button>
             </form>
 
+            <div className="flex gap-2 border-b border-chess-border/30 pb-3">
+              {authStatus === "authenticated" ? (
+                <div className="flex flex-1 items-center gap-2">
+                  <Link
+                    href="/mypage"
+                    className="flex-1 text-center py-2 rounded-lg bg-chess-surface border border-chess-border text-sm font-semibold text-chess-primary"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {forumDisplayName ?? "My"}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSignOut();
+                      setMenuOpen(false);
+                    }}
+                    className="flex-1 py-2 rounded-lg border border-chess-border text-sm font-medium text-chess-primary"
+                  >
+                    {t("nav.signOut")}
+                  </button>
+                </div>
+              ) : (
+                <a
+                  href="/api/auth/signin?callbackUrl=%2Fpost-login"
+                  className="flex-1 text-center py-2 rounded-lg bg-chess-accent text-white text-sm font-semibold"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  {t("nav.signIn")}
+                </a>
+              )}
+            </div>
+
             {/* 네비 링크 */}
             <nav className="space-y-1">
               {NAV_ITEMS.map(({ href, labelKey }) => {
-                const active = pathname.startsWith(href);
+                const active =
+                  href === "/forum"
+                    ? pathname.startsWith("/forum")
+                    : href === "/board"
+                      ? pathname.startsWith("/board")
+                      : pathname.startsWith(href);
                 return (
                   <Link
                     key={href}
@@ -192,9 +282,6 @@ export default function Navbar() {
           </div>
         )}
       </header>
-
-      {/* 설정 모달 (공통) */}
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }

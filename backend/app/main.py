@@ -1,13 +1,19 @@
+import asyncio
+import errno
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.shared.services.lichess import LichessRateLimitedError
-from app.api.routes import player, games, analysis, stats, engine, opening_tier, community, game_analysis
+from app.api.routes import player, games, analysis, stats, engine, opening_tier, forum, game_analysis
 from app.shared.services import opening_db
 
 # Configure logging
@@ -29,7 +35,11 @@ async def lifespan(_app: FastAPI):
 
     opening_tier_svc = OpeningTierService()
     _app.state.opening_tier_service = opening_tier_svc
-    await opening_tier_svc.load_cache_from_disk_if_valid()
+    cache_ok = await opening_tier_svc.load_cache_from_disk_if_valid()
+    if not cache_ok:
+        _app.state.opening_tier_refresh_task = asyncio.create_task(
+            opening_tier_svc.refresh_cache_for_all()
+        )
     opening_tier_svc.start_midnight_cache_refresher()
     yield
     # shutdown: 스케줄러 task 정리
@@ -37,6 +47,9 @@ async def lifespan(_app: FastAPI):
         opening_tier_svc.stop_midnight_cache_refresher()
     except Exception:
         pass
+    task = getattr(_app.state, "opening_tier_refresh_task", None)
+    if task is not None:
+        task.cancel()
 
 
 
@@ -46,6 +59,52 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=()",
+    )
+    return response
+
+
+@app.middleware("http")
+async def postgres_unreachable_returns_503(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except OperationalError as e:
+        logger.warning("PostgreSQL OperationalError: %s", e)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": (
+                    "Cannot connect to PostgreSQL. If the API runs in Docker Compose, set "
+                    "DATABASE_URL host to `db` (not `localhost`). For Postgres on your host machine, "
+                    "use `host.docker.internal` as hostname. See docs/forum-setup-checklist.md."
+                )
+            },
+        )
+    except OSError as e:
+        if getattr(e, "errno", None) in (errno.ECONNREFUSED, errno.EADDRNOTAVAIL):
+            logger.warning("PostgreSQL network error errno=%s: %s", e.errno, e)
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "detail": (
+                        "Cannot reach PostgreSQL. Inside a container, `localhost` is the container itself — "
+                        "use Compose service name `db` or `host.docker.internal`. "
+                        "Remove `ssl=require` from DATABASE_URL when using local Postgres without TLS."
+                    )
+                },
+            )
+        raise
 
 # CORS 설정
 app.add_middleware(
@@ -64,7 +123,7 @@ app.include_router(game_analysis.router, prefix="/api/v1/game-analysis", tags=["
 app.include_router(stats.router, prefix="/api/v1/stats", tags=["Stats"])
 app.include_router(engine.router, prefix="/api/v1/engine", tags=["Engine"])
 app.include_router(opening_tier.router, prefix="/api/v1/opening-tier", tags=["Opening Tier"])
-app.include_router(community.router, prefix="/api/v1/community", tags=["Community"])
+app.include_router(forum.router, prefix="/api/v1/forum", tags=["Forum"])
 
 
 @app.exception_handler(LichessRateLimitedError)
