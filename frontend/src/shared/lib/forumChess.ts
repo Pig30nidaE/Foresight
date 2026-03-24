@@ -108,3 +108,58 @@ export function applyPieceDropToFen(
   }
   return positionDataToFen(pos);
 }
+
+function loadChessRelaxed(fen: string): Chess | null {
+  try {
+    return new Chess(fen);
+  } catch {
+    try {
+      const c = new Chess();
+      c.load(fen, { skipValidation: true });
+      return c;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function fenWithTurn(fen: string, turn: "w" | "b"): string {
+  const parts = fen.trim().split(/\s+/);
+  if (parts.length < 2) return fen;
+  parts[1] = turn;
+  return parts.join(" ");
+}
+
+export function legalTargetsForSquareFromFen(fen: string, square: string): string[] {
+  const chess = loadChessRelaxed(fen);
+  if (!chess) return [];
+  try {
+    const piece = chess.get(square as Square);
+    if (!piece) return [];
+    // Position editor allows moving either side regardless of current turn.
+    const forcedTurnFen = fenWithTurn(chess.fen(), piece.color);
+    const board = loadChessRelaxed(forcedTurnFen);
+    if (!board) return [];
+    const moves = board.moves({ square: square as Square, verbose: true });
+    return moves.map((m) => m.to);
+  } catch {
+    return [];
+  }
+}
+
+export function movePieceOnFenIfLegal(fen: string, from: string, to: string): string | null {
+  const chess = loadChessRelaxed(fen);
+  if (!chess) return null;
+  try {
+    const piece = chess.get(from as Square);
+    if (!piece) return null;
+    const forcedTurnFen = fenWithTurn(chess.fen(), piece.color);
+    const board = loadChessRelaxed(forcedTurnFen);
+    if (!board) return null;
+    const moved = board.move({ from: from as Square, to: to as Square });
+    if (!moved) return null;
+    return board.fen();
+  } catch {
+    return null;
+  }
+}

@@ -8,8 +8,6 @@ import { Suspense, useState, useEffect } from "react";
 import GameHistorySection from "@/features/dashboard/components/GameHistorySection";
 import AnalysisSection from "@/features/dashboard/components/AnalysisSection";
 import { useTranslation } from "@/shared/lib/i18n";
-import { DashboardPixelMascot } from "@/shared/components/ui/DashboardPixelMascot";
-import { PixelSearchIcon } from "@/shared/components/ui/PixelHudIcons";
 import type { PixelGlyphComponent } from "@/shared/components/ui/PixelGlyphs";
 import {
   PixelBarrierGlyph,
@@ -154,20 +152,15 @@ function DashboardContent() {
 
       {/* ── Search Card ── */}
       <div className="pixel-frame pixel-hud-fill relative overflow-hidden">
-        <div className="absolute right-1.5 top-1.5 sm:right-2 sm:top-2 z-[1]" aria-hidden>
-          <DashboardPixelMascot />
-        </div>
-
         {/* 모바일: 검색 + 필터 버튼 한 줄 */}
         <div className="md:hidden flex gap-2 p-4">
           <div className="relative flex-1 min-w-0">
-            <PixelSearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px]" />
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleSearch(e as unknown as React.FormEvent); }}
               placeholder={t("dh.searchPlaceholder")}
-              className="pixel-input font-pixel w-full pl-9 pr-3 py-2.5 text-base text-chess-primary placeholder-chess-muted"
+              className="pixel-input font-pixel w-full px-3 py-2.5 text-base text-chess-primary placeholder-chess-muted"
             />
           </div>
           {/* 필터 버튼 */}
@@ -175,7 +168,7 @@ function DashboardContent() {
             type="button"
             onClick={openFilter}
             className="pixel-btn flex items-center justify-center w-11 h-11 bg-chess-surface text-chess-muted hover:text-chess-primary shrink-0"
-            aria-label="필터"
+            aria-label={t("dh.aria.filter")}
           >
             <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <line x1="4" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="11" y1="18" x2="13" y2="18" />
@@ -202,12 +195,11 @@ function DashboardContent() {
           {/* 검색 행 */}
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <PixelSearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px]" />
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder={t("dh.searchPlaceholder")}
-                className="pixel-input font-pixel w-full pl-10 pr-4 py-2.5 text-base text-chess-primary placeholder-chess-muted"
+                className="pixel-input font-pixel w-full px-4 py-2.5 text-base text-chess-primary placeholder-chess-muted"
               />
             </div>
             <button
@@ -298,7 +290,7 @@ function DashboardContent() {
             </div>
 
             <div className="px-5 pb-6 pt-3 space-y-5">
-              <h2 className="text-base font-bold text-chess-primary">필터</h2>
+              <h2 className="text-base font-bold text-chess-primary">{t("dh.filter.sheetTitle")}</h2>
 
               {/* Platform */}
               <div className="space-y-2.5">
@@ -364,7 +356,7 @@ function DashboardContent() {
                 onClick={applyFilter}
                 className="font-pixel pixel-btn w-full py-3 bg-chess-inverse text-white font-semibold text-sm hover:bg-chess-inverse/90"
               >
-                적용하기
+                {t("dh.filter.apply")}
               </button>
             </div>
           </div>

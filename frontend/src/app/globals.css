@@ -59,6 +59,13 @@ html {
   font-size: 103%;
 }
 
+/* PC에서 전체 폰트를 한 단계 더 키워 가독성 확보 */
+@media (min-width: 1024px) {
+  html {
+    font-size: 112%;
+  }
+}
+
 body {
   overflow-x: hidden;
   background-color: var(--background);

@@ -13,7 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.shared.services.lichess import LichessRateLimitedError
-from app.api.routes import player, games, analysis, stats, engine, opening_tier, forum, game_analysis
+from app.api.routes import player, games, analysis, stats, engine, opening_tier, forum, game_analysis, profile
 from app.shared.services import opening_db
 
 # Configure logging
@@ -30,7 +30,7 @@ async def lifespan(_app: FastAPI):
     count = await opening_db.load_opening_db()
     logger.info(f"[Startup] Opening DB 준비 완료 — {count}개 ECO 코드")
 
-    # Opening Tier cache: 디스크 캐시 로드는 가볍게, 실제 프리페치는 자정에만 수행합니다.
+    # Opening Tier cache: 디스크 캐시 로드는 가볍게, 정기 프리페치는 매월 1일 UTC 00:00에 수행합니다.
     from app.features.opening_tier.services.opening_tier_service import OpeningTierService
 
     opening_tier_svc = OpeningTierService()
@@ -58,6 +58,9 @@ app = FastAPI(
     description="체스 유저를 위한 분석 플랫폼",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.API_DOCS_ENABLED else None,
+    redoc_url="/redoc" if settings.API_DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if settings.API_DOCS_ENABLED else None,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -72,6 +75,12 @@ async def security_headers(request: Request, call_next):
         "Permissions-Policy",
         "camera=(), microphone=(), geolocation=()",
     )
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    if settings.SECURITY_HSTS_MAX_AGE > 0:
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            f"max-age={settings.SECURITY_HSTS_MAX_AGE}; includeSubDomains",
+        )
     return response
 
 
@@ -79,8 +88,8 @@ async def security_headers(request: Request, call_next):
 async def postgres_unreachable_returns_503(request: Request, call_next):
     try:
         return await call_next(request)
-    except OperationalError as e:
-        logger.warning("PostgreSQL OperationalError: %s", e)
+    except OperationalError:
+        logger.warning("PostgreSQL OperationalError (connection failed)")
         return JSONResponse(
             status_code=503,
             content={
@@ -93,7 +102,7 @@ async def postgres_unreachable_returns_503(request: Request, call_next):
         )
     except OSError as e:
         if getattr(e, "errno", None) in (errno.ECONNREFUSED, errno.EADDRNOTAVAIL):
-            logger.warning("PostgreSQL network error errno=%s: %s", e.errno, e)
+            logger.warning("PostgreSQL network error errno=%s", getattr(e, "errno", None))
             return JSONResponse(
                 status_code=503,
                 content={
@@ -110,6 +119,7 @@ async def postgres_unreachable_returns_503(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -123,6 +133,7 @@ app.include_router(game_analysis.router, prefix="/api/v1/game-analysis", tags=["
 app.include_router(stats.router, prefix="/api/v1/stats", tags=["Stats"])
 app.include_router(engine.router, prefix="/api/v1/engine", tags=["Engine"])
 app.include_router(opening_tier.router, prefix="/api/v1/opening-tier", tags=["Opening Tier"])
+app.include_router(profile.router, prefix="/api/v1", tags=["Profile"])
 app.include_router(forum.router, prefix="/api/v1/forum", tags=["Forum"])
 
 

@@ -108,8 +108,6 @@ export default function BlunderTimeline({ data }: Props) {
 
   const overall = hasClock ? (data.overall["mine"] ?? Object.values(data.overall)[0]) : null;
   const upq = overall?.under_pressure_quality;
-  const thresholdSec =
-    typeof data?.pressure_threshold_seconds === "number" ? data.pressure_threshold_seconds : null;
 
   return (
     <div className="space-y-5">
@@ -136,11 +134,6 @@ export default function BlunderTimeline({ data }: Props) {
             <p className={`mt-1 text-lg font-black ${overall.pressure_ratio >= 0.3 ? "text-chess-loss" : overall.pressure_ratio >= 0.15 ? "text-chess-warn" : "text-chess-win"}`}>
               {Math.round(overall.pressure_ratio * 100)}%
             </p>
-            {thresholdSec != null && (
-              <p className="mt-1 text-[10px] text-chess-muted leading-tight">
-                &lt;{thresholdSec}s
-              </p>
-            )}
           </div>
           <div className="pixel-frame bg-chess-bg px-4 py-3">
             <p className="text-chess-muted">{t("chart.avgThinkTime")}</p>
@@ -174,13 +167,13 @@ export default function BlunderTimeline({ data }: Props) {
       <div className={phaseData && phaseData.length > 0 ? "grid gap-4 md:grid-cols-2" : ""}>
         {/* 페이즈별 압박률 카드형 막대 */}
         {phaseData && phaseData.length > 0 && (
-          <div className="pixel-frame bg-chess-bg/95 dark:bg-chess-elevated/12 p-4">
+          <div className="pixel-frame bg-chess-bg/95 dark:bg-chess-elevated/12 p-4.5">
             <div className="flex items-end justify-between gap-3 mb-3">
-              <p className="text-xs font-medium tracking-wide text-chess-primary">{t("chart.phasePressureMap")}</p>
+              <p className="text-sm sm:text-base font-semibold tracking-wide text-chess-primary">{t("chart.phasePressureMap")}</p>
               {topRiskPhase && (
-                <p className="text-[11px] text-chess-muted">
+                <p className="text-sm text-chess-muted">
                   {t("chart.highestRisk")}{" "}
-                  <span className="font-semibold text-chess-primary">{topRiskPhase.phase}</span>
+                  <span className="font-bold text-chess-primary">{topRiskPhase.phase}</span>
                 </p>
               )}
             </div>
@@ -191,29 +184,29 @@ export default function BlunderTimeline({ data }: Props) {
                 return (
                   <div
                     key={entry.phase}
-                    className="pixel-frame bg-chess-surface/70 dark:bg-chess-bg/35 px-3 py-2.5"
+                    className="pixel-frame bg-chess-surface/70 dark:bg-chess-bg/35 px-3.5 py-3"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-semibold text-sm text-chess-primary">{entry.phase}</p>
+                      <p className="font-semibold text-base text-chess-primary">{entry.phase}</p>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 border-2 ${tone.badge}`}>
+                        <span className={`text-xs sm:text-sm font-semibold px-2.5 py-0.5 border-2 ${tone.badge}`}>
                           {tone.label}
                         </span>
-                        <span className={`text-sm font-black tabular-nums ${tone.text}`}>
+                        <span className={`text-base sm:text-lg font-black tabular-nums ${tone.text}`}>
                           {entry.pressure_pct}%
                         </span>
                       </div>
                     </div>
 
                     {/* 읽기 전용 막대 (슬라이더 썸 제거) */}
-                    <div className="mt-2 h-2.5 w-full overflow-hidden bg-chess-elevated dark:bg-chess-surface/50 border border-chess-border/50">
+                    <div className="mt-2.5 h-3.5 w-full overflow-hidden bg-chess-elevated dark:bg-chess-surface/50 border border-chess-border/50">
                       <div
                         className={`h-full ${tone.barClass}`}
                         style={{ width: `${Math.max(entry.pressure_pct, 2)}%` }}
                       />
                     </div>
 
-                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-chess-muted">
+                    <div className="mt-2 flex items-center justify-between text-sm text-chess-muted">
                       <span>{t("chart.sampleMoves").replace("{n}", String(entry.moves))}</span>
                       <span>{entry.avg_time != null ? t("chart.avgThink").replace("{n}", String(entry.avg_time)) : "-"}</span>
                     </div>

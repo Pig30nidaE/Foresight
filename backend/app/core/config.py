@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     # Alembic sync driver; if empty, derived from DATABASE_URL (asyncpg → psycopg2)
     DATABASE_URL_SYNC: str = ""
+    # 선택: 관리형 Postgres idle 타임아웃 회피 등. 미설정 시 엔진 기본값(기존과 동일).
+    DATABASE_POOL_RECYCLE_SECONDS: int | None = None
+
+    # HTTPS 역프록시 뒤 프로덕션에서만 HSTS 권장. 0이면 헤더 미전송(로컬·HTTP와 동일 동작).
+    SECURITY_HSTS_MAX_AGE: int = 0
+
+    # false면 /docs, /redoc, /openapi.json 비활성화(배포 하드닝). 기본 true로 기존과 동일.
+    API_DOCS_ENABLED: bool = True
 
     # HS256 — must match NextAuth AUTH_SECRET (same string) unless BRIDGE_JWT_SECRET is set.
     JWT_SECRET: str = ""

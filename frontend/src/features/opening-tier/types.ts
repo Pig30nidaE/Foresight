@@ -20,10 +20,13 @@ export interface OpeningTierEntry {
 }
 
 export interface OpeningTierResponse {
+  state?: "warming" | "ready";
   rating: number;
   speed: string;
   color: string;
   total_openings: number;
+  retry_after_seconds?: number;
+  detail?: string;
   data_period: string;
   /** 마지막 수집된 날짜 (YYYY-MM-DD) */
   collected_at: string;

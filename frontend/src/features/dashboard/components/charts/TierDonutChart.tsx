@@ -7,7 +7,6 @@ import { useTranslation, type I18nKey } from "@/shared/lib/i18n";
 interface TierDonutChartProps {
   tierPercentages: Record<MoveTier, number>;
   tierCounts: Record<MoveTier, number>;
-  accuracy: number;
   size?: number;
   strokeWidth?: number;
 }
@@ -40,7 +39,6 @@ function withAlpha(hex: string, alpha: number) {
 export default function TierDonutChart({
   tierPercentages,
   tierCounts,
-  accuracy,
   size = 200,
   strokeWidth = 24,
 }: TierDonutChartProps) {
@@ -149,7 +147,7 @@ export default function TierDonutChart({
           })}
         </svg>
         
-        {/* Center content (Accuracy) */}
+        {/* Center content (Tier ratio only) */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <div
             className="flex flex-col items-center border-[3px] border-chess-border bg-chess-bg pixel-hud-fill shadow-[inset_2px_2px_0_rgba(255,255,255,0.1),2px_2px_0_rgba(0,0,0,0.2)]"
@@ -159,12 +157,11 @@ export default function TierDonutChart({
               justifyContent: "center",
             }}
           >
-            <span className="font-pixel text-3xl font-bold text-chess-primary tracking-tight">
-              {accuracy.toFixed(1)}
-              <span className="text-lg text-chess-muted/80">%</span>
+            <span className="font-pixel text-2xl font-bold text-chess-primary tracking-tight">
+              T1~T6
             </span>
             <span className="font-pixel text-[10px] sm:text-xs font-bold text-chess-muted mt-1">
-              {t("chart.accuracy")}
+              {t("chart.tierRatio")}
             </span>
           </div>
         </div>

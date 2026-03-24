@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ChevronRight, FileText, MessageCircle } from "lucide-react";
 
 import api from "@/shared/lib/api";
@@ -39,13 +39,17 @@ type UserPublicProfile = {
 };
 
 export default function PublicUserProfileView() {
+  const PAGE_SIZE = 5;
   const params = useParams<{ userId: string }>();
+  const router = useRouter();
   const userId = params?.userId;
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserPublicProfile | null>(null);
   const [tab, setTab] = useState<"posts" | "comments">("posts");
+  const [postsPage, setPostsPage] = useState(1);
+  const [commentsPage, setCommentsPage] = useState(1);
 
   useEffect(() => {
     const load = async () => {
@@ -53,14 +57,14 @@ export default function PublicUserProfileView() {
       try {
         setLoading(true);
         const token = await getBackendJwt();
-        const { data } = await api.get<UserPublicProfile>(`/forum/users/${userId}`, {
+        const { data } = await api.get<UserPublicProfile>(`/users/${userId}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
         setProfile(data);
         setError(null);
       } catch (e: unknown) {
         const d = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-        setError(typeof d === "string" ? d : "사용자 프로필을 불러오지 못했습니다.");
+        setError(typeof d === "string" ? d : t("profilePublic.error.load"));
       } finally {
         setLoading(false);
       }
@@ -68,9 +72,40 @@ export default function PublicUserProfileView() {
     void load();
   }, [userId]);
 
+  useEffect(() => {
+    setPostsPage(1);
+    setCommentsPage(1);
+  }, [profile?.id]);
+
+  useEffect(() => {
+    setPostsPage(1);
+  }, [tab]);
+
+  const posts = profile?.posts ?? [];
+  const comments = profile?.comments ?? [];
+  const postsPageCount = Math.max(1, Math.ceil(posts.length / PAGE_SIZE));
+  const commentsPageCount = Math.max(1, Math.ceil(comments.length / PAGE_SIZE));
+  const pagedPosts = posts.slice((postsPage - 1) * PAGE_SIZE, postsPage * PAGE_SIZE);
+  const pagedComments = comments.slice((commentsPage - 1) * PAGE_SIZE, commentsPage * PAGE_SIZE);
+
   return (
     <div className="min-h-[60vh] pb-16">
       <div className="mx-auto w-full max-w-3xl px-4 pt-6 sm:px-6">
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) {
+                router.back();
+                return;
+              }
+              router.push("/forum");
+            }}
+            className="pixel-btn px-3 py-1.5 font-pixel text-xs text-chess-primary"
+          >
+            {t("profilePublic.back")}
+          </button>
+        </div>
         <nav className="mb-6 flex flex-wrap items-center gap-1 font-pixel text-xs text-chess-muted sm:text-sm">
           <Link href="/" className="pixel-btn px-2 py-1 hover:text-chess-primary">
             {t("nav.home")}
@@ -81,7 +116,7 @@ export default function PublicUserProfileView() {
 
         {loading && (
           <div className="pixel-frame pixel-hud-fill p-10 text-center font-pixel text-sm text-chess-muted">
-            불러오는 중...
+            {t("profilePublic.loading")}
           </div>
         )}
 
@@ -125,10 +160,10 @@ export default function PublicUserProfileView() {
                     </h1>
                     <p className="mt-1 font-pixel text-[11px] text-chess-muted sm:text-xs">
                       {!profile.activity_visible
-                        ? "비공개 프로필"
+                        ? t("profilePublic.private")
                         : profile.profile_public
-                          ? "공개 프로필"
-                          : "비공개 프로필"}
+                          ? t("profilePublic.public")
+                          : t("profilePublic.private")}
                     </p>
                   </div>
                 </div>
@@ -139,7 +174,7 @@ export default function PublicUserProfileView() {
                       <div className="flex items-center gap-2 text-chess-muted">
                         <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         <span className="font-pixel text-[10px] font-medium uppercase tracking-wide sm:text-[11px]">
-                          게시글
+                          {t("profilePublic.posts")}
                         </span>
                       </div>
                       <p className="mt-1 font-pixel text-xl tabular-nums text-chess-primary sm:text-2xl">
@@ -150,7 +185,7 @@ export default function PublicUserProfileView() {
                       <div className="flex items-center gap-2 text-chess-muted">
                         <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         <span className="font-pixel text-[10px] font-medium uppercase tracking-wide sm:text-[11px]">
-                          댓글
+                          {t("profilePublic.commentsTab")}
                         </span>
                       </div>
                       <p className="mt-1 font-pixel text-xl tabular-nums text-chess-primary sm:text-2xl">
@@ -175,7 +210,7 @@ export default function PublicUserProfileView() {
                     }`}
                   >
                     <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
-                    작성한 글
+                    {t("profilePublic.tabPosts")}
                     <span
                       className={`min-w-[1.25rem] px-1.5 py-0.5 text-[10px] tabular-nums sm:text-[11px] ${
                         tab === "posts" ? "bg-white/20 text-white" : "bg-chess-border/40 text-chess-muted"
@@ -194,7 +229,7 @@ export default function PublicUserProfileView() {
                     }`}
                   >
                     <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
-                    댓글
+                    {t("profilePublic.commentsTab")}
                     <span
                       className={`min-w-[1.25rem] px-1.5 py-0.5 text-[10px] tabular-nums sm:text-[11px] ${
                         tab === "comments" ? "bg-white/20 text-white" : "bg-chess-border/40 text-chess-muted"
@@ -207,12 +242,12 @@ export default function PublicUserProfileView() {
 
                 <section className="mt-5 space-y-3" aria-live="polite">
                   {tab === "posts" &&
-                    (profile.posts.length === 0 ? (
+                    (posts.length === 0 ? (
                       <p className="border-2 border-dashed border-chess-border py-10 text-center font-pixel text-xs text-chess-muted sm:text-sm">
-                        아직 작성한 글이 없습니다.
+                        {t("profilePublic.emptyPosts")}
                       </p>
                     ) : (
-                      profile.posts.map((p) => (
+                      pagedPosts.map((p) => (
                         <article
                           key={p.id}
                           className="group pixel-frame pixel-hud-fill p-4 transition-[filter] hover:brightness-[1.02] dark:hover:brightness-110"
@@ -235,14 +270,37 @@ export default function PublicUserProfileView() {
                         </article>
                       ))
                     ))}
+                  {tab === "posts" && posts.length > PAGE_SIZE && (
+                    <div className="flex items-center justify-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setPostsPage((prev) => Math.max(1, prev - 1))}
+                        disabled={postsPage === 1}
+                        className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                      >
+                        {t("forum.pagination.prev")}
+                      </button>
+                      <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                        {postsPage} / {postsPageCount}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPostsPage((prev) => Math.min(postsPageCount, prev + 1))}
+                        disabled={postsPage === postsPageCount}
+                        className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                      >
+                        {t("forum.pagination.next")}
+                      </button>
+                    </div>
+                  )}
 
                   {tab === "comments" &&
-                    (profile.comments.length === 0 ? (
+                    (comments.length === 0 ? (
                       <p className="border-2 border-dashed border-chess-border py-10 text-center font-pixel text-xs text-chess-muted sm:text-sm">
-                        아직 작성한 댓글이 없습니다.
+                        {t("profilePublic.emptyComments")}
                       </p>
                     ) : (
-                      profile.comments.map((c) => (
+                      pagedComments.map((c) => (
                         <article
                           key={c.id}
                           className="pixel-frame pixel-hud-fill p-4 transition-[filter] hover:brightness-[1.02] dark:hover:brightness-110"
@@ -265,6 +323,29 @@ export default function PublicUserProfileView() {
                         </article>
                       ))
                     ))}
+                  {tab === "comments" && comments.length > PAGE_SIZE && (
+                    <div className="flex items-center justify-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setCommentsPage((prev) => Math.max(1, prev - 1))}
+                        disabled={commentsPage === 1}
+                        className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                      >
+                        {t("forum.pagination.prev")}
+                      </button>
+                      <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                        {commentsPage} / {commentsPageCount}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setCommentsPage((prev) => Math.min(commentsPageCount, prev + 1))}
+                        disabled={commentsPage === commentsPageCount}
+                        className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                      >
+                        {t("forum.pagination.next")}
+                      </button>
+                    </div>
+                  )}
                 </section>
               </>
             )}

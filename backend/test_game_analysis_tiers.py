@@ -1,4 +1,10 @@
-from app.ml.game_analyzer import MoveTier, AnalyzedMove, _determine_tier, _promote_best_t2_to_t1
+from app.ml.game_analyzer import (
+    MoveTier,
+    AnalyzedMove,
+    _compute_accuracy,
+    _determine_tier,
+    _promote_best_t2_to_t1,
+)
 
 
 def test_determine_tier_top_rank_near_zero_is_t2():
@@ -49,3 +55,34 @@ def test_promote_best_t2_to_t1():
     t1s = [m for m in w + b if m.tier == MoveTier.T1]
     assert len(t1s) == 1
     assert t1s[0].halfmove == 1  # cp_loss 3, win 0.2, only_best = best
+
+
+def test_accuracy_is_stabilized_in_mate_like_decisive_sequence():
+    moves = [
+        AnalyzedMove(
+            halfmove=1,
+            move_number=1,
+            color="white",
+            san="Qh5+",
+            uci="d1h5",
+            cp_before=9800,
+            cp_after=9600,
+            win_pct_loss=45.0,  # 메이트 수순 변화로 과대 산정된 손실 가정
+            tier=MoveTier.T2,
+        ),
+        AnalyzedMove(
+            halfmove=3,
+            move_number=2,
+            color="white",
+            san="Bc4",
+            uci="f1c4",
+            cp_before=9500,
+            cp_after=9400,
+            win_pct_loss=35.0,
+            tier=MoveTier.T2,
+        ),
+    ]
+
+    acc = _compute_accuracy(moves)
+    # 완화 로직이 없으면 한 자리 수 정확도로 급락할 수 있음.
+    assert acc >= 90.0

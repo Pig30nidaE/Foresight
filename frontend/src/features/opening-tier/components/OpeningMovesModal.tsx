@@ -22,7 +22,7 @@ interface Position {
 }
 
 export default function OpeningMovesModal({ entry, onClose, color = "white" }: Props) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   useBodyScrollLock(!!entry);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [detail, setDetail] = useState<OpeningDetail | null>(null);
@@ -114,7 +114,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
             type="button"
             onClick={onClose}
             className="font-pixel pixel-btn shrink-0 px-2 py-1 text-chess-muted hover:text-chess-primary text-sm leading-none mt-0.5"
-            aria-label="닫기"
+            aria-label={t("forum.overlay.close")}
           >
             X
           </button>
@@ -152,7 +152,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                     type="button"
                     onClick={() => setCurrentIndex(0)}
                     disabled={currentIndex === 0}
-                    className="font-pixel pixel-btn px-2 py-1 text-[10px] text-chess-primary disabled:opacity-25"
+                    className="font-pixel pixel-btn min-h-10 min-w-10 px-3 py-2 text-xs text-chess-primary disabled:opacity-25"
                   >
                     |&lt;
                   </button>
@@ -160,11 +160,11 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                     type="button"
                     onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
                     disabled={currentIndex === 0}
-                    className="font-pixel pixel-btn px-2 py-1 text-[10px] text-chess-primary disabled:opacity-25"
+                    className="font-pixel pixel-btn min-h-10 min-w-10 px-3 py-2 text-xs text-chess-primary disabled:opacity-25"
                   >
                     &lt;
                   </button>
-                  <span className="font-pixel text-[10px] text-chess-muted tabular-nums w-16 text-center">
+                  <span className="font-pixel text-xs text-chess-muted tabular-nums w-20 text-center">
                     {currentIndex}/{maxIndex}
                   </span>
                   <button
@@ -173,7 +173,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                       setCurrentIndex((i) => Math.min(i + 1, maxIndex))
                     }
                     disabled={currentIndex === maxIndex}
-                    className="font-pixel pixel-btn px-2 py-1 text-[10px] text-chess-primary disabled:opacity-25"
+                    className="font-pixel pixel-btn min-h-10 min-w-10 px-3 py-2 text-xs text-chess-primary disabled:opacity-25"
                   >
                     &gt;
                   </button>
@@ -181,7 +181,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                     type="button"
                     onClick={() => setCurrentIndex(maxIndex)}
                     disabled={currentIndex === maxIndex}
-                    className="font-pixel pixel-btn px-2 py-1 text-[10px] text-chess-primary disabled:opacity-25"
+                    className="font-pixel pixel-btn min-h-10 min-w-10 px-3 py-2 text-xs text-chess-primary disabled:opacity-25"
                   >
                     &gt;|
                   </button>
@@ -316,7 +316,9 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
               <div className="h-7 w-48 border-2 border-chess-border/50 bg-chess-border/30 animate-pulse" />
             ) : (
               <a
-                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(entry.name + " " + entry.eco + " 체스 오프닝 강의 한국어")}`}
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(
+                  entry.name + " " + entry.eco + (language === "ko" ? t("tier.youtubeManualSuffixKo") : t("tier.youtubeManualSuffixEn"))
+                )}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-pixel pixel-btn inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold bg-red-600/12 text-chess-loss border-red-600/40 hover:bg-red-600/20"

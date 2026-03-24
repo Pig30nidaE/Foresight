@@ -24,15 +24,15 @@ if (process.env.AUTH_DISCORD_ID && process.env.AUTH_DISCORD_SECRET) {
   );
 }
 
-/** 세션 쿠키 최대 수명(초). 기본 7일. */
+/** 세션 쿠키 최대 수명(초). 기본 30분. */
 const sessionMaxAgeSeconds = Math.max(
   300,
-  Number.parseInt(process.env.AUTH_SESSION_MAX_AGE_SECONDS ?? `${60 * 60 * 24 * 7}`, 10) || 60 * 60 * 24 * 7
+  Number.parseInt(process.env.AUTH_SESSION_MAX_AGE_SECONDS ?? "1800", 10) || 1800
 );
-/** 세션을 갱신하기 전 최소 간격(초). 기본 12시간. */
+/** 세션을 갱신하기 전 최소 간격(초). 기본 5분. */
 const sessionUpdateAgeSeconds = Math.max(
   60,
-  Number.parseInt(process.env.AUTH_SESSION_UPDATE_AGE_SECONDS ?? `${60 * 60 * 12}`, 10) || 60 * 60 * 12
+  Number.parseInt(process.env.AUTH_SESSION_UPDATE_AGE_SECONDS ?? "300", 10) || 300
 );
 
 export const { handlers, auth, signIn, signOut } = NextAuth({

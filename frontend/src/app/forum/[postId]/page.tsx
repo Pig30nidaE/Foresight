@@ -22,6 +22,7 @@ import {
 import { ReportModal } from "@/shared/components/forum/ReportModal";
 import { apiErrorDetail } from "@/shared/lib/apiErrorDetail";
 import { useTranslation } from "@/shared/lib/i18n";
+import { formatPostDateTime } from "@/shared/lib/formatLocaleDate";
 
 function isForumAdminAuthor(role?: string | null) {
   return (role ?? "").toLowerCase().trim() === "admin";
@@ -56,6 +57,7 @@ const inputClass =
   "w-full pixel-input px-4 py-3 text-sm text-chess-primary placeholder:text-chess-muted/70 dark:bg-chess-elevated/50";
 
 export default function ForumPostDetailPage() {
+  const COMMENT_PAGE_SIZE = 10;
   const params = useParams<{ postId: string }>();
   const postId = params?.postId;
   const router = useRouter();
@@ -79,8 +81,9 @@ export default function ForumPostDetailPage() {
   const [reportTarget, setReportTarget] = useState<"post" | { type: "comment"; id: string } | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportSubmittedFlash, setReportSubmittedFlash] = useState(false);
+  const [commentPage, setCommentPage] = useState(1);
   const reportFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   const load = async () => {
     if (!postId) return;
@@ -97,7 +100,7 @@ export default function ForumPostDetailPage() {
       setError(null);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      setError(err?.response?.data?.detail ?? "게시글을 불러오지 못했습니다.");
+      setError(err?.response?.data?.detail ?? t("forum.error.loadPost"));
     } finally {
       setLoading(false);
     }
@@ -116,7 +119,7 @@ export default function ForumPostDetailPage() {
     const token = await getBackendJwt();
     if (!token) {
       router.push("/api/auth/signin?callbackUrl=%2Fpost-login");
-      throw new Error("로그인이 필요합니다.");
+      throw new Error(t("forum.error.loginRequired"));
     }
     return token;
   };
@@ -130,7 +133,7 @@ export default function ForumPostDetailPage() {
       try {
         const token = await getBackendJwt();
         if (!token) return;
-        const { data } = await api.get<{ id?: string }>("/forum/me", {
+        const { data } = await api.get<{ id?: string }>("/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
         setMyUserId((data?.id as string | undefined) ?? null);
@@ -146,6 +149,14 @@ export default function ForumPostDetailPage() {
       if (reportFlashTimerRef.current) clearTimeout(reportFlashTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    setCommentPage(1);
+  }, [post?.id, post?.comments.length]);
+
+  const comments = post?.comments ?? [];
+  const commentsPageCount = Math.max(1, Math.ceil(comments.length / COMMENT_PAGE_SIZE));
+  const pagedComments = comments.slice((commentPage - 1) * COMMENT_PAGE_SIZE, commentPage * COMMENT_PAGE_SIZE);
 
   const onToggleLike = async () => {
     if (!post) return;
@@ -166,7 +177,7 @@ export default function ForumPostDetailPage() {
       await load();
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      setError(err?.response?.data?.detail ?? "좋아요 처리에 실패했습니다.");
+      setError(err?.response?.data?.detail ?? t("forum.error.likeFailed"));
     } finally {
       setBusy(false);
     }
@@ -187,7 +198,7 @@ export default function ForumPostDetailPage() {
       await load();
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      setError(err?.response?.data?.detail ?? "댓글 작성에 실패했습니다.");
+      setError(err?.response?.data?.detail ?? t("forum.error.commentCreateFailed"));
     } finally {
       setBusy(false);
     }
@@ -203,7 +214,7 @@ export default function ForumPostDetailPage() {
       await load();
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      setError(err?.response?.data?.detail ?? "댓글 삭제에 실패했습니다.");
+      setError(err?.response?.data?.detail ?? t("forum.error.commentDeleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -327,7 +338,7 @@ export default function ForumPostDetailPage() {
       await load();
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      setError(err?.response?.data?.detail ?? "게시글 수정에 실패했습니다.");
+      setError(err?.response?.data?.detail ?? t("forum.error.updateFailed"));
     } finally {
       setBusy(false);
     }
@@ -355,7 +366,7 @@ export default function ForumPostDetailPage() {
       router.push(post.board_category ? "/board" : "/forum");
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      setError(err?.response?.data?.detail ?? "게시글 삭제에 실패했습니다.");
+      setError(err?.response?.data?.detail ?? t("forum.error.deleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -368,10 +379,10 @@ export default function ForumPostDetailPage() {
           href={post?.board_category ? "/board" : "/forum"}
           className="text-sm text-chess-accent hover:underline"
         >
-          {post?.board_category ? "← 게시판 목록" : "← 포럼 목록"}
+          {post?.board_category ? t("forum.backToBoard") : t("forum.backToForum")}
         </Link>
       </div>
-      {loading && <p className="text-chess-muted">불러오는 중...</p>}
+      {loading && <p className="text-chess-muted">{t("forum.loadingShort")}</p>}
       {error && <p className="text-red-500">{error}</p>}
       {post && (
         <>
@@ -389,7 +400,7 @@ export default function ForumPostDetailPage() {
               className="overflow-hidden pixel-frame bg-chess-surface/80 dark:bg-chess-surface/35"
             >
               <div className="border-b border-chess-border/50 bg-chess-elevated/25 px-5 py-4 dark:bg-chess-elevated/20">
-                <p className="text-xs font-medium uppercase tracking-wider text-chess-muted">제목</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-chess-muted">{t("forum.titleLabel")}</p>
                 <input
                   type="text"
                   required
@@ -402,7 +413,7 @@ export default function ForumPostDetailPage() {
               <div className="space-y-4 px-5 py-5">
                 <div>
                   <label htmlFor="forum-edit-body" className="text-xs font-medium uppercase tracking-wider text-chess-muted">
-                    본문
+                    {t("forum.body")}
                   </label>
                   {!post.board_category && (
                     <div className="mt-2 flex w-full flex-col items-center">
@@ -417,7 +428,8 @@ export default function ForumPostDetailPage() {
                         ) : (
                           <ChevronDown className="size-4 shrink-0 text-chess-muted" aria-hidden />
                         )}
-                        썸네일 보드 {editBoardSectionExpanded ? "접기" : "펼치기"}
+                        {t("forum.thumbnailBoard")}{" "}
+                        {editBoardSectionExpanded ? t("forum.collapse") : t("forum.expand")}
                       </button>
                       {editBoardSectionExpanded && (
                         <div className="flex w-full flex-col items-center">
@@ -432,7 +444,7 @@ export default function ForumPostDetailPage() {
                               onClick={removeBoard}
                               className="-mt-1 mb-2 text-xs font-medium text-red-600 underline-offset-2 hover:underline dark:text-red-400"
                             >
-                              보드 제거
+                              {t("forum.removeBoard")}
                             </button>
                           )}
                         </div>
@@ -456,7 +468,7 @@ export default function ForumPostDetailPage() {
                   onClick={cancelEdit}
                   className="font-pixel pixel-btn px-5 py-3 text-sm font-medium text-chess-primary hover:bg-chess-elevated/50"
                 >
-                  취소
+                  {t("settings.cancel")}
                 </button>
                 <button
                   type="submit"
@@ -466,10 +478,10 @@ export default function ForumPostDetailPage() {
                   {busy ? (
                     <>
                       <Loader2 className="size-4 animate-spin" aria-hidden />
-                      저장 중…
+                      {t("forum.saving")}
                     </>
                   ) : (
-                    "저장"
+                    t("forum.save")
                   )}
                 </button>
               </div>
@@ -477,12 +489,14 @@ export default function ForumPostDetailPage() {
           ) : (
             <article className="pixel-frame p-4">
               {post.board_category === "notice" && (
-                <p className={noticeDetailBadgeClass}>공지</p>
+                <p className={noticeDetailBadgeClass}>{t("board.badge.notice")}</p>
               )}
               {post.board_category === "patch" && (
-                <p className={patchDetailBadgeClass}>패치노트</p>
+                <p className={patchDetailBadgeClass}>{t("board.tab.patch")}</p>
               )}
-              {post.board_category === "free" && <p className={freeDetailBadgeClass}>자유글</p>}
+              {post.board_category === "free" && (
+                <p className={freeDetailBadgeClass}>{t("board.tab.free")}</p>
+              )}
               <h1 className="break-words text-2xl font-bold text-chess-primary [overflow-wrap:anywhere] sm:text-3xl">
                 {post.title}
               </h1>
@@ -493,7 +507,7 @@ export default function ForumPostDetailPage() {
                   className="min-w-0 font-semibold text-chess-primary hover:text-chess-accent hover:underline underline-offset-2 sm:text-lg"
                 />
                 <span className="shrink-0 tabular-nums opacity-90">
-                  · {new Date(post.created_at).toLocaleString()}
+                  · {formatPostDateTime(post.created_at, language)}
                 </span>
               </div>
               {displayFen && (
@@ -506,7 +520,7 @@ export default function ForumPostDetailPage() {
               </p>
               {post.pgn_text?.trim() && !post.board_category && (
                 <div className="mt-4 pixel-frame bg-chess-surface/45 p-3">
-                  <p className="text-xs font-medium text-chess-muted">PGN</p>
+                  <p className="text-xs font-medium text-chess-muted">{t("forum.pgnLabel")}</p>
                   <pre className="mt-2 max-h-48 overflow-auto break-words whitespace-pre-wrap font-mono text-xs text-chess-primary [overflow-wrap:anywhere]">
                     {post.pgn_text}
                   </pre>
@@ -517,7 +531,11 @@ export default function ForumPostDetailPage() {
                   type="button"
                   disabled={busy || status !== "authenticated"}
                   onClick={onToggleLike}
-                  aria-label={post.liked_by_me ? `좋아요 취소, ${post.like_count}개` : `좋아요, ${post.like_count}개`}
+                  aria-label={
+                    post.liked_by_me
+                      ? t("forum.aria.unlikeCount").replace("{n}", String(post.like_count))
+                      : t("forum.aria.likeCount").replace("{n}", String(post.like_count))
+                  }
                   className="font-pixel pixel-btn px-3 py-2 text-sm tabular-nums disabled:opacity-50 inline-flex items-center gap-1.5"
                 >
                   <PixelHeartGlyph className="text-red-500 dark:text-red-400" size={15} />
@@ -530,14 +548,14 @@ export default function ForumPostDetailPage() {
                       onClick={beginEdit}
                       className="font-pixel pixel-btn px-3 py-2 text-sm"
                     >
-                      수정
+                      {t("forum.edit")}
                     </button>
                     <button
                       type="button"
                       onClick={onDeletePost}
                       className="font-pixel pixel-btn border-red-500/60 px-3 py-2 text-sm text-red-500"
                     >
-                      삭제
+                      {t("forum.delete")}
                     </button>
                   </>
                 )}
@@ -550,7 +568,7 @@ export default function ForumPostDetailPage() {
                       onClick={openReportPost}
                       className="font-pixel pixel-btn px-3 py-2 text-sm text-chess-muted"
                     >
-                      신고
+                      {t("forum.reportShort")}
                     </button>
                   )}
               </div>
@@ -571,14 +589,16 @@ export default function ForumPostDetailPage() {
           )}
 
           <section className="pixel-frame p-4">
-            <h2 className="text-lg font-semibold">댓글 {post.comment_count}</h2>
+            <h2 className="text-lg font-semibold">
+              {t("forum.commentsWithCount").replace("{n}", String(post.comment_count))}
+            </h2>
             <form onSubmit={onAddComment} className="mt-3 space-y-2">
               <textarea
                 value={commentBody}
                 onChange={(e) => setCommentBody(e.target.value)}
                 required
                 rows={3}
-                placeholder="댓글을 입력하세요"
+                placeholder={t("forum.commentPlaceholder")}
                 className="w-full pixel-input px-3 py-2 text-sm break-words [overflow-wrap:anywhere]"
               />
               <button
@@ -586,11 +606,11 @@ export default function ForumPostDetailPage() {
                 disabled={busy || status !== "authenticated"}
                 className="font-pixel pixel-btn bg-chess-accent px-4 py-2 text-sm font-semibold text-white border-chess-accent disabled:opacity-50"
               >
-                댓글 작성
+                {t("forum.commentPost")}
               </button>
             </form>
             <div className="mt-4 space-y-3">
-              {post.comments.map((c) => (
+              {pagedComments.map((c) => (
                 <article key={c.id} className="pixel-frame p-3">
                   {editingCommentId === c.id ? (
                     <form onSubmit={onSaveComment} className="space-y-2">
@@ -609,14 +629,14 @@ export default function ForumPostDetailPage() {
                           disabled={busy}
                           className="font-pixel pixel-btn bg-chess-accent px-3 py-1 text-xs font-semibold text-white border-chess-accent disabled:opacity-50"
                         >
-                          저장
+                          {t("forum.save")}
                         </button>
                         <button
                           type="button"
                           onClick={cancelEditComment}
                           className="font-pixel pixel-btn px-3 py-1 text-xs"
                         >
-                          취소
+                          {t("settings.cancel")}
                         </button>
                       </div>
                     </form>
@@ -633,7 +653,7 @@ export default function ForumPostDetailPage() {
                         className="min-w-0 font-semibold text-chess-primary hover:text-chess-accent hover:underline underline-offset-2 sm:text-lg"
                       />
                       <span className="shrink-0 tabular-nums opacity-90">
-                        · {new Date(c.created_at).toLocaleString()}
+                        · {formatPostDateTime(c.created_at, language)}
                       </span>
                     </div>
                     {editingCommentId !== c.id && status === "authenticated" && (
@@ -645,14 +665,14 @@ export default function ForumPostDetailPage() {
                               onClick={() => beginEditComment(c)}
                               className="text-xs text-chess-accent hover:underline"
                             >
-                              수정
+                              {t("forum.edit")}
                             </button>
                             <button
                               type="button"
                               onClick={() => onDeleteComment(c.id)}
                               className="text-xs text-red-500 hover:underline"
                             >
-                              삭제
+                              {t("forum.delete")}
                             </button>
                           </>
                         )}
@@ -662,7 +682,7 @@ export default function ForumPostDetailPage() {
                             onClick={() => openReportComment(c.id)}
                             className="text-xs text-chess-muted hover:underline"
                           >
-                            신고
+                            {t("forum.reportShort")}
                           </button>
                         )}
                       </div>
@@ -671,11 +691,34 @@ export default function ForumPostDetailPage() {
                 </article>
               ))}
             </div>
+            {comments.length > COMMENT_PAGE_SIZE && (
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCommentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={commentPage === 1}
+                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {t("forum.pagination.prev")}
+                </button>
+                <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                  {commentPage} / {commentsPageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCommentPage((prev) => Math.min(commentsPageCount, prev + 1))}
+                  disabled={commentPage === commentsPageCount}
+                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {t("forum.pagination.next")}
+                </button>
+              </div>
+            )}
           </section>
 
           <ReportModal
             open={reportOpen && reportTarget !== null}
-            title={reportTarget === "post" ? "게시글 신고" : "댓글 신고"}
+            title={reportTarget === "post" ? t("forum.reportPostTitle") : t("forum.reportCommentTitle")}
             busy={reportBusy}
             onClose={() => {
               setReportOpen(false);

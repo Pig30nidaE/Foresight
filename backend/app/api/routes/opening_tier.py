@@ -6,16 +6,19 @@ GET  /api/v1/opening-tier/brackets  → 레이팅 구간 목록 (Lichess + Chess
 GET  /api/v1/opening-tier/detail    → 오프닝 핵심 포인트 + YouTube 링크
 GET  /api/v1/opening-tier/export    → CSV 또는 JSON 파일 다운로드
 """
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
+from app.api.deps import get_current_user
 from app.features.opening_tier.services.opening_tier_service import OpeningTierService, RATING_BRACKETS
 from app.features.opening_tier.services.opening_detail_service import get_opening_detail
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 _VALID_RATINGS = set(RATING_BRACKETS)  # 서비스 정의와 자동 동기화
 _VALID_SPEEDS = {"bullet", "blitz", "rapid", "classical"}
+_OPENING_TIER_CLIENT_HEADER = "x-foresight-client"
+_OPENING_TIER_CLIENT_VALUE = "web-ui"
 
 
 def _get_service(request: Request) -> OpeningTierService:
@@ -50,12 +53,23 @@ def _validate_color(color: str) -> None:
         )
 
 
+def _require_opening_tier_client(request: Request) -> None:
+    """브라우저 주소창 직접 접근을 줄이기 위한 최소 헤더 검증."""
+    if request.headers.get(_OPENING_TIER_CLIENT_HEADER) != _OPENING_TIER_CLIENT_VALUE:
+        raise HTTPException(status_code=403, detail="직접 접근은 허용되지 않습니다.")
+
+
 @router.get("/global")
 async def get_global_opening_tiers(
     request: Request,
-    rating: int = Query(..., description="Lichess 레이팅 구간 (400/800/1200/1600/2000/2400)"),
+    rating: int = Query(..., description="Lichess 레이팅 bucket (1000/1200/1400/1600/1800/2000/2200/2500)"),
     speed: str = Query("blitz", description="타임클래스 (bullet/blitz/rapid/classical)"),
     color: str = Query("white", description="기준 색상 (white/black)"),
+    q: str | None = Query(None, min_length=1, max_length=80, description="오프닝 검색어 (ECO/이름)"),
+    allow_cold_fetch: bool = Query(
+        False,
+        description="true면 캐시 미존재 시 즉시 계산(무거움). 기본값 false면 warming 상태를 반환.",
+    ),
 ):
     """레이팅 구간별 오프닝 티어 랭킹 반환.
 
@@ -64,16 +78,36 @@ async def get_global_opening_tiers(
     _validate_rating(rating)
     _validate_speed(speed)
     _validate_color(color)
+    _require_opening_tier_client(request)
 
     _service = _get_service(request)
     try:
         openings, data_period, collected_at = await _service.get_opening_tiers(
-            rating, speed, color
+            rating, speed, color, allow_fetch_if_missing=allow_cold_fetch
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        if str(exc) == "warming":
+            return {
+                "state": "warming",
+                "rating": rating,
+                "speed": speed,
+                "color": color,
+                "retry_after_seconds": 8,
+                "detail": "opening tier cache warming in progress",
+                "data_period": "",
+                "collected_at": "",
+                "openings": [],
+                "total_openings": 0,
+            }
+        raise HTTPException(status_code=503, detail=str(exc))
+    openings = _service.filter_openings(openings, q)
+    # 기본 티어표에서는 1% 미만 마이너 variation 을 숨기고,
+    # 검색(query) 상황에서는 탐색 가능하도록 노출합니다.
+    if not (q or "").strip():
+        openings = [row for row in openings if not bool(row.get("is_minor", False))]
 
     return {
+        "state": "ready",
         "rating": rating,
         "speed": speed,
         "color": color,
@@ -141,7 +175,9 @@ async def export_opening_tiers(
         )
 
     try:
-        openings, _, _ = await _service.get_opening_tiers(rating, speed, color)
+        openings, _, _ = await _service.get_opening_tiers(
+            rating, speed, color, allow_fetch_if_missing=True
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
