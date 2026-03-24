@@ -116,10 +116,14 @@ async def postgres_unreachable_returns_503(request: Request, call_next):
         raise
 
 # CORS 설정
+# - allow_origins: FORESIGHT_CORS_ORIGINS + 기본값(로컬, 프로덕션 Vercel)
+# - allow_origin_regex: 로컬 호스트 + Vercel 프리뷰(*.vercel.app) — 프리뷰 URL은 매 배포마다 달라짐
+_VERCEL_APP_ORIGIN_RE = r"^https://[a-zA-Z0-9.-]+\.vercel\.app$"
+_LOCAL_ORIGIN_RE = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origin_regex=rf"{_LOCAL_ORIGIN_RE}|{_VERCEL_APP_ORIGIN_RE}",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
