@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* 한글·라틴 공통 픽셀 폰트 (파일: noonfonts 배포본, CDN) */
+@font-face {
+  font-family: "NeoDunggeunmo";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2108@1.1/NeoDunggeunmo.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ── Chess 커스텀 팔레트 ───────────────────────────────────
    라이트: 크림·웜 그레이
    다크: 쿨 차콜 계층 + 구리색 액센트 (저채도, 가독성 우선)
@@ -32,19 +41,54 @@
 :root {
   --background: #fbfbf4;
   --foreground: #1a1714;
+  /* Pixel / arcade chrome (VT323 via next/font on body → --font-pixel) */
+  --pixel-border-w: 2px;
+  --pixel-radius: 0px;
+  /* Checker dither (2×2) */
+  --pixel-dither: repeating-conic-gradient(
+    var(--color-chess-bg) 0% 25%,
+    color-mix(in srgb, var(--foreground) 9%, var(--color-chess-bg)) 0% 50%,
+    var(--color-chess-bg) 0% 75%,
+    color-mix(in srgb, var(--foreground) 6%, var(--color-chess-bg)) 0% 100%
+  );
 }
 
 html {
   overflow-x: hidden;
+  /* rem 기준 살짝 키움 — 영문·숫자·Tailwind text-* 전반 가독성 */
+  font-size: 103%;
 }
 
 body {
   overflow-x: hidden;
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans, 'Inter', 'Apple SD Gothic Neo', sans-serif);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* 기본 본문: 네오둥근모(한글 픽셀) + VT323(--font-pixel) 보조 */
+  font-family: "NeoDunggeunmo", var(--font-pixel, ui-monospace), ui-monospace, monospace;
+  /* 한글: 브라우저 기본(서브픽셀) 스무딩 — 전역 antialiased/none 강제보다 윤곽이 덜 흐릿한 경우가 많음 */
+  text-rendering: geometricPrecision;
+  /* Layered scan + checker dither (no smooth gradients) */
+  background-image:
+    var(--pixel-dither),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 3px,
+      color-mix(in srgb, var(--foreground) 4%, transparent) 3px,
+      color-mix(in srgb, var(--foreground) 4%, transparent) 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 3px,
+      color-mix(in srgb, var(--foreground) 3%, transparent) 3px,
+      color-mix(in srgb, var(--foreground) 3%, transparent) 4px
+    );
+  background-size:
+    4px 4px,
+    auto,
+    auto;
+  background-blend-mode: multiply, normal, normal;
 }
 
 /* Dark Mode — 계층: bg < surface < elevated, 테두리는 낮은 대비로 구분 */
@@ -72,27 +116,87 @@ html.dark {
   --color-fm-bar-loss: #f87171;
 }
 
+html.dark {
+  --pixel-dither: repeating-conic-gradient(
+    var(--color-chess-bg) 0% 25%,
+    rgba(255, 255, 255, 0.045) 0% 50%,
+    var(--color-chess-bg) 0% 75%,
+    rgba(0, 0, 0, 0.35) 0% 100%
+  );
+}
+
 html.dark body {
-  background: var(--background);
+  background-color: var(--background);
   background-image:
-    radial-gradient(ellipse 100% 60% at 50% -15%, rgba(196, 165, 116, 0.055), transparent 55%),
-    radial-gradient(ellipse 80% 50% at 100% 50%, rgba(120, 132, 160, 0.05), transparent 50%);
+    var(--pixel-dither),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 3px,
+      rgba(255, 255, 255, 0.03) 3px,
+      rgba(255, 255, 255, 0.03) 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 3px,
+      rgba(255, 255, 255, 0.025) 3px,
+      rgba(255, 255, 255, 0.025) 4px
+    );
+  background-size:
+    4px 4px,
+    auto,
+    auto;
+  background-blend-mode: soft-light, normal, normal;
+}
+
+/* CRT scanlines — minimal; disabled when reduced motion */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0.04;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    color-mix(in srgb, var(--foreground) 12%, transparent) 2px,
+    color-mix(in srgb, var(--foreground) 12%, transparent) 3px
+  );
+}
+
+html.dark body::after {
+  opacity: 0.045;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.35) 2px,
+    rgba(0, 0, 0, 0.35) 3px
+  );
 }
 
 /* ── 커스텀 스크롤바 ─────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-chess-surface);
+  background: var(--color-chess-bg);
+  border: 2px solid var(--color-chess-border);
+  box-shadow: inset 2px 2px 0 color-mix(in srgb, black 12%, transparent);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-chess-border);
-  border-radius: 3px;
+  border-radius: 0;
+  border: 2px solid var(--color-chess-primary);
+  box-shadow: inset 1px 1px 0 color-mix(in srgb, white 25%, transparent);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-chess-muted);
+  background: var(--color-chess-accent);
+  border-color: var(--color-chess-primary);
 }
 
 /* ── 텍스트 선택 ─────────────────────────────────────────── */
@@ -154,25 +258,23 @@ html.dark ::selection {
   }
 }
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--color-chess-border) 25%,
-    var(--color-chess-elevated) 50%,
-    var(--color-chess-border) 75%
+  background-color: var(--color-chess-border);
+  background-image: repeating-conic-gradient(
+    color-mix(in srgb, var(--color-chess-elevated) 70%, var(--color-chess-border)) 0% 25%,
+    var(--color-chess-border) 0% 50%,
+    color-mix(in srgb, var(--color-chess-elevated) 70%, var(--color-chess-border)) 0% 75%,
+    var(--color-chess-border) 0% 100%
   );
-  background-size: 800px 100%;
+  background-size: 6px 6px;
   animation: shimmer 1.4s infinite linear;
-  border-radius: 0.375rem;
+  border-radius: var(--pixel-radius);
+  border: 2px solid var(--color-chess-border);
 }
 
 html.dark .skeleton {
-  background: linear-gradient(
-    90deg,
-    #2e303a 25%,
-    #383b48 50%,
-    #2e303a 75%
-  );
-  background-size: 800px 100%;
+  background-color: #2e303a;
+  background-image: repeating-conic-gradient(#383b48 0% 25%, #2e303a 0% 50%, #383b48 0% 75%, #2e303a 0% 100%);
+  background-size: 6px 6px;
 }
 
 /* ── 도트 그리드 배경 (홈 히어로) ───────────────────────── */
@@ -196,4 +298,234 @@ html.dark .dot-grid {
 }
 .animate-loading-slide {
   animation: loading-slide 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::after {
+    display: none;
+  }
+  .animate-fade-in {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .animate-loading-slide {
+    animation: none;
+  }
+}
+
+/* ── Pixel UI utilities (16-bit HUD / RPG window) ───────── */
+.font-pixel {
+  font-family: var(--font-pixel), "NeoDunggeunmo", ui-monospace, monospace;
+  /* VT323 등 라틴 픽셀 라벨이 본문 대비 작게 느껴질 때 살짝만 키움 */
+  font-size: 1.055em;
+  letter-spacing: 0.04em;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  text-shadow:
+    1px 0 0 color-mix(in srgb, var(--color-chess-bg) 55%, transparent),
+    0 1px 0 color-mix(in srgb, black 22%, transparent);
+}
+
+html.dark .font-pixel {
+  text-shadow:
+    1px 0 0 color-mix(in srgb, var(--color-chess-bg) 40%, transparent),
+    0 1px 0 rgba(0, 0, 0, 0.65);
+}
+
+.pixel-frame {
+  position: relative;
+  border: var(--pixel-border-w) solid var(--color-chess-border);
+  border-radius: var(--pixel-radius);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-chess-primary) 35%, transparent),
+    inset 2px 2px 0 color-mix(in srgb, white 32%, transparent),
+    inset -3px -3px 0 color-mix(in srgb, black 14%, transparent),
+    4px 4px 0 color-mix(in srgb, var(--color-chess-primary) 22%, transparent);
+}
+
+html.dark .pixel-frame {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 2px 2px 0 color-mix(in srgb, white 10%, transparent),
+    inset -3px -3px 0 color-mix(in srgb, black 55%, transparent),
+    4px 4px 0 rgba(0, 0, 0, 0.65);
+}
+
+/* Dithered panel fill inside HUD windows */
+.pixel-hud-fill {
+  background-color: var(--color-chess-surface);
+  background-image: var(--pixel-dither);
+  background-size: 4px 4px;
+  background-blend-mode: multiply;
+}
+
+html.dark .pixel-hud-fill {
+  background-color: color-mix(in srgb, var(--color-chess-surface) 88%, black);
+  background-blend-mode: soft-light;
+}
+
+/* First-move stacked bar textures */
+.fm-texture-win {
+  background-color: var(--color-fm-bar-win);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 2px,
+    color-mix(in srgb, black 18%, transparent) 2px,
+    color-mix(in srgb, black 18%, transparent) 3px
+  );
+}
+.fm-texture-draw {
+  background-color: var(--color-fm-bar-draw);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 2px,
+    color-mix(in srgb, black 14%, transparent) 2px,
+    color-mix(in srgb, black 14%, transparent) 3px
+  );
+}
+.fm-texture-loss {
+  background-color: var(--color-fm-bar-loss);
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 2px,
+    color-mix(in srgb, black 16%, transparent) 2px,
+    color-mix(in srgb, black 16%, transparent) 3px
+  );
+}
+
+.pixel-btn {
+  border: var(--pixel-border-w) solid var(--color-chess-border);
+  border-radius: var(--pixel-radius);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 22%, transparent),
+    2px 2px 0 color-mix(in srgb, var(--color-chess-primary) 15%, transparent);
+}
+
+.pixel-btn:active {
+  box-shadow: inset 2px 2px 0 color-mix(in srgb, black 15%, transparent);
+  transform: translate(1px, 1px);
+}
+
+html.dark .pixel-btn {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 6%, transparent),
+    2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.pixel-input {
+  border: var(--pixel-border-w) solid var(--color-chess-border);
+  border-radius: var(--pixel-radius);
+  background: var(--color-chess-surface);
+  box-shadow: inset 2px 2px 0 color-mix(in srgb, black 8%, transparent);
+}
+
+.pixel-input:focus {
+  outline: 2px solid var(--color-chess-accent);
+  outline-offset: 0;
+}
+
+html.dark .pixel-input:focus {
+  outline-color: var(--color-chess-accent);
+}
+
+.pixel-progress-track {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 12px;
+  gap: 2px;
+  border: 2px solid var(--color-chess-border);
+  padding: 2px;
+  background: var(--color-chess-bg);
+}
+
+/* Decorative sticker badges (dashboard) */
+.pixel-sticker {
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 6px;
+  border: 2px solid var(--color-chess-primary);
+  background: var(--color-chess-warn);
+  color: var(--color-chess-inverse);
+  image-rendering: pixelated;
+  box-shadow:
+    inset 1px 1px 0 color-mix(in srgb, white 35%, transparent),
+    2px 2px 0 color-mix(in srgb, black 35%, transparent);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+html.dark .pixel-sticker {
+  color: #1a1b22;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.2),
+    2px 2px 0 rgba(0, 0, 0, 0.7);
+}
+
+@keyframes pixel-glitch-text {
+  0%,
+  92%,
+  100% {
+    filter: none;
+    transform: translate(0, 0);
+  }
+  93% {
+    text-shadow:
+      2px 0 var(--color-chess-accent),
+      -1px 0 var(--color-chess-loss),
+      0 0 0 var(--color-chess-primary);
+    transform: translate(-1px, 0);
+  }
+  94% {
+    text-shadow:
+      -1px 0 var(--color-chess-accent),
+      1px 0 var(--color-chess-warn);
+    transform: translate(1px, 0);
+  }
+  95% {
+    text-shadow: 1px 1px 0 color-mix(in srgb, var(--color-chess-accent) 50%, transparent);
+    transform: translate(0, 0);
+  }
+}
+
+.pixel-glitch-title {
+  animation: pixel-glitch-text 8s steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-glitch-title {
+    animation: none;
+  }
+  .pixel-btn:active {
+    transform: none;
+  }
+}
+
+/* Insufficient-data overlay: no backdrop blur */
+.pixel-lock-overlay {
+  background: color-mix(in srgb, var(--color-chess-bg) 82%, var(--color-chess-muted));
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    color-mix(in srgb, var(--foreground) 6%, transparent) 4px,
+    color-mix(in srgb, var(--foreground) 6%, transparent) 5px
+  );
+}
+
+html.dark .pixel-lock-overlay {
+  background: color-mix(in srgb, var(--color-chess-bg) 75%, black);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    rgba(255, 255, 255, 0.04) 4px,
+    rgba(255, 255, 255, 0.04) 5px
+  );
 }

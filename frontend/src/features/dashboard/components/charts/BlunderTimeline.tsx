@@ -10,9 +10,10 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import type { TimePressureStats } from "@/types";
 import { useTranslation } from "@/shared/lib/i18n";
+import { PixelWarnGlyph } from "@/shared/components/ui/PixelGlyphs";
 
 // ── 목 데이터 (게임-클록 데이터 없을 때 표시용) ─────────────
 const MOCK_MOVE_DATA = [
@@ -44,7 +45,7 @@ function pressureTone(pct: number, t: any) {
       text: "text-chess-loss",
       badge:
         "border border-chess-loss/40 bg-chess-loss/10 text-chess-loss dark:bg-red-950/40 dark:border-chess-loss/35",
-      bar: "from-red-600 to-rose-600",
+      barClass: "bg-red-600",
     };
   }
   if (pct >= 20) {
@@ -53,7 +54,7 @@ function pressureTone(pct: number, t: any) {
       text: "text-chess-warn",
       badge:
         "border border-amber-600/50 bg-amber-100 text-amber-950 dark:bg-amber-950/35 dark:text-amber-200 dark:border-amber-500/40",
-      bar: "from-amber-500 to-amber-600",
+      barClass: "bg-amber-600",
     };
   }
   return {
@@ -61,12 +62,13 @@ function pressureTone(pct: number, t: any) {
     text: "text-chess-win",
     badge:
       "border border-chess-win/45 bg-chess-win/10 text-chess-win dark:bg-chess-win/18 dark:border-chess-win/40",
-    bar: "from-green-600 to-green-500",
+      barClass: "bg-green-600",
   };
 }
 
 export default function BlunderTimeline({ data }: Props) {
   const { t } = useTranslation();
+  const areaPatternId = useId().replace(/:/g, "");
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
@@ -112,7 +114,8 @@ export default function BlunderTimeline({ data }: Props) {
   return (
     <div className="space-y-5">
       {isMock && (
-        <p className="text-xs text-chess-warn/90 dark:text-chess-warn/80 text-center">
+        <p className="text-xs text-chess-warn/90 dark:text-chess-warn/80 text-center inline-flex items-center justify-center gap-1.5 w-full flex-wrap">
+          <PixelWarnGlyph size={14} className="shrink-0 text-chess-warn" />
           {t("chart.mockData")}
         </p>
       )}
@@ -124,11 +127,11 @@ export default function BlunderTimeline({ data }: Props) {
             upq ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"
           }`}
         >
-          <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
+          <div className="pixel-frame bg-chess-bg px-4 py-3">
             <p className="text-chess-muted">{t("chart.analyzedGames")}</p>
             <p className="mt-1 text-lg font-black text-chess-primary">{t("chart.gamesCount").replace("{n}", String(data!.games_with_clock))}</p>
           </div>
-          <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
+          <div className="pixel-frame bg-chess-bg px-4 py-3">
             <p className="text-chess-muted">{t("chart.timePressureRate")}</p>
             <p className={`mt-1 text-lg font-black ${overall.pressure_ratio >= 0.3 ? "text-chess-loss" : overall.pressure_ratio >= 0.15 ? "text-chess-warn" : "text-chess-win"}`}>
               {Math.round(overall.pressure_ratio * 100)}%
@@ -139,14 +142,14 @@ export default function BlunderTimeline({ data }: Props) {
               </p>
             )}
           </div>
-          <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
+          <div className="pixel-frame bg-chess-bg px-4 py-3">
             <p className="text-chess-muted">{t("chart.avgThinkTime")}</p>
             <p className="mt-1 text-lg font-black text-chess-primary">
               {overall.avg_time_spent != null ? t("chart.seconds").replace("{n}", String(overall.avg_time_spent)) : "-"}
             </p>
           </div>
           {upq && (
-            <div className="bg-chess-bg border border-chess-border rounded-xl px-4 py-3">
+            <div className="pixel-frame bg-chess-bg px-4 py-3">
               <p className="text-chess-muted">{t("chart.pressureSevereUnderPct")}</p>
               <p
                 className={`mt-1 text-lg font-black ${
@@ -171,7 +174,7 @@ export default function BlunderTimeline({ data }: Props) {
       <div className={phaseData && phaseData.length > 0 ? "grid gap-4 md:grid-cols-2" : ""}>
         {/* 페이즈별 압박률 카드형 막대 */}
         {phaseData && phaseData.length > 0 && (
-          <div className="rounded-2xl border border-chess-border/70 dark:border-chess-border/50 bg-chess-bg/95 dark:bg-chess-elevated/12 p-4 shadow-sm">
+          <div className="pixel-frame bg-chess-bg/95 dark:bg-chess-elevated/12 p-4">
             <div className="flex items-end justify-between gap-3 mb-3">
               <p className="text-xs font-medium tracking-wide text-chess-primary">{t("chart.phasePressureMap")}</p>
               {topRiskPhase && (
@@ -188,12 +191,12 @@ export default function BlunderTimeline({ data }: Props) {
                 return (
                   <div
                     key={entry.phase}
-                    className="rounded-xl border border-chess-border/55 dark:border-chess-border/40 bg-chess-surface/60 dark:bg-chess-bg/35 px-3 py-2.5"
+                    className="pixel-frame bg-chess-surface/70 dark:bg-chess-bg/35 px-3 py-2.5"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-semibold text-sm text-chess-primary">{entry.phase}</p>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${tone.badge}`}>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 border-2 ${tone.badge}`}>
                           {tone.label}
                         </span>
                         <span className={`text-sm font-black tabular-nums ${tone.text}`}>
@@ -203,9 +206,9 @@ export default function BlunderTimeline({ data }: Props) {
                     </div>
 
                     {/* 읽기 전용 막대 (슬라이더 썸 제거) */}
-                    <div className="mt-2 h-2 w-full rounded-full overflow-hidden bg-chess-elevated dark:bg-chess-surface/50 ring-1 ring-chess-border/45 dark:ring-chess-border/30">
+                    <div className="mt-2 h-2.5 w-full overflow-hidden bg-chess-elevated dark:bg-chess-surface/50 border border-chess-border/50">
                       <div
-                        className={`h-full rounded-full bg-gradient-to-r ${tone.bar}`}
+                        className={`h-full ${tone.barClass}`}
                         style={{ width: `${Math.max(entry.pressure_pct, 2)}%` }}
                       />
                     </div>
@@ -222,7 +225,7 @@ export default function BlunderTimeline({ data }: Props) {
         )}
 
         {/* 수 번호별 압박률 곡선 */}
-        <div className="rounded-2xl border border-chess-border/70 dark:border-chess-border/50 bg-chess-bg/90 dark:bg-chess-elevated/12 p-4 shadow-sm">
+        <div className="pixel-frame bg-chess-bg/90 dark:bg-chess-elevated/12 p-4">
           <p className="text-xs tracking-wide text-chess-muted mb-2">
             {t("chart.pressureByMove")}{isMock ? t("chart.mockSuffix") : ""}
           </p>
@@ -230,12 +233,14 @@ export default function BlunderTimeline({ data }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={moveData} margin={{ left: -10, right: isMobile ? -10 : 8, top: 4, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="pressureGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                  </linearGradient>
+                  <pattern id={areaPatternId} width="5" height="5" patternUnits="userSpaceOnUse">
+                    <rect width="5" height="5" fill="#ea580c" fillOpacity={0.28} />
+                    <rect x="0" y="0" width="2" height="2" fill="#000" opacity={0.14} />
+                    <rect x="2" y="2" width="2" height="2" fill="#fff" opacity={0.08} />
+                    <rect x="4" y="4" width="1" height="1" fill="#000" opacity={0.2} />
+                  </pattern>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#b9bdb4" />
+                <CartesianGrid strokeDasharray="4 4" stroke="#b9bdb4" strokeWidth={1.5} />
                 <XAxis
                   dataKey="move_number"
                   tickFormatter={(v) => t("chart.moveN").replace("{n}", String(v))}
@@ -263,28 +268,28 @@ export default function BlunderTimeline({ data }: Props) {
                     name === "pressure_pct" ? t("chart.pressure") : t("chart.think"),
                   ]}
                   labelFormatter={(v) => t("chart.moveN").replace("{n}", String(v))}
-                  contentStyle={{ background: "#FBFBF2", border: "1px solid #C8CBC5", borderRadius: 8, fontSize: 12 }}
+                  contentStyle={{ background: "#FBFBF2", border: "2px solid #b9bdb4", borderRadius: 2, fontSize: 12 }}
                 />
                 <Area
                   yAxisId="pressure"
-                  type="monotone"
+                  type="linear"
                   dataKey="pressure_pct"
-                  stroke="#ea580c"
-                  strokeWidth={2.5}
-                  fill="url(#pressureGrad)"
-                  dot={{ r: 2, strokeWidth: 0, fill: "#ea580c" }}
-                  activeDot={{ r: 4, fill: "#b91c1c", stroke: "#fff", strokeWidth: 1 }}
+                  stroke="#c2410c"
+                  strokeWidth={3}
+                  fill={`url(#${areaPatternId})`}
+                  dot={{ r: 3, strokeWidth: 2, stroke: "#1a1714", fill: "#ea580c" }}
+                  activeDot={{ r: 5, fill: "#b91c1c", stroke: "#1a1714", strokeWidth: 2 }}
                 />
                 {!isMobile && (
                   <Line
                     yAxisId="time"
-                    type="monotone"
+                    type="linear"
                     dataKey="avg_time_spent"
                     connectNulls
-                    stroke="#2563eb"
-                    strokeWidth={2}
-                    dot={{ r: 2, strokeWidth: 0, fill: "#2563eb" }}
-                    activeDot={{ r: 4, fill: "#1d4ed8", stroke: "#fff", strokeWidth: 1 }}
+                    stroke="#1d4ed8"
+                    strokeWidth={3}
+                    dot={{ r: 3, strokeWidth: 2, stroke: "#1a1714", fill: "#3b82f6" }}
+                    activeDot={{ r: 5, fill: "#1d4ed8", stroke: "#1a1714", strokeWidth: 2 }}
                   />
                 )}
               </ComposedChart>
@@ -292,11 +297,11 @@ export default function BlunderTimeline({ data }: Props) {
           </div>
           <div className="mt-2 flex items-center gap-4 text-[11px] text-chess-muted">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-orange-600" /> {t("chart.pressureRatePct")}
+              <span className="h-2 w-2 border border-chess-primary/30 bg-orange-600" /> {t("chart.pressureRatePct")}
             </span>
             {!isMobile && (
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-blue-600" /> {t("chart.avgThinkSec")}
+                <span className="h-2 w-2 border border-chess-primary/30 bg-blue-600" /> {t("chart.avgThinkSec")}
               </span>
             )}
           </div>

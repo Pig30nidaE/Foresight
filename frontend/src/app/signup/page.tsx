@@ -85,7 +85,7 @@ export default function SignupPage() {
     : "이미 가입된 이메일입니다. 기존에 사용하던 로그인 수단으로 들어가 주세요.";
 
   return (
-    <section className="mx-auto w-full max-w-lg rounded-xl border border-chess-border bg-chess-surface/70 p-6">
+    <section className="mx-auto w-full max-w-lg pixel-frame bg-chess-surface/75 p-6">
       <h1 className="text-xl font-bold text-chess-primary">회원가입 완료</h1>
       <p className="mt-2 text-sm text-chess-muted">
         포럼 쓰기 기능을 이용하려면 닉네임과 약관 동의를 완료해 주세요.

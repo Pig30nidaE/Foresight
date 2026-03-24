@@ -134,7 +134,7 @@ export default function SignupVerifyEmailPage() {
       ? `${me.masked_conflict_email}(으)로 이미 가입되어 있습니다.`
       : "이미 가입된 이메일입니다.";
     return (
-      <section className="mx-auto w-full max-w-lg rounded-xl border border-chess-border bg-chess-surface/70 p-6">
+      <section className="mx-auto w-full max-w-lg pixel-frame bg-chess-surface/75 p-6">
         <h1 className="text-xl font-bold text-chess-primary">가입할 수 없습니다</h1>
         <p className="mt-3 text-sm text-red-200">{msg}</p>
         <p className="mt-2 text-sm text-chess-muted">기존에 연동한 소셜 로그인으로 다시 들어와 주세요.</p>
@@ -145,7 +145,7 @@ export default function SignupVerifyEmailPage() {
   const hint = maskHint(me?.email ?? null);
 
   return (
-    <section className="mx-auto w-full max-w-lg rounded-xl border border-chess-border bg-chess-surface/70 p-6">
+    <section className="mx-auto w-full max-w-lg pixel-frame bg-chess-surface/75 p-6">
       <h1 className="text-xl font-bold text-chess-primary">이메일 인증</h1>
       <p className="mt-2 text-sm text-chess-muted">
         회원가입을 마치려면 등록된 이메일로 보낸 6자리 코드를 입력해 주세요.

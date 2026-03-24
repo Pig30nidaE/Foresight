@@ -425,15 +425,16 @@ def _material_score(board: chess.Board, color: chess.Color) -> int:
 def _promote_best_t2_to_t1(
     white_moves: List[AnalyzedMove],
     black_moves: List[AnalyzedMove],
-) -> None:
+) -> Optional[AnalyzedMove]:
     """
     T2 수 중 게임에서 가장 잘 둔 수 1개만 T1으로 승격.
     정렬: cp_loss ↓, win_pct_loss ↓, is_only_best ↑, user_rank ↑
+    승격된 수를 반환 (스트리밍 클라이언트에 tier 갱신 전송용).
     """
     pool = white_moves + black_moves
     t2_only = [m for m in pool if m.tier == MoveTier.T2]
     if not t2_only:
-        return
+        return None
     t2_only.sort(
         key=lambda m: (
             m.cp_loss,
@@ -443,7 +444,9 @@ def _promote_best_t2_to_t1(
             m.halfmove,
         )
     )
-    t2_only[0].tier = MoveTier.T1
+    promoted = t2_only[0]
+    promoted.tier = MoveTier.T1
+    return promoted
 
 
 def analyze_single_game_sync(
@@ -871,7 +874,6 @@ def analyze_game_streaming(
 
     white_moves: List[AnalyzedMove] = []
     black_moves: List[AnalyzedMove] = []
-    all_plies: List[AnalyzedMove] = []
 
     try:
         with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
@@ -909,7 +911,8 @@ def analyze_game_streaming(
                         white_moves.append(analyzed)
                     else:
                         black_moves.append(analyzed)
-                    all_plies.append(analyzed)
+                    if on_move:
+                        on_move(_analyzed_move_to_dict(analyzed))
 
                 # board.push는 _analyze_single_move_with_fen 내부에서 수행
                 node = next_node
@@ -922,11 +925,9 @@ def analyze_game_streaming(
         logger.exception(f"Game analysis error: {exc}")
         raise
 
-    _promote_best_t2_to_t1(white_moves, black_moves)
-
-    if on_move:
-        for m in sorted(all_plies, key=lambda x: x.halfmove):
-            on_move(_analyzed_move_to_dict(m))
+    promoted = _promote_best_t2_to_t1(white_moves, black_moves)
+    if on_move and promoted is not None:
+        on_move(_analyzed_move_to_dict(promoted))
 
     white_analysis = PlayerAnalysisResult(
         username=white_player,

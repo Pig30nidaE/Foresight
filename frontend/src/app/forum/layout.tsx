@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export default function ForumLayout({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
-      <header className="rounded-xl border border-chess-border bg-chess-surface/60 px-4 py-4 sm:px-6">
+      <header className="pixel-frame bg-chess-surface/65 px-4 py-4 sm:px-6">
         <p className="text-xs font-medium uppercase tracking-wide text-chess-muted">Community</p>
         <h1 className="mt-1 text-2xl font-bold text-chess-primary">포럼</h1>
         <p className="mt-2 text-sm text-chess-muted">

@@ -93,29 +93,30 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
 
   const modal = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-hidden overscroll-none bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-hidden overscroll-none bg-black/65"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl h-[90dvh] max-h-[90vh] min-h-0 flex flex-col bg-chess-bg border border-chess-border/60 rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-2xl h-[90dvh] max-h-[90vh] min-h-0 flex flex-col pixel-frame pixel-hud-fill overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="shrink-0 flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-chess-border">
+        <div className="shrink-0 flex items-start justify-between gap-3 px-4 sm:px-6 pt-4 sm:pt-5 pb-3 sm:pb-4 border-b-2 border-chess-border bg-chess-surface/30 dark:bg-chess-elevated/20">
           <div className="flex-1 min-w-0">
-            <span className="text-xs font-mono font-bold text-chess-accent mb-1 block">
+            <span className="font-pixel text-xs font-bold text-chess-accent mb-1 block">
               {entry.eco}
             </span>
-            <h2 className="text-lg font-bold text-chess-primary leading-tight">
+            <h2 className="font-pixel text-base sm:text-lg font-bold text-chess-primary leading-tight">
               {entry.name}
             </h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="shrink-0 text-chess-muted hover:text-chess-primary transition-colors text-xl leading-none mt-0.5"
+            className="font-pixel pixel-btn shrink-0 px-2 py-1 text-chess-muted hover:text-chess-primary text-sm leading-none mt-0.5"
             aria-label="닫기"
           >
-            ✕
+            X
           </button>
         </div>
 
@@ -146,25 +147,25 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                   />
                 </div>
                 {/* 네비게이션 버튼 */}
-                <div className="flex items-center gap-1 mt-3">
+                <div className="flex items-center gap-1 mt-3 flex-wrap justify-center">
                   <button
                     type="button"
                     onClick={() => setCurrentIndex(0)}
                     disabled={currentIndex === 0}
-                    className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
+                    className="font-pixel pixel-btn px-2 py-1 text-[10px] text-chess-primary disabled:opacity-25"
                   >
-                    |◀
+                    |&lt;
                   </button>
                   <button
                     type="button"
                     onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
                     disabled={currentIndex === 0}
-                    className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
+                    className="font-pixel pixel-btn px-2 py-1 text-[10px] text-chess-primary disabled:opacity-25"
                   >
-                    ◀
+                    &lt;
                   </button>
-                  <span className="text-xs text-chess-muted tabular-nums w-14 text-center">
-                    {currentIndex} / {maxIndex}
+                  <span className="font-pixel text-[10px] text-chess-muted tabular-nums w-16 text-center">
+                    {currentIndex}/{maxIndex}
                   </span>
                   <button
                     type="button"
@@ -172,17 +173,17 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                       setCurrentIndex((i) => Math.min(i + 1, maxIndex))
                     }
                     disabled={currentIndex === maxIndex}
-                    className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
+                    className="font-pixel pixel-btn px-2 py-1 text-[10px] text-chess-primary disabled:opacity-25"
                   >
-                    ▶
+                    &gt;
                   </button>
                   <button
                     type="button"
                     onClick={() => setCurrentIndex(maxIndex)}
                     disabled={currentIndex === maxIndex}
-                    className="px-2.5 py-1 text-xs text-chess-muted hover:text-chess-primary disabled:opacity-25 transition-colors font-mono"
+                    className="font-pixel pixel-btn px-2 py-1 text-[10px] text-chess-primary disabled:opacity-25"
                   >
-                    ▶|
+                    &gt;|
                   </button>
                 </div>
               </div>
@@ -190,7 +191,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
               {/* 수 순서 목록 + 메인 아이디어 */}
               <div className="flex-1 min-w-0 flex flex-col gap-4">
                 <div>
-                  <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
+                  <p className="font-pixel text-[10px] text-chess-muted mb-2 font-bold">
                     {t("tier.moveSeq")}
                   </p>
                   <div className="flex flex-wrap gap-1 content-start">
@@ -203,10 +204,10 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                           key={i}
                           type="button"
                           onClick={() => setCurrentIndex(i + 1)}
-                          className={`px-2 py-0.5 rounded text-xs font-mono transition-colors ${
+                          className={`font-pixel px-2 py-0.5 text-[10px] font-bold transition-colors ${
                             isActive
-                              ? "bg-chess-accent/30 text-chess-accent border border-chess-accent/40"
-                              : "text-chess-muted hover:text-chess-primary hover:bg-chess-border"
+                              ? "bg-chess-accent text-white border-2 border-chess-accent"
+                              : "pixel-btn text-chess-muted hover:text-chess-primary"
                           }`}
                         >
                           {isWhiteMove && (
@@ -220,8 +221,8 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                 </div>
 
                 {description && (
-                  <div className="rounded-lg bg-chess-accent/5 border border-chess-accent/20 px-3 py-2.5">
-                    <p className="text-xs text-chess-muted mb-1 font-medium uppercase tracking-wide">
+                  <div className="pixel-frame bg-chess-accent/8 border-chess-accent/35 px-3 py-2.5">
+                    <p className="font-pixel text-[10px] text-chess-muted mb-1 font-bold">
                       {t("tier.mainIdea")}
                     </p>
                     <p className="text-sm text-chess-primary leading-relaxed">
@@ -234,7 +235,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
           )}
 
           {/* 핵심 포인트 & YouTube 링크 */}
-          <div className="px-5 pb-4 border-t border-chess-border pt-4 shrink-0">
+          <div className="px-5 pb-4 border-t-2 border-chess-border pt-4 shrink-0 pixel-hud-fill">
           {/* 핵심 포인트 — 접기/펼치기 */}
           <div>
             <button
@@ -242,7 +243,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
               onClick={() => setTipsOpen((v) => !v)}
               className="flex items-center gap-1.5 w-full text-left group mb-2"
             >
-              <p className="text-xs text-chess-muted font-medium uppercase tracking-wide">
+              <p className="font-pixel text-[10px] text-chess-muted font-bold">
                 {t("tier.keyPoints")}
               </p>
               <svg
@@ -265,7 +266,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                     {[1, 2, 3].map((i) => (
                       <div
                         key={i}
-                        className="h-4 rounded bg-chess-border/40 animate-pulse"
+                        className="h-3 border-2 border-chess-border/50 bg-chess-border/30 animate-pulse"
                         style={{ width: `${70 + i * 8}%` }}
                       />
                     ))}
@@ -292,7 +293,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
 
           {/* YouTube 검색 링크 */}
           <div>
-            <p className="text-xs text-chess-muted mb-2 font-medium uppercase tracking-wide">
+            <p className="font-pixel text-[10px] text-chess-muted mb-2 font-bold">
               {t("tier.youtube")}
             </p>
             {detail ? (
@@ -300,7 +301,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                 href={detail.youtube_search_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600/8 text-chess-loss border border-red-600/28 hover:bg-red-600/15 transition-colors"
+                className="font-pixel pixel-btn inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold bg-red-600/12 text-chess-loss border-red-600/40 hover:bg-red-600/20"
               >
                 <svg
                   className="w-3.5 h-3.5"
@@ -312,13 +313,13 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                 {t("tier.searchYoutube").replace("{name}", entry.name)}
               </a>
             ) : detailLoading ? (
-              <div className="h-7 w-48 rounded-lg bg-chess-border/40 animate-pulse" />
+              <div className="h-7 w-48 border-2 border-chess-border/50 bg-chess-border/30 animate-pulse" />
             ) : (
               <a
                 href={`https://www.youtube.com/results?search_query=${encodeURIComponent(entry.name + " " + entry.eco + " 체스 오프닝 강의 한국어")}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600/8 text-chess-loss border border-red-600/28 hover:bg-red-600/15 transition-colors"
+                className="font-pixel pixel-btn inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold bg-red-600/12 text-chess-loss border-red-600/40 hover:bg-red-600/20"
               >
                 <svg
                   className="w-3.5 h-3.5"
@@ -335,8 +336,8 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 px-6 py-2.5 border-t border-chess-border text-center">
-          <p className="text-xs text-chess-muted">
+        <div className="shrink-0 px-4 py-2.5 border-t-2 border-chess-border text-center bg-chess-surface/25 dark:bg-chess-elevated/15">
+          <p className="font-pixel text-[10px] text-chess-muted">
             {t("tier.modalHelp")}
           </p>
         </div>

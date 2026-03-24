@@ -3,6 +3,7 @@ import json
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 import magic
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
@@ -16,6 +17,7 @@ from app.api.deps import (
     get_current_user,
     get_current_user_completed,
     get_optional_current_user,
+    get_token_payload,
 )
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -139,6 +141,18 @@ def _normalize_display_name(value: str) -> str:
     if len(normalized) < 2 or len(normalized) > 50:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Display name must be 2-50 chars")
     return normalized
+
+
+def _validate_avatar_url_value(url: str) -> str:
+    u = url.strip()
+    if len(u) > 2048:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Avatar URL too long")
+    if not u.startswith(("https://", "http://")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Avatar URL must start with http:// or https://",
+        )
+    return u
 
 
 async def _me_response(db: AsyncSession, me: User) -> MeResponse:
@@ -342,21 +356,59 @@ async def complete_signup(
 async def update_my_profile(
     request: Request,
     payload: ProfileUpdateRequest,
+    claims: Annotated[dict, Depends(get_token_payload)],
     db: AsyncSession = Depends(get_async_session),
     me: User = Depends(get_current_user_completed),
 ):
     _ = request
-    if payload.display_name is None and payload.profile_public is None:
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No profile fields provided")
+
+    if data.get("restore_oauth_avatar") and (
+        data.get("use_site_default_avatar") is True or "avatar_url" in data
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Conflicting avatar options",
+        )
+    if data.get("use_site_default_avatar") is True and "avatar_url" in data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Conflicting avatar options",
+        )
+
     changed = False
-    if payload.display_name is not None:
-        new_name = _normalize_display_name(payload.display_name)
+
+    if data.get("restore_oauth_avatar") is True:
+        me.avatar_sync_oauth = True
+        pic = claims.get("picture")
+        me.avatar_url = str(pic).strip() if pic else None
+        changed = True
+    elif data.get("use_site_default_avatar") is True:
+        me.avatar_sync_oauth = False
+        me.avatar_url = None
+        changed = True
+    elif "avatar_url" in data:
+        raw = data["avatar_url"]
+        if raw is None or (isinstance(raw, str) and not str(raw).strip()):
+            me.avatar_sync_oauth = False
+            me.avatar_url = None
+        else:
+            me.avatar_url = _validate_avatar_url_value(str(raw))
+            me.avatar_sync_oauth = False
+        changed = True
+
+    if "display_name" in data and data["display_name"] is not None:
+        new_name = _normalize_display_name(data["display_name"])
         if new_name != me.display_name.strip():
             me.display_name = new_name
             changed = True
-    if payload.profile_public is not None and payload.profile_public != me.profile_public:
-        me.profile_public = payload.profile_public
-        changed = True
+    if "profile_public" in data and data["profile_public"] is not None:
+        if data["profile_public"] != me.profile_public:
+            me.profile_public = data["profile_public"]
+            changed = True
+
     if not changed:
         return await _me_response(db, me)
     try:
@@ -993,6 +1045,12 @@ async def create_report(
         post = await db.get(Post, payload.post_id, with_for_update=True)
         if post is None or post.deleted_at is not None or post.is_hidden:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+        post_author = await db.get(User, post.author_id)
+        if post_author is not None and _is_admin_user(post_author):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="관리자가 작성한 글은 신고할 수 없습니다.",
+            )
     else:
         c0 = await db.get(Comment, payload.comment_id)
         if c0 is None or c0.deleted_at is not None or c0.is_hidden:
@@ -1003,6 +1061,12 @@ async def create_report(
         comment_locked = await db.get(Comment, payload.comment_id, with_for_update=True)
         if comment_locked is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
+        comment_author = await db.get(User, comment_locked.author_id)
+        if comment_author is not None and _is_admin_user(comment_author):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="관리자가 작성한 댓글은 신고할 수 없습니다.",
+            )
 
     report = Report(
         reporter_id=me.id,

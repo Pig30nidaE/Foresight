@@ -69,7 +69,8 @@ async def upsert_user_from_claims(db: AsyncSession, claims: dict) -> User:
     user = result.scalar_one_or_none()
     if user:
         user.email = email
-        user.avatar_url = avatar
+        if getattr(user, "avatar_sync_oauth", True):
+            user.avatar_url = avatar
         # 가입 완료 후 닉네임은 DB 값만 사용 (OAuth 실명 덮어쓰기 금지, 닉네임 유니크 충돌 방지)
         if not user.signup_completed:
             user.display_name = display_name
@@ -82,6 +83,7 @@ async def upsert_user_from_claims(db: AsyncSession, claims: dict) -> User:
             email=email,
             display_name=display_name,
             avatar_url=avatar,
+            avatar_sync_oauth=True,
         )
         db.add(user)
     try:

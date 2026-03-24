@@ -49,7 +49,7 @@ export default function SignupConsentPage() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-xl rounded-xl border border-chess-border bg-chess-surface/70 p-6 text-center">
+    <section className="mx-auto w-full max-w-xl pixel-frame bg-chess-surface/75 p-6 text-center">
       <h1 className="text-xl font-bold text-chess-primary">회원가입 동의</h1>
       <p className="mt-3 text-sm text-chess-muted">
         이 계정은 처음 로그인했습니다. 회원가입을 진행하시겠습니까?

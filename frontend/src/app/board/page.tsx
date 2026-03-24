@@ -9,6 +9,7 @@ import { useSession } from "next-auth/react";
 import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
 import { AuthorNameLink } from "@/shared/components/forum/AuthorName";
+import { PixelChatGlyph, PixelHeartGlyph } from "@/shared/components/ui/PixelGlyphs";
 import { noticeListBadgeClass, patchListBadgeClass } from "@/shared/components/forum/boardPostBadges";
 
 type BoardKind = "notice" | "patch" | "free";
@@ -34,7 +35,7 @@ const SORT_OPTIONS: { value: string; label: string }[] = [
 ];
 
 const listUlClass =
-  "divide-y divide-chess-border/60 rounded-xl border border-chess-border/70 bg-chess-bg/50 dark:bg-chess-surface/30";
+  "divide-y divide-chess-border/60 pixel-frame bg-chess-bg/55 dark:bg-chess-surface/32";
 
 function PostListRow({ p }: { p: PostRow }) {
   return (
@@ -52,12 +53,26 @@ function PostListRow({ p }: { p: PostRow }) {
           )}
           <span className="min-w-0">{p.title}</span>
         </Link>
-        <span className="shrink-0 text-xs text-chess-muted">
-          <AuthorNameLink author={p.author} className="hover:text-chess-accent hover:underline" />{" "}
-          {new Date(p.created_at).toLocaleDateString()}
+        <span className="inline-flex shrink-0 flex-wrap items-center gap-2 text-xs text-chess-muted">
+          <AuthorNameLink
+            author={p.author}
+            avatarSize={22}
+            className="max-w-[10rem] hover:text-chess-accent hover:underline"
+          />
+          <span className="shrink-0 tabular-nums opacity-80">
+            {new Date(p.created_at).toLocaleDateString()}
+          </span>
         </span>
-        <span className="shrink-0 text-xs tabular-nums text-chess-muted">
-          ❤️ {p.like_count} · 💬 {p.comment_count}
+        <span className="shrink-0 text-xs tabular-nums text-chess-muted inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-0.5">
+            <PixelHeartGlyph className="text-red-500/90 dark:text-red-400/90" size={12} />
+            {p.like_count}
+          </span>
+          <span className="opacity-50">·</span>
+          <span className="inline-flex items-center gap-0.5">
+            <PixelChatGlyph size={12} />
+            {p.comment_count}
+          </span>
         </span>
       </div>
     </li>
@@ -83,7 +98,7 @@ export default function BoardPage() {
   const [busyCreate, setBusyCreate] = useState(false);
 
   const inputClass =
-    "w-full rounded-xl border border-chess-border/90 bg-chess-bg px-4 py-3 text-sm text-chess-primary shadow-inner shadow-black/[0.02] outline-none transition-[border-color,box-shadow] placeholder:text-chess-muted/70 focus:border-chess-accent/50 focus:ring-2 focus:ring-chess-accent/20 dark:border-chess-border dark:bg-chess-elevated/50";
+    "w-full pixel-input px-4 py-3 text-sm text-chess-primary placeholder:text-chess-muted/70 dark:bg-chess-elevated/50";
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -193,9 +208,9 @@ export default function BoardPage() {
         <button
           type="button"
           onClick={() => setTab("notice")}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+          className={`font-pixel pixel-btn px-4 py-2 text-sm font-semibold ${
             tab === "notice"
-              ? "bg-chess-accent text-white"
+              ? "bg-chess-accent text-white border-chess-accent"
               : "bg-chess-surface/80 text-chess-muted hover:text-chess-primary"
           }`}
         >
@@ -204,9 +219,9 @@ export default function BoardPage() {
         <button
           type="button"
           onClick={() => setTab("patch")}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+          className={`font-pixel pixel-btn px-4 py-2 text-sm font-semibold ${
             tab === "patch"
-              ? "bg-chess-accent text-white"
+              ? "bg-chess-accent text-white border-chess-accent"
               : "bg-chess-surface/80 text-chess-muted hover:text-chess-primary"
           }`}
         >
@@ -215,9 +230,9 @@ export default function BoardPage() {
         <button
           type="button"
           onClick={() => setTab("free")}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+          className={`font-pixel pixel-btn px-4 py-2 text-sm font-semibold ${
             tab === "free"
-              ? "bg-chess-accent text-white"
+              ? "bg-chess-accent text-white border-chess-accent"
               : "bg-chess-surface/80 text-chess-muted hover:text-chess-primary"
           }`}
         >
@@ -231,7 +246,7 @@ export default function BoardPage() {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            className="rounded-lg border border-chess-border bg-chess-bg px-3 py-2 text-sm text-chess-primary"
+            className="pixel-input px-3 py-2 text-sm text-chess-primary"
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -244,7 +259,7 @@ export default function BoardPage() {
           <button
             type="button"
             onClick={() => setCreating((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-xl bg-chess-accent px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
+            className="font-pixel pixel-btn inline-flex items-center gap-2 bg-chess-accent px-4 py-2 text-sm font-semibold text-white border-chess-accent hover:brightness-105"
           >
             <PenLine className="size-4 opacity-90" aria-hidden />
             {creating ? "닫기" : "글쓰기"}
@@ -266,7 +281,7 @@ export default function BoardPage() {
       {creating && canWrite && (
         <form
           onSubmit={onCreate}
-          className="space-y-3 rounded-2xl border border-chess-border/70 bg-chess-surface/40 p-4 dark:bg-chess-elevated/20"
+          className="space-y-3 pixel-frame bg-chess-surface/45 p-4 dark:bg-chess-elevated/22"
         >
           <p className="text-xs font-medium uppercase tracking-wider text-chess-muted">새 글</p>
           <div className="flex flex-wrap gap-2">
@@ -321,7 +336,7 @@ export default function BoardPage() {
           <button
             type="submit"
             disabled={busyCreate}
-            className="inline-flex items-center gap-2 rounded-xl bg-chess-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="font-pixel pixel-btn inline-flex items-center gap-2 bg-chess-accent px-5 py-2.5 text-sm font-semibold text-white border-chess-accent disabled:opacity-50"
           >
             {busyCreate ? <Loader2 className="size-4 animate-spin" /> : null}
             등록
@@ -333,7 +348,7 @@ export default function BoardPage() {
       {loading && <p className="text-sm text-chess-muted">불러오는 중…</p>}
 
       {!loading && !error && listEmpty && (
-        <p className="rounded-xl border border-dashed border-chess-border px-4 py-8 text-center text-sm text-chess-muted">글이 없습니다.</p>
+        <p className="pixel-frame border-dashed border-chess-border px-4 py-8 text-center text-sm text-chess-muted">글이 없습니다.</p>
       )}
 
       {!loading && !error && !listEmpty && tab === "free" && pinnedNotices.length > 0 && (

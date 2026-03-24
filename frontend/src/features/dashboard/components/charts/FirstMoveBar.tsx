@@ -17,9 +17,8 @@ function winRateDisplayClass(wr: number) {
   return wr >= 50 ? "text-chess-win" : "text-chess-loss";
 }
 
-/** 스택 세그먼트: 동일 인셋 하이라이트로 면이 한 평면에 놓인 느낌 */
-const segmentSurface =
-  "shadow-[inset_0_1px_0_rgba(255,255,255,0.16),inset_0_-1px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),inset_0_-1px_0_rgba(0,0,0,0.38)]";
+const segmentBevel =
+  "shadow-[inset_0_2px_0_rgba(255,255,255,0.22),inset_0_-2px_0_rgba(0,0,0,0.2)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),inset_0_-2px_0_rgba(0,0,0,0.45)]";
 
 const BAR_EASE = "cubic-bezier(0.33, 1, 0.68, 1)";
 const SEG_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
@@ -43,12 +42,12 @@ function StackedSegment({
 }) {
   if (flexWeight <= 0) return null;
 
-  const bg =
+  const texture =
     tone === "win"
-      ? "bg-fm-bar-win"
+      ? "fm-texture-win"
       : tone === "draw"
-        ? "bg-fm-bar-draw"
-        : "bg-fm-bar-loss";
+        ? "fm-texture-draw"
+        : "fm-texture-loss";
 
   const segDelay = reducedMotion ? 0 : rowDelayMs + 140 + segIndex * 72;
 
@@ -59,7 +58,7 @@ function StackedSegment({
       title={title}
     >
       <div
-        className={`h-full w-full ${bg} ${segmentSurface}`}
+        className={`h-full w-full ${texture} ${segmentBevel}`}
         style={{
           transformOrigin: "left center",
           transform: drawBars || reducedMotion ? "scaleX(1)" : "scaleX(0)",
@@ -104,13 +103,13 @@ export default function FirstMoveBar({ data, side }: Props) {
   const sideTitleKey = side === "white" ? "chart.white" : "chart.black";
 
   return (
-    <div className="rounded-xl border border-chess-border/60 dark:border-chess-border/45 bg-chess-bg/80 dark:bg-chess-elevated/12 overflow-hidden shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-chess-border/50 dark:border-chess-border/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="pixel-frame pixel-hud-fill overflow-hidden">
+      <div className="flex flex-col gap-3 border-b-2 border-chess-border/55 dark:border-chess-border/45 px-4 py-3 sm:flex-row sm:items-center sm:justify-between bg-chess-bg/40 dark:bg-chess-bg/25">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-chess-muted">
+          <p className="font-pixel text-[11px] font-bold text-chess-muted">
             {t("chart.firstMoveChartTitle")}
           </p>
-          <p className="text-sm font-semibold text-chess-primary mt-0.5">{t(sideTitleKey)}</p>
+          <p className="font-pixel text-sm font-bold text-chess-primary mt-0.5">{t(sideTitleKey)}</p>
         </div>
         <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-[10px] font-medium text-chess-muted">
           <span className="inline-flex items-center gap-1.5">
@@ -128,7 +127,7 @@ export default function FirstMoveBar({ data, side }: Props) {
         </div>
       </div>
 
-      <div className="hidden md:grid md:grid-cols-[minmax(10rem,13rem)_1fr_minmax(4.75rem,5.25rem)] md:gap-4 md:items-end border-b border-chess-border/40 dark:border-chess-border/30 bg-chess-surface/30 dark:bg-chess-bg/20 px-4 py-2">
+      <div className="hidden md:grid md:grid-cols-[minmax(10rem,13rem)_1fr_minmax(4.75rem,5.25rem)] md:gap-4 md:items-end border-b-2 border-chess-border/40 dark:border-chess-border/30 bg-chess-surface/35 dark:bg-chess-bg/30 px-4 py-2">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-chess-muted">
           {t("chart.opening")}
         </span>
@@ -183,18 +182,18 @@ export default function FirstMoveBar({ data, side }: Props) {
               </div>
 
               <div className="mt-2 md:mt-0">
-                <div className="relative h-3 w-full rounded-sm bg-slate-200/65 dark:bg-slate-950/55 ring-1 ring-slate-300/40 dark:ring-white/[0.08]">
+                <div className="relative h-3.5 w-full border-2 border-chess-border bg-chess-bg pixel-hud-fill">
                   <div
                     className="pointer-events-none absolute inset-0 z-0 hidden md:grid md:grid-cols-4"
                     aria-hidden
                   >
-                    <div className="border-r border-chess-border/30 dark:border-chess-border/20" />
-                    <div className="border-r border-chess-border/30 dark:border-chess-border/20" />
-                    <div className="border-r border-chess-border/30 dark:border-chess-border/20" />
+                    <div className="border-r-2 border-chess-border/35 dark:border-chess-border/25" />
+                    <div className="border-r-2 border-chess-border/35 dark:border-chess-border/25" />
+                    <div className="border-r-2 border-chess-border/35 dark:border-chess-border/25" />
                     <div />
                   </div>
                   <div
-                    className="relative z-[1] flex h-full w-full min-w-0 gap-px overflow-hidden rounded-sm ring-1 ring-chess-border/25 dark:ring-white/[0.06]"
+                    className="relative z-[1] flex h-full w-full min-w-0 gap-px overflow-hidden border border-chess-border/40"
                     style={{
                       width: drawBars ? "100%" : "0%",
                       maxWidth: "100%",
