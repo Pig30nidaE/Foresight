@@ -71,6 +71,7 @@ export default function ForumPostDetailPage() {
   const [post, setPost] = useState<PostDetail | null>(null);
   const [commentBody, setCommentBody] = useState("");
   const [editing, setEditing] = useState(false);
+  const TITLE_MAX_LENGTH = 200;
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const [editFen, setEditFen] = useState(DEFAULT_START_FEN);
@@ -330,13 +331,21 @@ export default function ForumPostDetailPage() {
   const onUpdatePost = async (e: FormEvent) => {
     e.preventDefault();
     if (!post) return;
+    if (!editTitle.trim() || !editBody.trim()) {
+      setError(t("forum.error.titleBodyRequired"));
+      return;
+    }
+    if (editTitle.trim().length > TITLE_MAX_LENGTH) {
+      setError(t("forum.error.titleTooLong"));
+      return;
+    }
     setBusy(true);
     try {
       const token = await getRequiredToken();
       await api.patch(
         `/forum/posts/${post.id}`,
         {
-          title: editTitle,
+          title: editTitle.trim(),
           body: editBody,
           pgn_text: "",
           fen_initial: post.board_category ? "" : chessImported ? editFen.trim() || "" : "",
@@ -417,7 +426,8 @@ export default function ForumPostDetailPage() {
                   required
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className={`mt-2 ${inputClass} text-base font-medium`}
+                  maxLength={TITLE_MAX_LENGTH}
+                  className={`mt-2 ${inputClass} text-base font-medium leading-relaxed [overflow-wrap:anywhere]`}
                 />
               </div>
 

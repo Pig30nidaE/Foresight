@@ -113,6 +113,7 @@ export default function BoardPage() {
   const [createBody, setCreateBody] = useState("");
   const [createKind, setCreateKind] = useState<BoardKind>("free");
   const [busyCreate, setBusyCreate] = useState(false);
+  const TITLE_MAX_LENGTH = 200;
 
   const inputClass =
     "w-full pixel-input px-4 py-3 text-sm text-chess-primary placeholder:text-chess-muted/70 dark:bg-chess-elevated/50";
@@ -246,6 +247,10 @@ export default function BoardPage() {
     e.preventDefault();
     if (!canWrite || busyCreate) return;
     if (!createTitle.trim() || !createBody.trim()) return;
+    if (createTitle.trim().length > TITLE_MAX_LENGTH) {
+      setError(t("forum.error.titleTooLong"));
+      return;
+    }
     if ((createKind === "notice" || createKind === "patch") && !isAdmin) return;
     setBusyCreate(true);
     try {
@@ -427,8 +432,9 @@ export default function BoardPage() {
             required
             value={createTitle}
             onChange={(e) => setCreateTitle(e.target.value)}
+            maxLength={TITLE_MAX_LENGTH}
             placeholder={t("board.field.title")}
-            className={inputClass}
+            className={`${inputClass} text-base leading-relaxed [overflow-wrap:anywhere]`}
           />
           <textarea
             required
