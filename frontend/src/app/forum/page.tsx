@@ -491,7 +491,7 @@ export default function ForumPage() {
                 <ForumPostThumbnail thumbnailFen={p.thumbnail_fen} />
               </Link>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2.5 sm:p-3">
-                <h3 className="text-lg font-semibold leading-snug tracking-tight text-chess-primary sm:text-base">
+                <h3 className="text-xl font-semibold leading-snug tracking-tight text-chess-primary sm:text-lg">
                   <Link
                     href={forumPostHref(p)}
                     className="block break-words [overflow-wrap:anywhere] [word-break:break-word] transition group-hover:text-chess-accent"
@@ -499,11 +499,11 @@ export default function ForumPage() {
                     {p.title}
                   </Link>
                 </h3>
-                <p className="mt-2 line-clamp-4 flex-1 overflow-hidden break-words text-[1.02rem] leading-relaxed text-chess-muted [overflow-wrap:anywhere] sm:line-clamp-3 sm:text-base">
+                <p className="mt-2 line-clamp-4 flex-1 overflow-hidden break-words text-lg leading-relaxed text-chess-muted [overflow-wrap:anywhere] sm:line-clamp-3 sm:text-[1.05rem]">
                   {p.body_preview}
                 </p>
                 <div
-                  className="mt-3 min-w-0 text-sm leading-relaxed text-chess-muted/90 sm:text-[0.95rem]"
+                  className="mt-3 min-w-0 text-base leading-relaxed text-chess-muted/90 sm:text-[1rem]"
                   title={`${p.author.display_name} · ${formatPostDate(p.created_at, language)}`}
                 >
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
