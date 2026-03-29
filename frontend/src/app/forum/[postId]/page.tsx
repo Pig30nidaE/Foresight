@@ -521,7 +521,7 @@ export default function ForumPostDetailPage() {
               <h1 className="break-words text-2xl font-bold text-chess-primary [overflow-wrap:anywhere] sm:text-3xl">
                 {post.title}
               </h1>
-              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-chess-muted sm:text-base">
+              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-base text-chess-muted sm:text-[1.02rem]">
                 <AuthorNameLink
                   author={post.author}
                   avatarSize={32}
@@ -666,12 +666,12 @@ export default function ForumPostDetailPage() {
                       </div>
                     </form>
                   ) : (
-                    <p className="whitespace-pre-wrap break-words text-sm text-chess-primary [overflow-wrap:anywhere]">
+                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.02rem]">
                       {c.body}
                     </p>
                   )}
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-chess-muted sm:text-base">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-base text-chess-muted sm:text-[1.02rem]">
                       <AuthorNameLink
                         author={c.author}
                         avatarSize={26}
