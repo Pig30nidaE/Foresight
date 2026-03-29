@@ -16,11 +16,11 @@ class TacticalPatternResult:
 
 
 class TacticalAnalysisService:
-    """Minimal compatibility service for legacy IQP test coverage.
+    """Compatibility service for legacy tactical/dashboard flows.
 
     The original richer tactical analysis module is not present in the current
-    codebase, but some tests still import it and expect IQP comparison data via
-    `_p_positional(..., situation_id == 10)`.
+    codebase, but routes/tests still import it. This shim provides the minimum
+    surface needed for app startup and existing IQP test coverage.
     """
 
     IQP_SITUATION_ID = 10
@@ -107,3 +107,25 @@ class TacticalAnalysisService:
                 chart_data=chart_data,
             )
         ]
+
+    def analyze(self, games: List[GameSummary], username: str, *args, progress_callback=None, **kwargs) -> dict:
+        _ = (args, kwargs)
+        if progress_callback is not None:
+            progress_callback(35, "analyzing", "전술 패턴을 정리 중", min(len(games), len(games)), len(games))
+
+        positional = self._p_positional(games, username, sf_cache={})
+        payload = {
+            "username": username,
+            "total_games": len(games),
+            "patterns": [
+                {
+                    "situation_id": item.situation_id,
+                    "chart_data": item.chart_data,
+                }
+                for item in positional
+            ],
+        }
+
+        if progress_callback is not None:
+            progress_callback(100, "completed", "전술 분석 완료", len(games), len(games))
+        return payload
