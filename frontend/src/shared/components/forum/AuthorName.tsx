@@ -20,7 +20,7 @@ type AuthorNameLinkProps = {
 };
 
 export function AuthorNameLink({ author, href, className, avatarSize = 24 }: AuthorNameLinkProps) {
-  const to = href ?? `/profile/${author.public_id ?? author.id}`;
+  const to = href ?? `/user/${author.public_id ?? author.id}`;
   const isAdmin = (author.role ?? "").toLowerCase().trim() === "admin";
   return (
     <Link
