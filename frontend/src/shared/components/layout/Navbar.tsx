@@ -277,7 +277,7 @@ export default function Navbar() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder={t("nav.searchPlaceholder")}
-                  className="pixel-input min-h-[44px] w-full pl-9 pr-3 py-2.5 text-base text-chess-primary placeholder:text-chess-muted sm:text-sm"
+                  className="pixel-input min-h-[44px] w-full pl-9 pr-3 py-2.5 text-[16px] text-chess-primary placeholder:text-chess-muted sm:text-sm"
                 />
               </div>
               <button

@@ -1,8 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import api from "@/shared/lib/api";
 import { clearBackendJwtCache, getBackendJwt } from "@/shared/lib/backendJwt";
@@ -15,8 +15,17 @@ type MeSignup = {
 
 export default function SignupConsentPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status } = useSession();
   const { t } = useTranslation();
+  const conflictMessage = useMemo(() => {
+    const code = searchParams.get("code");
+    if (code !== "email_conflict") return null;
+    const masked = searchParams.get("email");
+    return masked
+      ? t("signup.conflict.masked").replace("{email}", masked)
+      : t("signup.conflict.default");
+  }, [searchParams, t]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -48,12 +57,23 @@ export default function SignupConsentPage() {
     await signOut({ callbackUrl: "/" });
   };
 
+  useEffect(() => {
+    if (!conflictMessage || status !== "authenticated") return;
+    clearBackendJwtCache();
+    void signOut({ callbackUrl: "/" });
+  }, [conflictMessage, status]);
+
   return (
     <section className="mx-auto w-full max-w-xl pixel-frame bg-chess-surface/75 p-6 text-center">
       <h1 className="text-xl font-bold text-chess-primary">{t("signupConsent.title")}</h1>
       <p className="mt-3 text-sm text-chess-muted">
         {t("signupConsent.desc")}
       </p>
+      {conflictMessage && (
+        <p className="mt-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-700 dark:text-red-200">
+          {conflictMessage}
+        </p>
+      )}
       <div className="mt-5 flex items-center justify-center gap-3">
         <button
           type="button"

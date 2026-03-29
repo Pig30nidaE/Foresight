@@ -38,6 +38,7 @@ const nextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "images.chesscomfiles.com" },
       { protocol: "https", hostname: "lichess1.org" },
+      { protocol: "https", hostname: "*.blob.core.windows.net" },
     ],
   },
   async headers() {

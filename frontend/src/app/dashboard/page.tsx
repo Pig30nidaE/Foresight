@@ -160,7 +160,7 @@ function DashboardContent() {
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleSearch(e as unknown as React.FormEvent); }}
               placeholder={t("dh.searchPlaceholder")}
-              className="pixel-input font-pixel w-full px-3 py-2.5 text-base text-chess-primary placeholder-chess-muted"
+              className="pixel-input font-pixel w-full px-3 py-2.5 text-[16px] text-chess-primary placeholder-chess-muted"
             />
           </div>
           {/* 필터 버튼 */}
@@ -277,19 +277,19 @@ function DashboardContent() {
       {/* ── 모바일 필터 바텀시트 ── */}
       {filterOpen && (
         <>
-          {/* 백드롭 */}
+          {/* 백드롭 — 모바일 뷰포트·홈 인디케이터까지 덮음 */}
           <div
-            className="md:hidden fixed inset-0 z-40 bg-black/55"
+            className="md:hidden fixed inset-0 z-40 min-h-[100dvh] w-full bg-black/55"
             onClick={() => setFilterOpen(false)}
           />
-          {/* 시트 */}
-          <div className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-chess-surface dark:bg-chess-elevated border-t-[3px] border-chess-border shadow-[0_-4px_0_0_color-mix(in_srgb,var(--color-chess-primary)_12%,transparent)] dark:shadow-[0_-4px_0_0_rgba(0,0,0,0.6)]">
+          {/* 시트 — 본문 + 하단 safe-area 동일 배경으로 끊김 없이 이어짐 */}
+          <div className="md:hidden fixed inset-x-0 bottom-0 z-50 flex max-h-[90dvh] flex-col bg-chess-surface dark:bg-chess-elevated border-t-[3px] border-chess-border shadow-[0_-4px_0_0_color-mix(in_srgb,var(--color-chess-primary)_12%,transparent)] dark:shadow-[0_-4px_0_0_rgba(0,0,0,0.6)]">
             {/* 핸들 */}
-            <div className="flex justify-center pt-3 pb-1">
+            <div className="flex shrink-0 justify-center pt-3 pb-1">
               <div className="w-10 h-1.5 bg-chess-border border border-chess-primary/20" />
             </div>
 
-            <div className="px-5 pb-6 pt-3 space-y-5">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-5 pt-3 pb-4 space-y-5">
               <h2 className="text-base font-bold text-chess-primary">{t("dh.filter.sheetTitle")}</h2>
 
               {/* Platform */}
@@ -359,6 +359,12 @@ function DashboardContent() {
                 {t("dh.filter.apply")}
               </button>
             </div>
+            {/* 홈 인디케이터 영역까지 배경 연장 (아래 줄/빈틈 제거) */}
+            <div
+              className="shrink-0 bg-chess-surface dark:bg-chess-elevated"
+              style={{ height: "max(env(safe-area-inset-bottom, 0px), 1px)" }}
+              aria-hidden
+            />
           </div>
         </>
       )}

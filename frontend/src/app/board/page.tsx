@@ -13,6 +13,7 @@ import { PixelChatGlyph, PixelHeartGlyph } from "@/shared/components/ui/PixelGly
 import { noticeListBadgeClass, patchListBadgeClass } from "@/shared/components/forum/boardPostBadges";
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDate } from "@/shared/lib/formatLocaleDate";
+import { forumPostHref } from "@/shared/lib/forumPostHref";
 
 type BoardKind = "notice" | "patch" | "free";
 
@@ -45,40 +46,41 @@ const listUlClass =
 
 function PostListRow({ p }: { p: PostRow }) {
   const { t, language } = useTranslation();
+  const href = forumPostHref(p);
   return (
     <li>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2.5 text-sm transition hover:bg-chess-elevated/40 sm:px-4">
+      <div className="flex flex-col gap-2 px-3 py-2.5 text-sm transition hover:bg-chess-elevated/40 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3 sm:gap-y-1 sm:px-4">
         <Link
-          href={`/forum/${p.public_id ?? p.id}`}
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-2 font-medium text-chess-primary [overflow-wrap:anywhere] hover:text-chess-accent"
+          href={href}
+          className="order-1 min-w-0 font-medium text-chess-primary [overflow-wrap:anywhere] hover:text-chess-accent sm:order-none sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:gap-2"
         >
-          {p.board_category === "notice" && (
-            <span className={noticeListBadgeClass}>{t("board.badge.notice")}</span>
-          )}
-          {p.board_category === "patch" && (
-            <span className={patchListBadgeClass}>{t("board.badge.patch")}</span>
-          )}
-          <span className="min-w-0">{p.title}</span>
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {p.board_category === "notice" && (
+              <span className={noticeListBadgeClass}>{t("board.badge.notice")}</span>
+            )}
+            {p.board_category === "patch" && (
+              <span className={patchListBadgeClass}>{t("board.badge.patch")}</span>
+            )}
+            <span className="min-w-0 break-words text-base leading-snug sm:text-sm">{p.title}</span>
+          </span>
         </Link>
-        <span className="inline-flex shrink-0 flex-wrap items-center gap-2 text-xs text-chess-muted">
+        <span className="order-2 flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs text-chess-muted sm:order-none sm:inline-flex sm:w-auto sm:shrink-0">
           <AuthorNameLink
             author={p.author}
             avatarSize={22}
-            className="max-w-[10rem] hover:text-chess-accent hover:underline"
+            className="max-w-[min(100%,12rem)] hover:text-chess-accent hover:underline"
           />
-          <span className="shrink-0 tabular-nums opacity-80">
-            {formatPostDate(p.created_at, language)}
-          </span>
-        </span>
-        <span className="shrink-0 text-xs tabular-nums text-chess-muted inline-flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-0.5">
-            <PixelHeartGlyph className="text-red-500/90 dark:text-red-400/90" size={12} />
-            {p.like_count}
-          </span>
-          <span className="opacity-50">·</span>
-          <span className="inline-flex items-center gap-0.5">
-            <PixelChatGlyph size={12} />
-            {p.comment_count}
+          <span className="shrink-0 tabular-nums opacity-80">{formatPostDate(p.created_at, language)}</span>
+          <span className="inline-flex items-center gap-1.5 tabular-nums">
+            <span className="inline-flex items-center gap-0.5">
+              <PixelHeartGlyph className="text-red-500/90 dark:text-red-400/90" size={12} />
+              {p.like_count}
+            </span>
+            <span className="opacity-50">·</span>
+            <span className="inline-flex items-center gap-0.5">
+              <PixelChatGlyph size={12} />
+              {p.comment_count}
+            </span>
           </span>
         </span>
       </div>
@@ -161,23 +163,29 @@ export default function BoardPage() {
         setNextCursor(data.next_cursor ?? null);
         setNextPage(data.next_page ?? null);
       } else {
-        const freeRes = await api.get<ListResponse>("/forum/board/posts", {
-          params: { ...baseParams, kind: "free" },
-        });
-        const freeItems = freeRes.data.items ?? [];
-        setPosts((prev) => (append ? [...prev, ...freeItems] : freeItems));
-        setNextCursor(freeRes.data.next_cursor ?? null);
-        setNextPage(freeRes.data.next_page ?? null);
-
-        if (!append) {
-          if (!normalized) {
-            const pinRes = await api.get<ListResponse>("/forum/board/posts", {
+        if (!append && !normalized) {
+          const [freeRes, pinRes] = await Promise.all([
+            api.get<ListResponse>("/forum/board/posts", {
+              params: { ...baseParams, kind: "free" },
+            }),
+            api.get<ListResponse>("/forum/board/posts", {
               params: { kind: "notice", sort: "new", limit: 5 },
-            });
-            setPinnedNotices(pinRes.data.items ?? []);
-          } else {
-            setPinnedNotices([]);
-          }
+            }),
+          ]);
+          const freeItems = freeRes.data.items ?? [];
+          setPosts(freeItems);
+          setNextCursor(freeRes.data.next_cursor ?? null);
+          setNextPage(freeRes.data.next_page ?? null);
+          setPinnedNotices(pinRes.data.items ?? []);
+        } else {
+          const freeRes = await api.get<ListResponse>("/forum/board/posts", {
+            params: { ...baseParams, kind: "free" },
+          });
+          const freeItems = freeRes.data.items ?? [];
+          setPosts((prev) => (append ? [...prev, ...freeItems] : freeItems));
+          setNextCursor(freeRes.data.next_cursor ?? null);
+          setNextPage(freeRes.data.next_page ?? null);
+          if (!append && normalized) setPinnedNotices([]);
         }
       }
     } catch (e: unknown) {
@@ -254,7 +262,7 @@ export default function BoardPage() {
       setCreateKind("free");
       await fetchList();
       const slug = data?.public_id ?? data?.id;
-      if (slug) router.push(`/forum/${slug}`);
+      if (slug) router.push(forumPostHref({ public_id: slug, id: slug, board_category: createKind }));
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
       const d = err?.response?.data?.detail;
@@ -313,41 +321,49 @@ export default function BoardPage() {
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-chess-muted">
-          <span>{t("board.sort.label")}</span>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="pixel-input px-3 py-2 text-sm text-chess-primary"
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex w-full flex-col gap-2 text-sm text-chess-muted sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+          <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <span className="shrink-0 text-xs font-medium sm:text-sm">{t("board.sort.label")}</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              className="pixel-input min-h-[44px] w-full px-3 py-2.5 text-base text-chess-primary sm:min-h-0 sm:w-auto sm:text-sm"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {t(o.labelKey)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <form
+            onSubmit={onSearchSubmit}
+            className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:gap-2"
           >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {t(o.labelKey)}
-              </option>
-            ))}
-          </select>
-          <form onSubmit={onSearchSubmit} className="flex items-center gap-2">
             <input
-              type="text"
+              type="search"
+              enterKeyHint="search"
               value={searchDraft}
               onChange={(e) => setSearchDraft(e.target.value)}
               placeholder={t("board.search.placeholder")}
-              className="pixel-input px-3 py-2 text-sm text-chess-primary"
+              className="pixel-input min-h-[44px] w-full px-3 py-2.5 text-base text-chess-primary sm:min-w-[12rem] sm:flex-1 sm:text-sm"
             />
             <button
               type="submit"
-              className="font-pixel pixel-btn px-3 py-2 text-xs bg-chess-surface/80 text-chess-primary"
+              className="font-pixel pixel-btn min-h-[44px] w-full px-4 py-2.5 text-sm bg-chess-surface/80 text-chess-primary sm:w-auto sm:min-h-0 sm:py-2"
             >
               {t("board.search.submit")}
             </button>
           </form>
         </div>
-        {canWrite ? (
+        {status === "loading" ? (
+          <p className="font-pixel text-xs text-chess-muted sm:text-right">{t("forum.checkingAccount")}</p>
+        ) : canWrite ? (
           <button
             type="button"
             onClick={() => setCreating((v) => !v)}
-            className="font-pixel pixel-btn inline-flex items-center gap-2 bg-chess-accent px-4 py-2 text-sm font-semibold text-white border-chess-accent hover:brightness-105"
+            className="font-pixel pixel-btn inline-flex min-h-[44px] w-full items-center justify-center gap-2 bg-chess-accent px-4 py-2.5 text-sm font-semibold text-white border-chess-accent hover:brightness-105 sm:w-auto sm:min-h-0"
           >
             <PenLine className="size-4 opacity-90" aria-hidden />
             {creating ? t("board.write.close") : t("board.write.open")}
@@ -355,11 +371,12 @@ export default function BoardPage() {
         ) : (
           <button
             type="button"
+            disabled={status === "loading"}
             onClick={() => {
               if (status !== "authenticated") router.push("/api/auth/signin?callbackUrl=%2Fpost-login");
               else router.push("/signup/consent");
             }}
-            className="rounded-xl border border-chess-border/90 px-4 py-2 text-sm font-medium text-chess-primary"
+            className="min-h-[44px] w-full rounded-xl border border-chess-border/90 px-4 py-2.5 text-sm font-medium text-chess-primary disabled:opacity-50 sm:w-auto sm:min-h-0"
           >
             {status === "authenticated" ? t("board.write.afterProfile") : t("board.write.afterSignIn")}
           </button>
