@@ -66,12 +66,22 @@ html {
   }
 }
 
+/* 영어 UI: 라틴·픽셀 폰트 상대적으로 작게 느껴질 때 rem 기준 추가 상향 */
+html[data-ui-lang="en"] {
+  font-size: 108%;
+}
+@media (min-width: 1024px) {
+  html[data-ui-lang="en"] {
+    font-size: 118%;
+  }
+}
+
 body {
   overflow-x: hidden;
   background-color: var(--background);
   color: var(--foreground);
-  /* 기본 본문: 네오둥근모(한글 픽셀) + VT323(--font-pixel) 보조 */
-  font-family: "NeoDunggeunmo", var(--font-pixel, ui-monospace), ui-monospace, monospace;
+  /* 기본 본문: 한글은 네오둥근모 유지, 영문 보조는 레거시 VT323 유지 */
+  font-family: "NeoDunggeunmo", var(--font-pixel-legacy, ui-monospace), ui-monospace, monospace;
   /* 한글: 브라우저 기본(서브픽셀) 스무딩 — 전역 antialiased/none 강제보다 윤곽이 덜 흐릿한 경우가 많음 */
   text-rendering: geometricPrecision;
   /* Layered scan + checker dither (no smooth gradients) */
@@ -324,8 +334,8 @@ html.dark .dot-grid {
 /* ── Pixel UI utilities (16-bit HUD / RPG window) ───────── */
 .font-pixel {
   font-family: var(--font-pixel), "NeoDunggeunmo", ui-monospace, monospace;
-  /* VT323 등 라틴 픽셀 라벨이 본문 대비 작게 느껴질 때 살짝만 키움 */
-  font-size: 1.055em;
+  /* Jersey 15를 영문 픽셀 UI에 우선 적용하고, 한글은 기존 폴백 유지 */
+  font-size: 1.08em;
   letter-spacing: 0.04em;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: unset;
