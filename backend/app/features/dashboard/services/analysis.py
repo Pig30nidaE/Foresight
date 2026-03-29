@@ -74,6 +74,13 @@ class AnalysisService:
             })
         return rows
 
+    def build_dataframe(self, games: List[GameSummary]) -> List[dict]:
+        """Backward-compatible alias for older scripts/tests.
+
+        The current service uses plain Python row dicts instead of pandas.
+        """
+        return self.build_rows(games)
+
     def get_performance_summary(
         self,
         username: str,
