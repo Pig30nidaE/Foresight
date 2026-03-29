@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { VT323 } from "next/font/google";
+import { Jersey_15, VT323 } from "next/font/google";
 import "./globals.css";
 import Providers from "@/shared/components/layout/Providers";
 import Navbar from "@/shared/components/layout/Navbar";
@@ -7,6 +7,12 @@ import { Analytics } from "@vercel/analytics/next";
 import { resolveApiBaseUrl } from "@/shared/lib/apiBaseUrl";
 
 const vt323 = VT323({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-pixel-legacy",
+});
+
+const jersey15 = Jersey_15({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-pixel",
@@ -83,7 +89,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body
-        className={`${vt323.variable} min-h-screen bg-[var(--background)] text-[var(--foreground)]`}
+        className={`${vt323.variable} ${jersey15.variable} min-h-screen bg-[var(--background)] text-[var(--foreground)]`}
       >
         <Providers apiBaseUrl={apiBaseUrl}>
           <Navbar />
