@@ -521,7 +521,7 @@ export default function ForumPostDetailPage() {
               <h1 className="break-words text-2xl font-bold text-chess-primary [overflow-wrap:anywhere] sm:text-3xl">
                 {post.title}
               </h1>
-              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-base text-chess-muted sm:text-[1.02rem]">
+              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-lg text-chess-muted sm:text-[1.08rem]">
                 <AuthorNameLink
                   author={post.author}
                   avatarSize={32}
@@ -536,7 +536,7 @@ export default function ForumPostDetailPage() {
                   <ForumPostThumbnail thumbnailFen={displayFen} />
                 </div>
               )}
-              <p className="mt-4 whitespace-pre-wrap break-words text-base leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.05rem]">
+              <p className="mt-4 whitespace-pre-wrap break-words text-xl leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.2rem]">
                 {post.body}
               </p>
               {post.pgn_text?.trim() && !post.board_category && (
@@ -624,7 +624,7 @@ export default function ForumPostDetailPage() {
                 rows={3}
                 placeholder={t("forum.commentPlaceholder")}
                 disabled={sessionLoading || status !== "authenticated"}
-                className="w-full pixel-input px-3 py-2 text-sm break-words [overflow-wrap:anywhere] disabled:opacity-60"
+                className="w-full pixel-input px-3 py-2 text-lg leading-relaxed break-words [overflow-wrap:anywhere] disabled:opacity-60 sm:text-[1.05rem]"
               />
               <button
                 type="submit"
@@ -646,7 +646,7 @@ export default function ForumPostDetailPage() {
                         minLength={1}
                         maxLength={10000}
                         rows={3}
-                        className="w-full pixel-input px-3 py-2 text-sm break-words [overflow-wrap:anywhere]"
+                        className="w-full pixel-input px-3 py-2 text-lg leading-relaxed break-words [overflow-wrap:anywhere] sm:text-[1.05rem]"
                       />
                       <div className="flex gap-2">
                         <button
@@ -666,12 +666,12 @@ export default function ForumPostDetailPage() {
                       </div>
                     </form>
                   ) : (
-                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.02rem]">
+                    <p className="whitespace-pre-wrap break-words text-lg leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.1rem]">
                       {c.body}
                     </p>
                   )}
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-base text-chess-muted sm:text-[1.02rem]">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-lg text-chess-muted sm:text-[1.08rem]">
                       <AuthorNameLink
                         author={c.author}
                         avatarSize={26}
