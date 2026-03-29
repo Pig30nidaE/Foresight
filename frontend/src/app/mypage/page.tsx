@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -10,6 +10,8 @@ import { getBackendJwt } from "@/shared/lib/backendJwt";
 import { useSettings, type Language, type Theme } from "@/shared/components/settings/SettingsContext";
 import AvatarThumb from "@/shared/components/ui/AvatarThumb";
 import { useTranslation } from "@/shared/lib/i18n";
+import { formatPostDateTime } from "@/shared/lib/formatLocaleDate";
+import { forumPostHref } from "@/shared/lib/forumPostHref";
 
 type Me = {
   id: string;
@@ -27,6 +29,7 @@ type MyPost = {
   title: string;
   body_preview: string;
   created_at: string;
+  board_category?: string | null;
 };
 
 type MyComment = {
@@ -36,13 +39,15 @@ type MyComment = {
   post_id: string;
   post_public_id: string;
   post_title: string;
+  post_board_category?: string | null;
 };
 
 export default function MyPage() {
   const PAGE_SIZE = 5;
   const router = useRouter();
   const { status } = useSession();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const [avatarRenderKey, setAvatarRenderKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -53,10 +58,20 @@ export default function MyPage() {
   const [profilePublic, setProfilePublic] = useState(true);
   const [posts, setPosts] = useState<MyPost[]>([]);
   const [comments, setComments] = useState<MyComment[]>([]);
+  const [postsTotal, setPostsTotal] = useState(0);
+  const [commentsTotal, setCommentsTotal] = useState(0);
   const [postsPage, setPostsPage] = useState(1);
   const [commentsPage, setCommentsPage] = useState(1);
-  const { language, setLanguage, theme, setTheme, stockfishDepth, setStockfishDepth } = useSettings();
-  const [draftLang, setDraftLang] = useState<Language>(language);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const {
+    language: settingsLanguage,
+    setLanguage,
+    theme,
+    setTheme,
+    stockfishDepth,
+    setStockfishDepth,
+  } = useSettings();
+  const [draftLang, setDraftLang] = useState<Language>(settingsLanguage);
   const [draftTheme, setDraftTheme] = useState<Theme>(theme);
   const [draftDepth, setDraftDepth] = useState<number>(stockfishDepth);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -68,7 +83,7 @@ export default function MyPage() {
     setProfilePublic(Boolean(data.profile_public));
   };
 
-  const load = async () => {
+  const loadProfile = async () => {
     if (status === "unauthenticated") {
       router.replace("/api/auth/signin?callbackUrl=%2Fpost-login");
       return;
@@ -87,15 +102,9 @@ export default function MyPage() {
       if (!meRes.data.signup_completed) {
         setPosts([]);
         setComments([]);
-        return;
+        setPostsTotal(0);
+        setCommentsTotal(0);
       }
-
-      const [postsRes, commentsRes] = await Promise.all([
-        api.get<{ items: MyPost[] }>("/me/posts", { headers: { Authorization: `Bearer ${token}` } }),
-        api.get<{ items: MyComment[] }>("/me/comments", { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
-      setPosts(postsRes.data.items ?? []);
-      setComments(commentsRes.data.items ?? []);
     } catch (e: any) {
       const d = e?.response?.data?.detail;
       const msg =
@@ -106,21 +115,47 @@ export default function MyPage() {
     }
   };
 
+  const loadActivity = async () => {
+    if (status !== "authenticated" || !me?.signup_completed) return;
+    try {
+      setActivityLoading(true);
+      const token = await getBackendJwt();
+      if (!token) return;
+      const [postsRes, commentsRes] = await Promise.all([
+        api.get<{ items: MyPost[]; total: number }>("/me/posts", {
+          params: { page: postsPage, page_size: PAGE_SIZE },
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        api.get<{ items: MyComment[]; total: number }>("/me/comments", {
+          params: { page: commentsPage, page_size: PAGE_SIZE },
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+      setPosts(postsRes.data.items ?? []);
+      setPostsTotal(postsRes.data.total ?? 0);
+      setComments(commentsRes.data.items ?? []);
+      setCommentsTotal(commentsRes.data.total ?? 0);
+    } catch (e: any) {
+      const d = e?.response?.data?.detail;
+      const msg =
+        typeof d === "string" ? d : Array.isArray(d) ? d.map((x: unknown) => JSON.stringify(x)).join(" ") : e?.message;
+      setError(msg ?? t("mypage.error.load"));
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
   useEffect(() => {
-    void load();
+    void loadProfile();
   }, [status]);
 
   useEffect(() => {
-    setPostsPage(1);
-  }, [posts]);
+    void loadActivity();
+  }, [status, me?.signup_completed, me?.id, postsPage, commentsPage]);
 
   useEffect(() => {
-    setCommentsPage(1);
-  }, [comments]);
-
-  useEffect(() => {
-    setDraftLang(language);
-  }, [language]);
+    setDraftLang(settingsLanguage);
+  }, [settingsLanguage]);
   useEffect(() => {
     setDraftTheme(theme);
   }, [theme]);
@@ -140,6 +175,7 @@ export default function MyPage() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       syncMe(data);
+      setProfilePublic(Boolean(data.profile_public));
       setError(null);
       setProfileSaved(true);
       window.setTimeout(() => setProfileSaved(false), 1500);
@@ -181,6 +217,7 @@ export default function MyPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       await patchProfileFields({ avatar_url: up.url });
+      setAvatarRenderKey((k) => k + 1);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
       const d = err?.response?.data?.detail;
@@ -195,6 +232,7 @@ export default function MyPage() {
     setError(null);
     try {
       await patchProfileFields({ use_site_default_avatar: true });
+      setAvatarRenderKey((k) => k + 1);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
       const d = err?.response?.data?.detail;
@@ -209,6 +247,7 @@ export default function MyPage() {
     setError(null);
     try {
       await patchProfileFields({ restore_oauth_avatar: true });
+      setAvatarRenderKey((k) => k + 1);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
       const d = err?.response?.data?.detail;
@@ -227,16 +266,8 @@ export default function MyPage() {
     window.setTimeout(() => setSettingsSaved(false), 1500);
   };
 
-  const postsPageCount = Math.max(1, Math.ceil(posts.length / PAGE_SIZE));
-  const commentsPageCount = Math.max(1, Math.ceil(comments.length / PAGE_SIZE));
-  const pagedPosts = useMemo(
-    () => posts.slice((postsPage - 1) * PAGE_SIZE, postsPage * PAGE_SIZE),
-    [posts, postsPage]
-  );
-  const pagedComments = useMemo(
-    () => comments.slice((commentsPage - 1) * PAGE_SIZE, commentsPage * PAGE_SIZE),
-    [comments, commentsPage]
-  );
+  const postsPageCount = Math.max(1, Math.ceil(postsTotal / PAGE_SIZE));
+  const commentsPageCount = Math.max(1, Math.ceil(commentsTotal / PAGE_SIZE));
 
   return (
     <section className="mx-auto w-full max-w-4xl space-y-5">
@@ -340,10 +371,12 @@ export default function MyPage() {
           <form onSubmit={onSaveProfile} className="space-y-3 pixel-frame pixel-hud-fill p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.profileSection")}</h2>
-              {me.profile_public && me.public_id && (
+              {me.public_id && (
                 <Link
                   href={`/profile/${me.public_id}`}
-                  className="font-pixel text-[11px] font-medium text-chess-accent underline decoration-2 underline-offset-2 hover:brightness-110"
+                  className={`font-pixel text-[11px] font-medium underline decoration-2 underline-offset-2 hover:brightness-110 ${
+                    me.profile_public ? "text-chess-accent" : "text-chess-muted"
+                  }`}
                 >
                   {t("mypage.viewPublicProfile")}
                 </Link>
@@ -356,7 +389,7 @@ export default function MyPage() {
             <div>
               <p className="text-sm font-medium text-chess-primary">{t("profile.photo")}</p>
               <div className="mt-2 flex flex-wrap items-start gap-4">
-                <AvatarThumb src={me.avatar_url} alt="" size={64} />
+                <AvatarThumb key={avatarRenderKey} src={me.avatar_url} alt="" size={64} />
                 <div className="min-w-0 flex-1 space-y-2">
                   <p className="text-xs leading-relaxed text-chess-muted">{t("profile.photoHint")}</p>
                   <input
@@ -431,18 +464,21 @@ export default function MyPage() {
             </div>
           </form>
 
-          <section className="pixel-frame pixel-hud-fill p-4 sm:p-5">
+          <section
+            className={`pixel-frame pixel-hud-fill p-4 sm:p-5 ${activityLoading ? "opacity-70" : ""}`}
+            aria-busy={activityLoading}
+          >
             <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.myPosts")}</h2>
             <div className="mt-3 space-y-2">
-              {posts.length === 0 ? (
+              {postsTotal === 0 ? (
                 <p className="text-sm text-chess-muted border-2 border-dashed border-chess-border/70 px-3 py-6 text-center">
                   {t("mypage.noPosts")}
                 </p>
               ) : (
-                pagedPosts.map((p) => (
+                posts.map((p) => (
                   <article key={p.id} className="pixel-frame pixel-hud-fill p-3">
                     <Link
-                      href={`/forum/${p.public_id ?? p.id}`}
+                      href={forumPostHref(p)}
                       className="font-pixel text-sm font-bold text-chess-primary hover:text-chess-accent [overflow-wrap:anywhere]"
                     >
                       {p.title}
@@ -451,18 +487,18 @@ export default function MyPage() {
                       {p.body_preview}
                     </p>
                     <p className="mt-1 font-pixel text-[10px] tabular-nums text-chess-muted">
-                      {new Date(p.created_at).toLocaleString()}
+                      {formatPostDateTime(p.created_at, language)}
                     </p>
                   </article>
                 ))
               )}
             </div>
-            {posts.length > PAGE_SIZE && (
+            {postsTotal > PAGE_SIZE && (
               <div className="mt-3 flex items-center justify-center gap-2">
                 <button
                   type="button"
                   onClick={() => setPostsPage((prev) => Math.max(1, prev - 1))}
-                  disabled={postsPage === 1}
+                  disabled={postsPage === 1 || activityLoading}
                   className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
                 >
                   {t("forum.pagination.prev")}
@@ -473,7 +509,7 @@ export default function MyPage() {
                 <button
                   type="button"
                   onClick={() => setPostsPage((prev) => Math.min(postsPageCount, prev + 1))}
-                  disabled={postsPage === postsPageCount}
+                  disabled={postsPage === postsPageCount || activityLoading}
                   className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
                 >
                   {t("forum.pagination.next")}
@@ -482,18 +518,25 @@ export default function MyPage() {
             )}
           </section>
 
-          <section className="pixel-frame pixel-hud-fill p-4 sm:p-5">
+          <section
+            className={`pixel-frame pixel-hud-fill p-4 sm:p-5 ${activityLoading ? "opacity-70" : ""}`}
+            aria-busy={activityLoading}
+          >
             <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.myComments")}</h2>
             <div className="mt-3 space-y-2">
-              {comments.length === 0 ? (
+              {commentsTotal === 0 ? (
                 <p className="text-sm text-chess-muted border-2 border-dashed border-chess-border/70 px-3 py-6 text-center">
                   {t("mypage.noComments")}
                 </p>
               ) : (
-                pagedComments.map((c) => (
+                comments.map((c) => (
                   <article key={c.id} className="pixel-frame pixel-hud-fill p-3">
                     <Link
-                      href={`/forum/${c.post_public_id ?? c.post_id}`}
+                      href={forumPostHref({
+                        public_id: c.post_public_id,
+                        id: c.post_id,
+                        board_category: c.post_board_category,
+                      })}
                       className="font-pixel text-xs font-bold text-chess-accent hover:brightness-110 [overflow-wrap:anywhere]"
                     >
                       {c.post_title}
@@ -502,18 +545,18 @@ export default function MyPage() {
                       {c.body}
                     </p>
                     <p className="mt-1 font-pixel text-[10px] tabular-nums text-chess-muted">
-                      {new Date(c.created_at).toLocaleString()}
+                      {formatPostDateTime(c.created_at, language)}
                     </p>
                   </article>
                 ))
               )}
             </div>
-            {comments.length > PAGE_SIZE && (
+            {commentsTotal > PAGE_SIZE && (
               <div className="mt-3 flex items-center justify-center gap-2">
                 <button
                   type="button"
                   onClick={() => setCommentsPage((prev) => Math.max(1, prev - 1))}
-                  disabled={commentsPage === 1}
+                  disabled={commentsPage === 1 || activityLoading}
                   className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
                 >
                   {t("forum.pagination.prev")}
@@ -524,7 +567,7 @@ export default function MyPage() {
                 <button
                   type="button"
                   onClick={() => setCommentsPage((prev) => Math.min(commentsPageCount, prev + 1))}
-                  disabled={commentsPage === commentsPageCount}
+                  disabled={commentsPage === commentsPageCount || activityLoading}
                   className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
                 >
                   {t("forum.pagination.next")}
