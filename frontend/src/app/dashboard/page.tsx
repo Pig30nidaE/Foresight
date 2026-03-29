@@ -124,11 +124,11 @@ function DashboardContent() {
   const SummaryTcIcon = TIME_CLASS_META[timeClass].Icon;
   const appliedFilterSummary = (
     <div className="md:hidden flex items-center gap-2 px-1 mt-2">
-      <span className="text-[11px] text-chess-muted">
+      <span className="text-sm text-chess-muted sm:text-base">
         {platform === "chess.com" ? "Chess.com" : "Lichess"}
       </span>
       <span className="text-chess-muted/40 text-xs">·</span>
-      <span className="text-[11px] text-chess-muted inline-flex items-center gap-1">
+      <span className="text-sm text-chess-muted inline-flex items-center gap-1 sm:text-base">
         <SummaryTcIcon size={12} className="shrink-0 opacity-80" />
         {t(TIME_CLASS_META[timeClass].key)}
         {tcGameCount(timeClass) != null ? ` (${tcGameCount(timeClass)})` : ""}
@@ -179,7 +179,7 @@ function DashboardContent() {
             type="button"
             onClick={handleSearch}
             disabled={platform === "lichess"}
-            className="font-pixel pixel-btn px-4 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold shrink-0"
+            className="font-pixel pixel-btn px-4 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-base font-semibold shrink-0"
           >
             {t("dh.startAnalysis")}
           </button>
@@ -205,7 +205,7 @@ function DashboardContent() {
             <button
               type="submit"
               disabled={platform === "lichess"}
-              className="font-pixel pixel-btn px-6 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold shrink-0"
+              className="font-pixel pixel-btn px-6 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-base font-semibold shrink-0"
             >
               {t("dh.startAnalysis")}
             </button>
@@ -225,7 +225,7 @@ function DashboardContent() {
                   key={p}
                   type="button"
                   onClick={() => setPlatform(p)}
-                  className={`font-pixel pixel-btn px-4 py-1.5 text-sm font-medium ${
+                  className={`font-pixel pixel-btn px-4 py-1.5 text-base font-medium ${
                     platform === p
                       ? "border-chess-accent bg-chess-accent text-white dark:bg-chess-accent/25 dark:text-chess-accent"
                       : "bg-chess-elevated/25 dark:bg-transparent text-chess-muted hover:text-chess-primary"
@@ -253,7 +253,7 @@ function DashboardContent() {
                     key={tc}
                     type="button"
                     onClick={() => setTimeClass(tc)}
-                    className={`font-pixel pixel-btn flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium ${
+                    className={`font-pixel pixel-btn flex items-center gap-1.5 px-4 py-1.5 text-base font-medium ${
                       active
                         ? "border-chess-inverse bg-chess-inverse text-white"
                         : "bg-chess-elevated/30 dark:bg-transparent text-chess-muted hover:text-chess-primary"
@@ -303,7 +303,7 @@ function DashboardContent() {
                       key={p}
                       type="button"
                       onClick={() => setDraftPlatform(p)}
-                      className={`font-pixel pixel-btn px-4 py-2 text-sm font-medium ${
+                      className={`font-pixel pixel-btn px-4 py-2 text-base font-medium ${
                         draftPlatform === p
                           ? "border-chess-accent bg-chess-accent text-white dark:bg-chess-accent/25 dark:text-chess-accent"
                           : "bg-chess-elevated/40 dark:bg-transparent text-chess-muted"
@@ -331,7 +331,7 @@ function DashboardContent() {
                         key={tc}
                         type="button"
                         onClick={() => setDraftTimeClass(tc)}
-                        className={`font-pixel pixel-btn flex items-center gap-2 px-4 py-3 text-sm font-medium ${
+                        className={`font-pixel pixel-btn flex items-center gap-2 px-4 py-3 text-base font-medium ${
                           active
                             ? "border-chess-inverse bg-chess-inverse text-white"
                             : "bg-chess-elevated/30 dark:bg-transparent text-chess-muted"
@@ -354,7 +354,7 @@ function DashboardContent() {
               <button
                 type="button"
                 onClick={applyFilter}
-                className="font-pixel pixel-btn w-full py-3 bg-chess-inverse text-white font-semibold text-sm hover:bg-chess-inverse/90"
+                className="font-pixel pixel-btn w-full py-3 bg-chess-inverse text-white font-semibold text-base hover:bg-chess-inverse/90"
               >
                 {t("dh.filter.apply")}
               </button>
@@ -391,7 +391,7 @@ function DashboardContent() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl sm:text-2xl font-bold text-chess-primary truncate">{submitted}</h2>
-                  <span className="font-pixel text-xs sm:text-sm text-chess-muted bg-chess-surface dark:bg-chess-elevated dark:text-chess-muted px-2 py-0.5 capitalize border-2 border-chess-border/60 dark:border-chess-border/60">
+                  <span className="font-pixel text-sm sm:text-base text-chess-muted bg-chess-surface dark:bg-chess-elevated dark:text-chess-muted px-2 py-0.5 capitalize border-2 border-chess-border/60 dark:border-chess-border/60">
                     {submittedPlatform}
                   </span>
                 </div>
