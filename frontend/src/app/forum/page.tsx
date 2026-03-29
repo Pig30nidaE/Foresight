@@ -499,7 +499,7 @@ export default function ForumPage() {
                     {p.title}
                   </Link>
                 </h3>
-                <p className="mt-1.5 line-clamp-2 flex-1 overflow-hidden break-words text-sm leading-relaxed text-chess-muted [overflow-wrap:anywhere] sm:text-xs">
+                <p className="mt-1.5 line-clamp-3 flex-1 overflow-hidden break-words text-base leading-relaxed text-chess-muted [overflow-wrap:anywhere] sm:line-clamp-2 sm:text-sm">
                   {p.body_preview}
                 </p>
                 <div

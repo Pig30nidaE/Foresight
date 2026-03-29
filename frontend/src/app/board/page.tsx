@@ -52,7 +52,7 @@ function PostListRow({ p }: { p: PostRow }) {
       <div className="flex flex-col gap-2 px-3 py-2.5 text-sm transition hover:bg-chess-elevated/40 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3 sm:gap-y-1 sm:px-4">
         <Link
           href={href}
-          className="order-1 min-w-0 font-medium text-chess-primary [overflow-wrap:anywhere] hover:text-chess-accent sm:order-none sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:gap-2"
+          className="order-1 min-w-0 font-medium text-chess-primary [overflow-wrap:anywhere] hover:text-chess-accent sm:order-none sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-start sm:gap-2"
         >
           <span className="inline-flex flex-wrap items-center gap-2">
             {p.board_category === "notice" && (
@@ -61,7 +61,7 @@ function PostListRow({ p }: { p: PostRow }) {
             {p.board_category === "patch" && (
               <span className={patchListBadgeClass}>{t("board.badge.patch")}</span>
             )}
-            <span className="min-w-0 break-words text-base leading-snug sm:text-sm">{p.title}</span>
+            <span className="block min-w-0 whitespace-normal break-words text-base leading-snug [overflow-wrap:anywhere] [word-break:break-word] sm:text-sm">{p.title}</span>
           </span>
         </Link>
         <span className="order-2 flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs text-chess-muted sm:order-none sm:inline-flex sm:w-auto sm:shrink-0">
