@@ -1,21 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Jersey_15, VT323 } from "next/font/google";
+import { localFont, VT323 } from "next/font/local";
 import "./globals.css";
 import Providers from "@/shared/components/layout/Providers";
 import Navbar from "@/shared/components/layout/Navbar";
 import { Analytics } from "@vercel/analytics/next";
 import { resolveApiBaseUrl } from "@/shared/lib/apiBaseUrl";
 
-const vt323 = VT323({
+const vt323 = localFont({
+  src: "../../../VCR_OSD_MONO_1.001.ttf",
+  variable: "--font-pixel",
+  display: "swap",
+});
+
+const vt323Legacy = VT323({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-pixel-legacy",
-});
-
-const jersey15 = Jersey_15({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-pixel",
 });
 
 export const viewport: Viewport = {
@@ -89,7 +89,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body
-        className={`${vt323.variable} ${jersey15.variable} min-h-screen bg-[var(--background)] text-[var(--foreground)]`}
+        className={`${vt323.variable} ${vt323Legacy.variable} min-h-screen bg-[var(--background)] text-[var(--foreground)]`}
       >
         <Providers apiBaseUrl={apiBaseUrl}>
           <Navbar />
