@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { notFound, useParams, usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 import ForumBoardEditOverlay from "@/app/forum/ForumBoardEditOverlay";
@@ -61,7 +61,11 @@ export default function ForumPostDetailPage() {
   const params = useParams<{ postId: string }>();
   const postId = params?.postId;
   const router = useRouter();
+  const pathname = usePathname();
+  const isBoardPath = pathname?.startsWith("/board");
+  const listBasePath = isBoardPath ? "/board" : "/forum";
   const { status } = useSession();
+  const sessionLoading = status === "loading";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [post, setPost] = useState<PostDetail | null>(null);
@@ -93,6 +97,13 @@ export default function ForumPostDetailPage() {
       const { data } = await api.get<PostDetail>(`/forum/posts/${postId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
+      if (isBoardPath && !data.board_category) {
+        notFound();
+      }
+      if (!isBoardPath && data.board_category) {
+        router.replace(`/board/${data.public_id || data.id}`);
+        return;
+      }
       setPost(data);
       setEditTitle(data.title);
       setEditBody(data.body);
@@ -108,7 +119,7 @@ export default function ForumPostDetailPage() {
 
   useEffect(() => {
     void load();
-  }, [postId]);
+  }, [postId, isBoardPath, router]);
 
   const displayFen = useMemo(() => {
     if (!post || post.board_category) return null;
@@ -363,7 +374,7 @@ export default function ForumPostDetailPage() {
       await api.delete(`/forum/posts/${post.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      router.push(post.board_category ? "/board" : "/forum");
+      router.push(post.board_category ? "/board" : listBasePath);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
       setError(err?.response?.data?.detail ?? t("forum.error.deleteFailed"));
@@ -376,7 +387,7 @@ export default function ForumPostDetailPage() {
     <section className="mx-auto w-full max-w-3xl space-y-4">
       <div>
         <Link
-          href={post?.board_category ? "/board" : "/forum"}
+          href={post?.board_category ? "/board" : listBasePath}
           className="text-sm text-chess-accent hover:underline"
         >
           {post?.board_category ? t("forum.backToBoard") : t("forum.backToForum")}
@@ -529,7 +540,7 @@ export default function ForumPostDetailPage() {
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  disabled={busy || status !== "authenticated"}
+                  disabled={busy || sessionLoading || status !== "authenticated"}
                   onClick={onToggleLike}
                   aria-label={
                     post.liked_by_me
@@ -593,17 +604,21 @@ export default function ForumPostDetailPage() {
               {t("forum.commentsWithCount").replace("{n}", String(post.comment_count))}
             </h2>
             <form onSubmit={onAddComment} className="mt-3 space-y-2">
+              {sessionLoading && (
+                <p className="text-xs text-chess-muted">{t("forum.checkingAccount")}</p>
+              )}
               <textarea
                 value={commentBody}
                 onChange={(e) => setCommentBody(e.target.value)}
                 required
                 rows={3}
                 placeholder={t("forum.commentPlaceholder")}
-                className="w-full pixel-input px-3 py-2 text-sm break-words [overflow-wrap:anywhere]"
+                disabled={sessionLoading || status !== "authenticated"}
+                className="w-full pixel-input px-3 py-2 text-sm break-words [overflow-wrap:anywhere] disabled:opacity-60"
               />
               <button
                 type="submit"
-                disabled={busy || status !== "authenticated"}
+                disabled={busy || sessionLoading || status !== "authenticated"}
                 className="font-pixel pixel-btn bg-chess-accent px-4 py-2 text-sm font-semibold text-white border-chess-accent disabled:opacity-50"
               >
                 {t("forum.commentPost")}
