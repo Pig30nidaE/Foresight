@@ -112,8 +112,11 @@ export default function Navbar() {
     setMenuOpen(false);
   };
 
+  const openMenu = () => setMenuOpen(true);
+  const closeMenu = () => setMenuOpen(false);
+
   const closeMenuAndNavigate = (href: string) => {
-    setMenuOpen(false);
+    closeMenu();
     router.push(href);
   };
 
@@ -224,7 +227,7 @@ export default function Navbar() {
               className="p-2.5 rounded-[var(--pixel-radius)] border-2 border-transparent hover:border-chess-border/50 hover:bg-chess-border/30 transition-colors"
               aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
               aria-expanded={menuOpen}
-              onClick={() => setMenuOpen(menuOpen ? false : true)}
+              onClick={() => (menuOpen ? closeMenu() : openMenu())}
             >
               {menuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
@@ -264,7 +267,7 @@ export default function Navbar() {
                     type="button"
                     onClick={() => {
                       handleSignOut();
-                      setMenuOpen(false);
+                      closeMenu();
                     }}
                     className="w-full py-3 pixel-btn text-sm font-medium text-chess-primary sm:w-auto sm:min-w-[6rem]"
                   >
@@ -275,7 +278,7 @@ export default function Navbar() {
                 <a
                   href="/api/auth/signin?callbackUrl=%2Fpost-login"
                   className="w-full text-center py-3 pixel-btn bg-chess-accent text-white text-sm font-semibold border-chess-accent"
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() => closeMenu()}
                 >
                   {t("nav.signIn")}
                 </a>

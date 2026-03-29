@@ -61,7 +61,7 @@ function PostListRow({ p }: { p: PostRow }) {
             {p.board_category === "patch" && (
               <span className={patchListBadgeClass}>{t("board.badge.patch")}</span>
             )}
-            <span className="block min-w-0 whitespace-normal break-words text-base leading-snug line-clamp-2 [overflow-wrap:anywhere] [word-break:break-word] sm:text-sm">{p.title}</span>
+            <span className="block min-w-0 max-w-full whitespace-normal break-words text-base leading-snug line-clamp-2 [overflow-wrap:anywhere] [word-break:break-word] sm:text-sm">{p.title}</span>
           </span>
         </Link>
         <span className="order-2 flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs text-chess-muted sm:order-none sm:inline-flex sm:w-auto sm:shrink-0">

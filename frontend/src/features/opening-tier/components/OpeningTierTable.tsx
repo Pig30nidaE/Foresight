@@ -71,24 +71,26 @@ export default function OpeningTierTable({ entries, color, onOpeningClick }: Pro
         {entries.map((entry) => (
           <div
             key={entry.eco}
-            className="flex items-center gap-3 px-3 py-2.5 pixel-frame pixel-hud-fill hover:brightness-[1.02] transition-[filter]"
+            className="flex flex-col gap-2 px-3 py-2.5 pixel-frame pixel-hud-fill hover:brightness-[1.02] transition-[filter]"
           >
-            <div className="shrink-0">
-              <TierBadge tier={entry.tier} />
+            <div className="flex items-start gap-3">
+              <div className="shrink-0">
+                <TierBadge tier={entry.tier} />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => onOpeningClick?.(entry)}
+                  className="font-pixel text-chess-primary hover:text-chess-accent text-sm font-bold text-left w-full line-clamp-2 break-words [overflow-wrap:anywhere]"
+                >
+                  {entry.name}
+                </button>
+                <span className="text-sm text-chess-muted font-mono">{entry.eco}</span>
+              </div>
             </div>
 
-            <div className="flex-1 min-w-0">
-              <button
-                type="button"
-                onClick={() => onOpeningClick?.(entry)}
-                className="font-pixel text-chess-primary hover:text-chess-accent text-xs font-bold text-left w-full truncate block"
-              >
-                {entry.name}
-              </button>
-              <span className="text-[11px] text-chess-muted font-mono">{entry.eco}</span>
-            </div>
-
-            <div className="shrink-0">
+            <div className="pl-12">
               <WinRateBar winRate={entry.win_rate} drawRate={entry.draw_rate} color={color} />
             </div>
           </div>
