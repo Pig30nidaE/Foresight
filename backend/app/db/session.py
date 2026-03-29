@@ -8,7 +8,12 @@ engine = None
 AsyncSessionLocal = None
 
 if settings.DATABASE_URL.strip():
-    _engine_kwargs: dict = {"echo": False, "pool_pre_ping": True}
+    _engine_kwargs: dict = {
+        "echo": False,
+        "pool_pre_ping": True,
+        "pool_size": max(1, settings.DATABASE_POOL_SIZE),
+        "max_overflow": max(0, settings.DATABASE_MAX_OVERFLOW),
+    }
     _recycle = settings.DATABASE_POOL_RECYCLE_SECONDS
     if _recycle is not None and _recycle > 0:
         _engine_kwargs["pool_recycle"] = _recycle
