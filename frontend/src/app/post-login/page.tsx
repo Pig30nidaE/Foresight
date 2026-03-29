@@ -36,7 +36,16 @@ export default function PostLoginPage() {
         }
         setMessage(t("postLogin.needConsent"));
         router.replace("/signup/consent");
-      } catch {
+      } catch (error: unknown) {
+        const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+        const code = typeof detail === "object" && detail !== null ? (detail as { code?: string }).code : null;
+        const masked = typeof detail === "object" && detail !== null ? (detail as { masked_email?: string | null }).masked_email : null;
+        if (code === "EMAIL_CONFLICT") {
+          const qs = new URLSearchParams({ code: "email_conflict" });
+          if (masked) qs.set("email", masked);
+          router.replace(`/signup/consent?${qs.toString()}`);
+          return;
+        }
         setMessage(t("postLogin.failed"));
       }
     };

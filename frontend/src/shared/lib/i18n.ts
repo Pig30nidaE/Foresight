@@ -137,6 +137,17 @@ export const ko = {
   "settings.apply": "적용",
   "settings.saved": "설정을 저장했습니다.",
 
+  "auth.error.title": "로그인 오류",
+  "auth.error.AccessDenied": "로그인이 취소되었거나 권한이 거부되었습니다.",
+  "auth.error.OAuthCallbackError": "OAuth 인증이 취소되었거나 중단되었습니다.",
+  "auth.error.OAuthSignin": "OAuth 로그인을 시작하는 중 오류가 발생했습니다.",
+  "auth.error.OAuthAccountNotLinked": "이 계정은 다른 로그인 방식으로 이미 등록되어 있습니다.",
+  "auth.error.generic": "로그인 처리 중 오류가 발생했습니다.",
+  "auth.error.retryHint": "잠시 후 다시 시도해 주세요.",
+  "auth.error.signInAgain": "다시 로그인",
+  "auth.error.backHome": "홈으로",
+  "auth.error.openSignIn": "로그인 페이지 열기",
+
   // Dashboard Page
   "dh.searchPlaceholder": "전적 검색",
   "dh.startAnalysis": "검색",
@@ -569,6 +580,7 @@ export const ko = {
   "postLogin.checking": "로그인 상태를 확인하는 중...",
   "postLogin.needConsent": "회원가입 동의가 필요합니다.",
   "postLogin.failed": "계정을 확인하지 못했습니다. 잠시 후 다시 시도하거나 홈으로 이동해 주세요.",
+  "profilePublic.privateDesc": "이 사용자는 프로필을 비공개로 설정했습니다.",
 
   "dh.filter.sheetTitle": "필터",
   "dh.filter.apply": "적용하기",
@@ -585,7 +597,8 @@ export const ko = {
   "tier.page.authLoading": "오프닝 티어표를 불러오는 중...",
   "tier.page.checkingSession": "로그인 상태를 확인하고 있습니다.",
   "tier.page.error401": "세션이 만료되었거나 로그인 상태가 아닙니다. 다시 로그인해 주세요.",
-  "tier.page.error403": "오프닝 티어표는 로그인한 사용자만 이용할 수 있습니다.",
+  "tier.page.error403": "요청이 거부되었습니다. 사이트 내 메뉴에서 다시 열어 주세요.",
+  "tier.page.bracketsLoading": "레이팅 구간 정보를 불러오는 중…",
   "tier.search.placeholder": "오프닝 검색 (ECO / 이름)",
   "tier.search.reset": "초기화",
   "tier.youtubeManualSuffixKo": " 체스 오프닝 강의 한국어",
@@ -780,6 +793,17 @@ export const en: typeof ko = {
   "settings.cancel": "Cancel",
   "settings.apply": "Apply",
   "settings.saved": "Settings saved.",
+
+  "auth.error.title": "Sign-in error",
+  "auth.error.AccessDenied": "Sign-in was cancelled or permission was denied.",
+  "auth.error.OAuthCallbackError": "OAuth sign-in was cancelled or interrupted.",
+  "auth.error.OAuthSignin": "An error occurred while starting OAuth sign-in.",
+  "auth.error.OAuthAccountNotLinked": "This account already exists with a different sign-in method.",
+  "auth.error.generic": "Something went wrong while processing sign-in.",
+  "auth.error.retryHint": "Please try again in a moment.",
+  "auth.error.signInAgain": "Sign in again",
+  "auth.error.backHome": "Back to home",
+  "auth.error.openSignIn": "Open sign-in page",
 
   // Dashboard Page
   "dh.searchPlaceholder": "Search match history",
@@ -1212,6 +1236,7 @@ export const en: typeof ko = {
   "postLogin.checking": "Checking login status...",
   "postLogin.needConsent": "Sign-up consent is required.",
   "postLogin.failed": "Could not verify your account. Please try again later or go to Home.",
+  "profilePublic.privateDesc": "This user has set their profile to private.",
 
   "dh.filter.sheetTitle": "Filters",
   "dh.filter.apply": "Apply",
@@ -1228,7 +1253,8 @@ export const en: typeof ko = {
   "tier.page.authLoading": "Loading opening tiers…",
   "tier.page.checkingSession": "Checking sign-in…",
   "tier.page.error401": "Session expired or not signed in. Please sign in again.",
-  "tier.page.error403": "Opening tiers are available to signed-in users only.",
+  "tier.page.error403": "Request blocked. Please open this page from the site menu.",
+  "tier.page.bracketsLoading": "Loading rating brackets…",
   "tier.search.placeholder": "Search openings (ECO / name)",
   "tier.search.reset": "Reset",
   "tier.youtubeManualSuffixKo": " 체스 오프닝 강의 한국어",
