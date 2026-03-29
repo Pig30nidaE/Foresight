@@ -28,6 +28,7 @@ export default function Navbar() {
   const { t } = useTranslation();
   const { status: authStatus, data: session } = useSession();
   const drawerRef = useRef<HTMLDivElement>(null);
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
 
   const handleSignOut = () => {
     clearBackendJwtCache();
@@ -39,16 +40,33 @@ export default function Navbar() {
     setMenuOpen(false);
   }, [pathname]);
 
-  // 드로어 외부 클릭 시 닫기
+  // 바깥 클릭 / ESC로 닫기
   useEffect(() => {
     if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
       if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown, { passive: true });
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const timer = window.setTimeout(() => {
+      mobileSearchRef.current?.blur();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [menuOpen]);
 
   useEffect(() => {
@@ -101,7 +119,7 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="border-b-2 border-chess-border/60 dark:border-chess-border/80 bg-chess-bg/95 dark:bg-chess-bg sticky top-0 z-50 pt-[env(safe-area-inset-top,0px)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]">
+      <header className="border-b-2 border-chess-border/60 dark:border-chess-border/80 bg-chess-bg/95 dark:bg-chess-bg sticky top-0 z-[60] pt-[env(safe-area-inset-top,0px)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]">
         {/* 모바일/태블릿은 동일한 틀, 데스크톱(lg 이상)에서만 좌측 정렬이 되도록 wrapper를 분리 */}
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
           {/* 좌측 영역: 로고 + (xl 이상에서만) 네비 — 태블릿·iPad 는 모바일 드로어 */}
@@ -216,13 +234,13 @@ export default function Navbar() {
         {/* ── 모바일·태블릿: 헤더 바로 아래로 펼쳐지는 패널 (전체 화면 오버레이 아님) ── */}
         <div
           ref={drawerRef}
-          className={`xl:hidden overflow-hidden border-chess-border/50 transition-[max-height] duration-300 ease-out motion-reduce:transition-none ${
+          className={`xl:hidden fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-[70] overflow-hidden border-chess-border/50 bg-chess-bg/98 transition-[max-height] duration-300 ease-out motion-reduce:transition-none ${
             menuOpen
-              ? "max-h-[min(75dvh,calc(100dvh-3.5rem-env(safe-area-inset-top,0px)))] border-t-2"
+              ? "max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px))] border-t-2 shadow-[0_6px_24px_rgba(0,0,0,0.18)]"
               : "max-h-0 border-t-0 pointer-events-none"
           }`}
         >
-          <div className="max-h-[min(75dvh,calc(100dvh-3.5rem-env(safe-area-inset-top,0px)))] overflow-y-auto overscroll-y-contain bg-chess-bg px-4 py-4 space-y-4">
+          <div className="max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px))] overflow-y-auto overscroll-y-contain bg-chess-bg px-4 py-4 space-y-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
             <div className="flex flex-col gap-2 border-b border-chess-border/30 pb-3 sm:flex-row">
               {authStatus === "authenticated" ? (
                 <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -272,6 +290,7 @@ export default function Navbar() {
                   className="absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-chess-muted pointer-events-none"
                 />
                 <input
+                  ref={mobileSearchRef}
                   type="search"
                   enterKeyHint="search"
                   value={username}
