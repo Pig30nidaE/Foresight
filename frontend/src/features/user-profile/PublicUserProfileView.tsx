@@ -138,6 +138,14 @@ export default function PublicUserProfileView() {
           </div>
         )}
 
+        {profile && !loading && !error && !profile.activity_visible && (
+          <div className="mt-4 pixel-frame pixel-hud-fill border-chess-border/60 p-4 text-center text-sm text-chess-primary">
+            <p className="font-pixel text-xs text-chess-muted">{t("nav.publicProfile")}</p>
+            <p className="mt-2 font-pixel text-sm text-chess-primary">{t("profilePublic.private")}</p>
+            <p className="mt-2 text-xs text-chess-muted">이 사용자는 프로필을 비공개로 설정했습니다.</p>
+          </div>
+        )}
+
         {profile && !loading && !error && (
           <>
             <header className="pixel-frame pixel-hud-fill overflow-hidden">
