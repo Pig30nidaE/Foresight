@@ -16,6 +16,7 @@ import { AuthorNameLink } from "@/shared/components/forum/AuthorName";
 import { PixelChatGlyph, PixelHeartGlyph } from "@/shared/components/ui/PixelGlyphs";
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDate } from "@/shared/lib/formatLocaleDate";
+import { forumPostHref } from "@/shared/lib/forumPostHref";
 
 type PostItem = {
   id: string;
@@ -35,6 +36,7 @@ type PostItem = {
   thumbnail_fen?: string | null;
   has_pgn?: boolean;
   has_fen?: boolean;
+  board_category?: string | null;
 };
 
 type PostListResponse = {
@@ -65,6 +67,7 @@ export default function ForumPage() {
   const pageSize = isDesktop ? 8 : 4;
   const router = useRouter();
   const { status } = useSession();
+  const sessionLoading = status === "loading";
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadingMe, setLoadingMe] = useState(false);
@@ -83,6 +86,7 @@ export default function ForumPage() {
   const [composeBoardSectionExpanded, setComposeBoardSectionExpanded] = useState(false);
   const [busyCreate, setBusyCreate] = useState(false);
   const [sort, setSort] = useState("new");
+  const TITLE_MAX_LENGTH = 200;
   const [searchDraft, setSearchDraft] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -197,6 +201,10 @@ export default function ForumPage() {
       setPostsError(t("forum.error.titleBodyRequired"));
       return;
     }
+    if (createTitle.trim().length > TITLE_MAX_LENGTH) {
+      setPostsError(t("forum.error.titleTooLong"));
+      return;
+    }
     setBusyCreate(true);
     try {
       const token = await getBackendJwt();
@@ -205,7 +213,7 @@ export default function ForumPage() {
       const { data } = await api.post(
         "/forum/posts",
         {
-          title: createTitle,
+          title: createTitle.trim(),
           body: createBody,
           pgn_text: null,
           fen_initial: fenOut,
@@ -268,29 +276,35 @@ export default function ForumPage() {
             </>
           )}
           {!creating && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-chess-muted">
-              <span>{t("board.sort.label")}</span>
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-                className="pixel-input px-3 py-2 text-sm text-chess-primary"
+            <div className="mt-3 flex w-full flex-col gap-2 text-sm text-chess-muted sm:flex-row sm:flex-wrap sm:items-center">
+              <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                <span className="shrink-0 text-xs font-medium sm:text-sm">{t("board.sort.label")}</span>
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                  className="pixel-input min-h-[44px] w-full px-3 py-2.5 text-base text-chess-primary sm:min-h-0 sm:w-auto sm:text-sm"
+                >
+                  <option value="new">{t("board.sort.new")}</option>
+                  <option value="old">{t("board.sort.old")}</option>
+                  <option value="likes">{t("board.sort.likes")}</option>
+                  <option value="comments">{t("board.sort.comments")}</option>
+                </select>
+              </label>
+              <form
+                onSubmit={onSearchSubmit}
+                className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:gap-2"
               >
-                <option value="new">{t("board.sort.new")}</option>
-                <option value="old">{t("board.sort.old")}</option>
-                <option value="likes">{t("board.sort.likes")}</option>
-                <option value="comments">{t("board.sort.comments")}</option>
-              </select>
-              <form onSubmit={onSearchSubmit} className="flex items-center gap-2">
                 <input
-                  type="text"
+                  type="search"
+                  enterKeyHint="search"
                   value={searchDraft}
                   onChange={(e) => setSearchDraft(e.target.value)}
                   placeholder={t("forum.search.placeholder")}
-                  className="pixel-input px-3 py-2 text-sm text-chess-primary"
+                  className="pixel-input min-h-[44px] w-full px-3 py-2.5 text-base text-chess-primary sm:min-w-[12rem] sm:flex-1 sm:text-sm"
                 />
                 <button
                   type="submit"
-                  className="font-pixel pixel-btn px-3 py-2 text-xs bg-chess-surface/80 text-chess-primary"
+                  className="font-pixel pixel-btn min-h-[44px] w-full px-4 py-2.5 text-sm bg-chess-surface/80 text-chess-primary sm:w-auto sm:min-h-0"
                 >
                   {t("board.search.submit")}
                 </button>
@@ -298,14 +312,16 @@ export default function ForumPage() {
             </div>
           )}
         </div>
-        {canWrite ? (
+        {sessionLoading ? (
+          <p className="font-pixel text-xs text-chess-muted sm:self-end">{t("forum.checkingAccount")}</p>
+        ) : canWrite ? (
           <button
             type="button"
             onClick={() => {
               if (creating) closeCompose();
               else setCreating(true);
             }}
-            className="font-pixel pixel-btn inline-flex items-center gap-2 bg-chess-accent px-4 py-2.5 text-sm font-semibold text-white border-chess-accent hover:brightness-105"
+            className="font-pixel pixel-btn inline-flex min-h-[44px] w-full items-center justify-center gap-2 bg-chess-accent px-4 py-2.5 text-sm font-semibold text-white border-chess-accent hover:brightness-105 sm:w-auto sm:min-h-0"
           >
             {creating ? (
               t("board.write.close")
@@ -319,6 +335,7 @@ export default function ForumPage() {
         ) : (
           <button
             type="button"
+            disabled={sessionLoading}
             onClick={() => {
               if (status !== "authenticated") {
                 router.push("/api/auth/signin?callbackUrl=%2Fpost-login");
@@ -326,7 +343,7 @@ export default function ForumPage() {
                 router.push("/signup/consent");
               }
             }}
-            className="font-pixel pixel-btn bg-chess-surface/70 px-4 py-2.5 text-sm font-medium text-chess-primary hover:bg-chess-elevated/80"
+            className="font-pixel pixel-btn min-h-[44px] w-full bg-chess-surface/70 px-4 py-2.5 text-sm font-medium text-chess-primary hover:bg-chess-elevated/80 disabled:opacity-50 sm:w-auto sm:min-h-0"
           >
             {status === "authenticated" ? t("board.write.afterProfile") : t("board.write.afterSignIn")}
           </button>
@@ -354,7 +371,7 @@ export default function ForumPage() {
               type="text"
               required
               minLength={1}
-              maxLength={500}
+              maxLength={TITLE_MAX_LENGTH}
               value={createTitle}
               onChange={(e) => setCreateTitle(e.target.value)}
               placeholder={t("forum.titlePlaceholder")}
@@ -468,21 +485,21 @@ export default function ForumPage() {
               className="group flex min-h-0 flex-col overflow-hidden pixel-frame bg-chess-bg/85 transition-colors hover:border-chess-accent/50 dark:bg-chess-surface/40"
             >
               <Link
-                href={`/forum/${p.public_id ?? p.id}`}
+                href={forumPostHref(p)}
                 className="relative block aspect-square w-full shrink-0 overflow-hidden bg-chess-surface"
               >
                 <ForumPostThumbnail thumbnailFen={p.thumbnail_fen} />
               </Link>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2.5 sm:p-3">
-                <h3 className="text-sm font-semibold leading-snug tracking-tight text-chess-primary">
+                <h3 className="text-base font-semibold leading-snug tracking-tight text-chess-primary sm:text-sm">
                   <Link
-                    href={`/forum/${p.public_id ?? p.id}`}
-                    className="transition group-hover:text-chess-accent"
+                    href={forumPostHref(p)}
+                    className="block break-words [overflow-wrap:anywhere] [word-break:break-word] transition group-hover:text-chess-accent"
                   >
                     {p.title}
                   </Link>
                 </h3>
-                <p className="mt-1.5 line-clamp-2 flex-1 overflow-hidden break-words text-xs leading-relaxed text-chess-muted [overflow-wrap:anywhere]">
+                <p className="mt-1.5 line-clamp-2 flex-1 overflow-hidden break-words text-sm leading-relaxed text-chess-muted [overflow-wrap:anywhere] sm:text-xs">
                   {p.body_preview}
                 </p>
                 <div
