@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,6 +52,11 @@ async def get_optional_token_payload(
 
 
 async def upsert_user_from_claims(db: AsyncSession, claims: dict) -> User:
+    """OAuth login bootstrap/update.
+
+    If a different provider already owns the same completed email, reject the sign-in.
+    If the duplicate row is still incomplete, clean it up so the user can retry cleanly.
+    """
     provider = str(claims.get("provider") or "").strip()
     provider_account_id = str(claims.get("provider_account_id") or "").strip()
     if not provider or not provider_account_id:
@@ -74,11 +79,37 @@ async def upsert_user_from_claims(db: AsyncSession, claims: dict) -> User:
         )
     )
     user = result.scalar_one_or_none()
+
+    conflict_user = None
+    if email:
+        conflict_user = (
+            await db.execute(
+                select(User).where(
+                    User.email == email,
+                    ~(
+                        (User.provider == provider)
+                        & (User.provider_account_id == provider_account_id)
+                    ),
+                )
+            )
+        ).scalar_one_or_none()
+
+    if conflict_user is not None:
+        if conflict_user.signup_completed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "EMAIL_CONFLICT",
+                    "masked_email": email,
+                },
+            )
+        await db.execute(delete(User).where(User.id == conflict_user.id))
+        await db.flush()
+
     if user:
         user.email = email
         if getattr(user, "avatar_sync_oauth", True):
             user.avatar_url = avatar
-        # 가입 완료 후 닉네임은 DB 값만 사용 (OAuth 실명 덮어쓰기 금지, 닉네임 유니크 충돌 방지)
         if not user.signup_completed:
             user.display_name = display_name
     else:
@@ -94,7 +125,6 @@ async def upsert_user_from_claims(db: AsyncSession, claims: dict) -> User:
         )
         db.add(user)
 
-    # Reserved super-admin account policy: always force role/display_name by email.
     if _is_protected_admin_email(user.email):
         user.role = "admin"
         user.display_name = _PROTECTED_ADMIN_DISPLAY_NAME
@@ -105,7 +135,7 @@ async def upsert_user_from_claims(db: AsyncSession, claims: dict) -> User:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="계정 정보를 동기화하는 중 닉네임이 충돌했습니다. 잠시 후 다시 시도해 주세요.",
+            detail="계정 정보를 동기화하는 중 충돌이 발생했습니다. 잠시 후 다시 시도해 주세요.",
         ) from exc
     await db.refresh(user)
     return user
