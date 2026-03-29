@@ -51,12 +51,6 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  // 드로어 열릴 때 스크롤 잠금
-  useEffect(() => {
-    document.body.style.overflow = menuOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [menuOpen]);
-
   useEffect(() => {
     const loadDisplayName = async () => {
       if (authStatus !== "authenticated") {
@@ -100,12 +94,17 @@ export default function Navbar() {
     setMenuOpen(false);
   };
 
+  const closeMenuAndNavigate = (href: string) => {
+    setMenuOpen(false);
+    router.push(href);
+  };
+
   return (
     <>
       <header className="border-b-2 border-chess-border/60 dark:border-chess-border/80 bg-chess-bg/95 dark:bg-chess-bg sticky top-0 z-50 pt-[env(safe-area-inset-top,0px)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]">
         {/* 모바일/태블릿은 동일한 틀, 데스크톱(lg 이상)에서만 좌측 정렬이 되도록 wrapper를 분리 */}
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
-          {/* 좌측 영역: 로고 + (lg 이상에서만) 네비 링크 */}
+          {/* 좌측 영역: 로고 + (xl 이상에서만) 네비 — 태블릿·iPad 는 모바일 드로어 */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {/* 로고 */}
             <Link
@@ -121,8 +120,8 @@ export default function Navbar() {
               </span>
             </Link>
 
-            {/* ── 데스크톱 전용 (lg 이상) ── */}
-            <nav className="hidden lg:flex items-center gap-1 text-sm shrink-0">
+            {/* ── 데스크톱 전용 (xl 이상, 1280px+) ── */}
+            <nav className="hidden xl:flex items-center gap-1 text-sm shrink-0">
               {NAV_ITEMS.map(({ href, labelKey }) => {
                 const active =
                   href === "/forum"
@@ -147,8 +146,8 @@ export default function Navbar() {
             </nav>
           </div>
 
-          {/* ── 데스크톱 검색 + 설정 (lg 이상) ── */}
-          <div className="hidden lg:flex items-center gap-3 shrink-0">
+          {/* ── 데스크톱 검색 + 설정 (xl 이상) ── */}
+          <div className="hidden xl:flex items-center gap-3 shrink-0">
             {authStatus === "authenticated" ? (
               <div className="flex items-center gap-1">
                 <Link
@@ -200,8 +199,8 @@ export default function Navbar() {
             </form>
           </div>
 
-          {/* ── 모바일 우측 아이콘 (lg 미만) ── */}
-          <div className="flex lg:hidden items-center gap-1 shrink-0">
+          {/* ── 모바일·태블릿 우측 아이콘 (xl 미만) ── */}
+          <div className="flex xl:hidden items-center gap-1 shrink-0">
             <button
               type="button"
               className="p-2.5 rounded-[var(--pixel-radius)] border-2 border-transparent hover:border-chess-border/50 hover:bg-chess-border/30 transition-colors"
@@ -214,62 +213,42 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* ── 모바일 드로어 (lg 미만) ── */}
-        {menuOpen && (
-          <div
-            ref={drawerRef}
-            className="lg:hidden border-t-2 border-chess-border/50 bg-chess-bg px-4 py-4 space-y-4 animate-fade-in"
-          >
-            {/* 검색 */}
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <div className="relative flex-1">
-                <Search
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-chess-muted pointer-events-none"
-                />
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder={t("nav.searchPlaceholder")}
-                  className="pixel-input w-full pl-9 pr-3 py-2.5 text-sm text-chess-primary placeholder-chess-muted"
-                  autoFocus
-                />
-              </div>
-              <button
-                type="submit"
-                className="font-pixel pixel-btn bg-chess-accent hover:bg-chess-accent/85 text-white font-semibold px-4 py-2.5 text-sm shrink-0"
-              >
-                {t("nav.analyze")}
-              </button>
-            </form>
-
-            <div className="flex gap-2 border-b border-chess-border/30 pb-3">
+        {/* ── 모바일·태블릿: 헤더 바로 아래로 펼쳐지는 패널 (전체 화면 오버레이 아님) ── */}
+        <div
+          ref={drawerRef}
+          className={`xl:hidden overflow-hidden border-chess-border/50 transition-[max-height] duration-300 ease-out motion-reduce:transition-none ${
+            menuOpen
+              ? "max-h-[min(75dvh,calc(100dvh-3.5rem-env(safe-area-inset-top,0px)))] border-t-2"
+              : "max-h-0 border-t-0 pointer-events-none"
+          }`}
+        >
+          <div className="max-h-[min(75dvh,calc(100dvh-3.5rem-env(safe-area-inset-top,0px)))] overflow-y-auto overscroll-y-contain bg-chess-bg px-4 py-4 space-y-4">
+            <div className="flex flex-col gap-2 border-b border-chess-border/30 pb-3 sm:flex-row">
               {authStatus === "authenticated" ? (
-                <div className="flex flex-1 items-center gap-2">
-                  <Link
-                    href="/mypage"
-                    className="group/nav-avatar flex flex-1 items-center justify-center gap-2.5 py-2.5 pixel-btn bg-chess-surface text-sm font-semibold text-chess-primary"
-                    onClick={() => setMenuOpen(false)}
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <button
+                    type="button"
+                    onClick={() => closeMenuAndNavigate("/mypage")}
+                    className="group/nav-avatar flex w-full items-center gap-3 rounded-[var(--pixel-radius)] border-2 border-chess-border/40 bg-chess-surface px-3 py-3 text-left text-sm font-semibold text-chess-primary hover:border-chess-accent/50"
                   >
                     {forumAvatarUrl !== undefined && (
                       <AvatarThumb
                         src={forumAvatarUrl}
                         alt=""
-                        size={28}
+                        size={36}
                         variant="hud"
-                        className="transition-[filter] group-hover/nav-avatar:brightness-105"
+                        className="shrink-0 transition-[filter] group-hover/nav-avatar:brightness-105"
                       />
                     )}
-                    <span className="truncate leading-snug">{forumDisplayName ?? "My"}</span>
-                  </Link>
+                    <span className="min-w-0 flex-1 truncate leading-snug">{forumDisplayName ?? "My"}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
                       handleSignOut();
                       setMenuOpen(false);
                     }}
-                    className="flex-1 py-2 pixel-btn text-sm font-medium text-chess-primary"
+                    className="w-full py-3 pixel-btn text-sm font-medium text-chess-primary sm:w-auto sm:min-w-[6rem]"
                   >
                     {t("nav.signOut")}
                   </button>
@@ -277,13 +256,37 @@ export default function Navbar() {
               ) : (
                 <a
                   href="/api/auth/signin?callbackUrl=%2Fpost-login"
-                  className="flex-1 text-center py-2 pixel-btn bg-chess-accent text-white text-sm font-semibold border-chess-accent"
+                  className="w-full text-center py-3 pixel-btn bg-chess-accent text-white text-sm font-semibold border-chess-accent"
                   onClick={() => setMenuOpen(false)}
                 >
                   {t("nav.signIn")}
                 </a>
               )}
             </div>
+
+            {/* 검색 — iOS 자동 확대 방지: 입력 글자 16px 이상 */}
+            <form onSubmit={handleSearch} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-chess-muted pointer-events-none"
+                />
+                <input
+                  type="search"
+                  enterKeyHint="search"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder={t("nav.searchPlaceholder")}
+                  className="pixel-input min-h-[44px] w-full pl-9 pr-3 py-2.5 text-base text-chess-primary placeholder:text-chess-muted sm:text-sm"
+                />
+              </div>
+              <button
+                type="submit"
+                className="font-pixel pixel-btn min-h-[44px] w-full shrink-0 bg-chess-accent px-4 py-2.5 text-base font-semibold text-white hover:bg-chess-accent/85 sm:w-auto sm:min-h-0 sm:text-sm"
+              >
+                {t("nav.analyze")}
+              </button>
+            </form>
 
             {/* 네비 링크 */}
             <nav className="space-y-1">
@@ -295,22 +298,23 @@ export default function Navbar() {
                       ? pathname.startsWith("/board")
                       : pathname.startsWith(href);
                 return (
-                  <Link
+                  <button
                     key={href}
-                    href={href}
-                    className={`font-pixel flex items-center px-4 py-3 text-sm font-medium pixel-btn ${
+                    type="button"
+                    onClick={() => closeMenuAndNavigate(href)}
+                    className={`font-pixel flex w-full items-center px-4 py-3 text-left text-sm font-medium pixel-btn ${
                       active
                         ? "bg-chess-accent/18 text-chess-accent border-chess-accent/45"
                         : "text-chess-muted hover:text-chess-primary bg-transparent"
                     }`}
                   >
                     {t(labelKey)}
-                  </Link>
+                  </button>
                 );
               })}
             </nav>
           </div>
-        )}
+        </div>
       </header>
     </>
   );
