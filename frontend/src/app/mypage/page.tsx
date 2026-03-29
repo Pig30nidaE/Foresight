@@ -284,7 +284,7 @@ export default function MyPage() {
       </div>
 
       {loading && (
-        <p className="font-pixel text-sm text-chess-muted border-2 border-chess-border border-dashed px-3 py-2 w-fit">
+        <p className="font-pixel text-base text-chess-muted border-2 border-chess-border border-dashed px-3 py-2 w-fit">
           {t("mypage.loading")}
         </p>
       )}
@@ -363,7 +363,7 @@ export default function MyPage() {
                 {t("mypage.saveSettings")}
               </button>
               {settingsSaved && (
-                <span className="font-pixel text-[11px] text-chess-win tabular-nums">{t("mypage.flash.settingsSaved")}</span>
+                <span className="font-pixel text-sm text-chess-win tabular-nums">{t("mypage.flash.settingsSaved")}</span>
               )}
             </div>
           </form>
@@ -374,7 +374,7 @@ export default function MyPage() {
               {me.public_id && (
                 <Link
                   href={`/user/${me.public_id}`}
-                  className={`font-pixel text-[11px] font-medium underline decoration-2 underline-offset-2 hover:brightness-110 ${
+                  className={`font-pixel text-sm font-medium underline decoration-2 underline-offset-2 hover:brightness-110 ${
                     me.profile_public ? "text-chess-accent" : "text-chess-muted"
                   }`}
                 >
@@ -404,7 +404,7 @@ export default function MyPage() {
                       type="button"
                       disabled={avatarBusy || busy}
                       onClick={() => fileInputRef.current?.click()}
-                      className="font-pixel px-3 py-1.5 text-[11px] font-semibold text-chess-primary pixel-btn bg-chess-surface/80 disabled:opacity-50"
+                      className="font-pixel px-3 py-1.5 text-sm font-semibold text-chess-primary pixel-btn bg-chess-surface/80 disabled:opacity-50"
                     >
                       {t("profile.chooseImage")}
                     </button>
@@ -412,7 +412,7 @@ export default function MyPage() {
                       type="button"
                       disabled={avatarBusy || busy}
                       onClick={() => void onDefaultAvatar()}
-                      className="font-pixel px-3 py-1.5 text-[11px] font-medium text-chess-primary pixel-btn bg-chess-border/25 disabled:opacity-50"
+                      className="font-pixel px-3 py-1.5 text-sm font-medium text-chess-primary pixel-btn bg-chess-border/25 disabled:opacity-50"
                     >
                       {t("profile.useDefaultImage")}
                     </button>
@@ -420,7 +420,7 @@ export default function MyPage() {
                       type="button"
                       disabled={avatarBusy || busy}
                       onClick={() => void onRestoreOAuthAvatar()}
-                      className="font-pixel px-3 py-1.5 text-[11px] font-medium text-chess-primary pixel-btn bg-chess-border/25 disabled:opacity-50"
+                      className="font-pixel px-3 py-1.5 text-sm font-medium text-chess-primary pixel-btn bg-chess-border/25 disabled:opacity-50"
                     >
                       {t("profile.restoreOAuthPhoto")}
                     </button>
