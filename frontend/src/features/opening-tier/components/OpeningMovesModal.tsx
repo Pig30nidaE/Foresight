@@ -27,7 +27,6 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
   const [currentIndex, setCurrentIndex] = useState(0);
   const [detail, setDetail] = useState<OpeningDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [tipsOpen, setTipsOpen] = useState(false);
 
   // UCI moves → FEN array + SAN array
   const positions = useMemo((): Position[] | null => {
@@ -53,7 +52,6 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
   useEffect(() => {
     setCurrentIndex(0);
     setDetail(null);
-    setTipsOpen(false);
     if (!entry) return;
     setDetailLoading(true);
     getOpeningDetail(entry.eco, entry.name, color)
@@ -226,7 +224,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                       {t("tier.mainIdea")}
                     </p>
                     <p className="text-sm text-chess-primary leading-relaxed">
-                      {description}
+                      {description[language] ?? description.ko}
                     </p>
                   </div>
                 )}
@@ -234,32 +232,11 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
             </div>
           )}
 
-          {/* 핵심 포인트 & YouTube 링크 */}
           <div className="px-5 pb-4 border-t-2 border-chess-border pt-4 shrink-0 pixel-hud-fill">
-          {/* 핵심 포인트 — 접기/펼치기 */}
-          <div>
-            <button
-              type="button"
-              onClick={() => setTipsOpen((v) => !v)}
-              className="flex items-center gap-1.5 w-full text-left group mb-2"
-            >
-              <p className="font-pixel text-[10px] text-chess-muted font-bold">
+            <div>
+              <p className="font-pixel text-[10px] text-chess-muted mb-2 font-bold">
                 {t("tier.keyPoints")}
               </p>
-              <svg
-                className={`w-3.5 h-3.5 text-chess-muted transition-transform duration-200 ${tipsOpen ? "rotate-180" : ""}`}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-
-            {tipsOpen && (
               <div className="mb-4">
                 {detailLoading ? (
                   <div className="space-y-2">
@@ -288,53 +265,8 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                   </p>
                 )}
               </div>
-            )}
+            </div>
           </div>
-
-          {/* YouTube 검색 링크 */}
-          <div>
-            <p className="font-pixel text-[10px] text-chess-muted mb-2 font-bold">
-              {t("tier.youtube")}
-            </p>
-            {detail ? (
-              <a
-                href={detail.youtube_search_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-pixel pixel-btn inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold bg-red-600/12 text-chess-loss border-red-600/40 hover:bg-red-600/20"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                </svg>
-                {t("tier.searchYoutube").replace("{name}", entry.name)}
-              </a>
-            ) : detailLoading ? (
-              <div className="h-7 w-48 border-2 border-chess-border/50 bg-chess-border/30 animate-pulse" />
-            ) : (
-              <a
-                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(
-                  entry.name + " " + entry.eco + (language === "ko" ? t("tier.youtubeManualSuffixKo") : t("tier.youtubeManualSuffixEn"))
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-pixel pixel-btn inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold bg-red-600/12 text-chess-loss border-red-600/40 hover:bg-red-600/20"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                </svg>
-                {t("tier.searchYoutube").replace("{name}", entry.name)}
-              </a>
-            )}
-          </div>
-        </div>
         </div>
 
         {/* Footer */}
