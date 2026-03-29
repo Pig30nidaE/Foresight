@@ -373,7 +373,7 @@ export default function MyPage() {
               <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.profileSection")}</h2>
               {me.public_id && (
                 <Link
-                  href={`/profile/${me.public_id}`}
+                  href={`/user/${me.public_id}`}
                   className={`font-pixel text-[11px] font-medium underline decoration-2 underline-offset-2 hover:brightness-110 ${
                     me.profile_public ? "text-chess-accent" : "text-chess-muted"
                   }`}
