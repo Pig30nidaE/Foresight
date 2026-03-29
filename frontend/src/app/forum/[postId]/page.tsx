@@ -536,7 +536,7 @@ export default function ForumPostDetailPage() {
                   <ForumPostThumbnail thumbnailFen={displayFen} />
                 </div>
               )}
-              <p className="mt-4 whitespace-pre-wrap break-words text-sm text-chess-primary [overflow-wrap:anywhere]">
+              <p className="mt-4 whitespace-pre-wrap break-words text-base leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.05rem]">
                 {post.body}
               </p>
               {post.pgn_text?.trim() && !post.board_category && (
