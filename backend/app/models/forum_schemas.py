@@ -67,20 +67,20 @@ class PostDetail(BaseModel):
 
 
 class PostCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=500)
+    title: str = Field(..., min_length=1, max_length=200)
     body: str = Field(..., min_length=1, max_length=50_000)
     pgn_text: str | None = Field(None, max_length=200_000)
     fen_initial: str | None = Field(None, max_length=120)
 
 
 class BoardPostCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=500)
+    title: str = Field(..., min_length=1, max_length=200)
     body: str = Field(..., min_length=1, max_length=50_000)
     kind: Literal["notice", "free", "patch"]
 
 
 class PostUpdate(BaseModel):
-    title: str | None = Field(None, min_length=1, max_length=500)
+    title: str | None = Field(None, min_length=1, max_length=200)
     body: str | None = Field(None, min_length=1, max_length=50_000)
     pgn_text: str | None = Field(None, max_length=200_000)
     fen_initial: str | None = Field(None, max_length=120)
@@ -143,10 +143,12 @@ class MyPostListItem(BaseModel):
     body_preview: str
     created_at: datetime
     updated_at: datetime
+    board_category: str | None = None
 
 
 class MyPostListResponse(BaseModel):
     items: list[MyPostListItem]
+    total: int = 0
 
 
 class MyCommentListItem(BaseModel):
@@ -156,10 +158,12 @@ class MyCommentListItem(BaseModel):
     post_id: uuid.UUID
     post_public_id: str
     post_title: str
+    post_board_category: str | None = None
 
 
 class MyCommentListResponse(BaseModel):
     items: list[MyCommentListItem]
+    total: int = 0
 
 
 class UserPublicProfileResponse(BaseModel):
@@ -172,6 +176,8 @@ class UserPublicProfileResponse(BaseModel):
     activity_visible: bool
     posts: list[MyPostListItem] = []
     comments: list[MyCommentListItem] = []
+    posts_total: int = 0
+    comments_total: int = 0
 
 
 class ReportCreate(BaseModel):
