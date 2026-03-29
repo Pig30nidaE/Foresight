@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ChevronRight, FileText, MessageCircle } from "lucide-react";
@@ -9,6 +9,8 @@ import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
 import { resolveAvatarUrl } from "@/shared/lib/avatarUrl";
 import { useTranslation } from "@/shared/lib/i18n";
+import { formatPostDateTime } from "@/shared/lib/formatLocaleDate";
+import { forumPostHref } from "@/shared/lib/forumPostHref";
 
 type PublicPost = {
   id: string;
@@ -16,6 +18,7 @@ type PublicPost = {
   title: string;
   body_preview: string;
   created_at: string;
+  board_category?: string | null;
 };
 
 type PublicComment = {
@@ -25,6 +28,7 @@ type PublicComment = {
   post_id: string;
   post_public_id: string;
   post_title: string;
+  post_board_category?: string | null;
 };
 
 type UserPublicProfile = {
@@ -36,6 +40,8 @@ type UserPublicProfile = {
   activity_visible: boolean;
   posts: PublicPost[];
   comments: PublicComment[];
+  posts_total: number;
+  comments_total: number;
 };
 
 export default function PublicUserProfileView() {
@@ -43,39 +49,45 @@ export default function PublicUserProfileView() {
   const params = useParams<{ userId: string }>();
   const router = useRouter();
   const userId = params?.userId;
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [loading, setLoading] = useState(true);
+  const [listRefreshing, setListRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserPublicProfile | null>(null);
   const [tab, setTab] = useState<"posts" | "comments">("posts");
   const [postsPage, setPostsPage] = useState(1);
   const [commentsPage, setCommentsPage] = useState(1);
+  const isFirstProfileFetch = useRef(true);
 
   useEffect(() => {
     const load = async () => {
       if (!userId) return;
       try {
-        setLoading(true);
+        if (isFirstProfileFetch.current) setLoading(true);
+        else setListRefreshing(true);
         const token = await getBackendJwt();
         const { data } = await api.get<UserPublicProfile>(`/users/${userId}`, {
+          params: {
+            posts_page: postsPage,
+            posts_page_size: PAGE_SIZE,
+            comments_page: commentsPage,
+            comments_page_size: PAGE_SIZE,
+          },
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
         setProfile(data);
         setError(null);
+        isFirstProfileFetch.current = false;
       } catch (e: unknown) {
         const d = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
         setError(typeof d === "string" ? d : t("profilePublic.error.load"));
       } finally {
         setLoading(false);
+        setListRefreshing(false);
       }
     };
     void load();
-  }, [userId]);
-
-  useEffect(() => {
-    setPostsPage(1);
-    setCommentsPage(1);
-  }, [profile?.id]);
+  }, [userId, postsPage, commentsPage]);
 
   useEffect(() => {
     setPostsPage(1);
@@ -83,10 +95,10 @@ export default function PublicUserProfileView() {
 
   const posts = profile?.posts ?? [];
   const comments = profile?.comments ?? [];
-  const postsPageCount = Math.max(1, Math.ceil(posts.length / PAGE_SIZE));
-  const commentsPageCount = Math.max(1, Math.ceil(comments.length / PAGE_SIZE));
-  const pagedPosts = posts.slice((postsPage - 1) * PAGE_SIZE, postsPage * PAGE_SIZE);
-  const pagedComments = comments.slice((commentsPage - 1) * PAGE_SIZE, commentsPage * PAGE_SIZE);
+  const postsTotal = profile?.posts_total ?? 0;
+  const commentsTotal = profile?.comments_total ?? 0;
+  const postsPageCount = Math.max(1, Math.ceil(postsTotal / PAGE_SIZE));
+  const commentsPageCount = Math.max(1, Math.ceil(commentsTotal / PAGE_SIZE));
 
   return (
     <div className="min-h-[60vh] pb-16">
@@ -178,7 +190,7 @@ export default function PublicUserProfileView() {
                         </span>
                       </div>
                       <p className="mt-1 font-pixel text-xl tabular-nums text-chess-primary sm:text-2xl">
-                        {profile.posts.length}
+                        {postsTotal}
                       </p>
                     </div>
                     <div className="pixel-frame pixel-hud-fill px-3 py-2.5 sm:px-4 sm:py-3">
@@ -189,7 +201,7 @@ export default function PublicUserProfileView() {
                         </span>
                       </div>
                       <p className="mt-1 font-pixel text-xl tabular-nums text-chess-primary sm:text-2xl">
-                        {profile.comments.length}
+                        {commentsTotal}
                       </p>
                     </div>
                   </div>
@@ -216,7 +228,7 @@ export default function PublicUserProfileView() {
                         tab === "posts" ? "bg-white/20 text-white" : "bg-chess-border/40 text-chess-muted"
                       }`}
                     >
-                      {profile.posts.length}
+                      {postsTotal}
                     </span>
                   </button>
                   <button
@@ -235,25 +247,29 @@ export default function PublicUserProfileView() {
                         tab === "comments" ? "bg-white/20 text-white" : "bg-chess-border/40 text-chess-muted"
                       }`}
                     >
-                      {profile.comments.length}
+                      {commentsTotal}
                     </span>
                   </button>
                 </div>
 
-                <section className="mt-5 space-y-3" aria-live="polite">
+                <section
+                  className={`mt-5 space-y-3 transition-opacity ${listRefreshing ? "pointer-events-none opacity-60" : ""}`}
+                  aria-live="polite"
+                  aria-busy={listRefreshing}
+                >
                   {tab === "posts" &&
-                    (posts.length === 0 ? (
+                    (postsTotal === 0 ? (
                       <p className="border-2 border-dashed border-chess-border py-10 text-center font-pixel text-xs text-chess-muted sm:text-sm">
                         {t("profilePublic.emptyPosts")}
                       </p>
                     ) : (
-                      pagedPosts.map((p) => (
+                      posts.map((p) => (
                         <article
                           key={p.id}
                           className="group pixel-frame pixel-hud-fill p-4 transition-[filter] hover:brightness-[1.02] dark:hover:brightness-110"
                         >
                           <Link
-                            href={`/forum/${p.public_id ?? p.id}`}
+                            href={forumPostHref(p)}
                             className="font-pixel text-sm font-bold text-chess-primary [overflow-wrap:anywhere] group-hover:text-chess-accent sm:text-base"
                           >
                             {p.title}
@@ -265,17 +281,17 @@ export default function PublicUserProfileView() {
                             className="mt-3 block font-pixel text-[10px] tabular-nums text-chess-muted sm:text-[11px]"
                             dateTime={p.created_at}
                           >
-                            {new Date(p.created_at).toLocaleString()}
+                            {formatPostDateTime(p.created_at, language)}
                           </time>
                         </article>
                       ))
                     ))}
-                  {tab === "posts" && posts.length > PAGE_SIZE && (
+                  {tab === "posts" && postsTotal > PAGE_SIZE && (
                     <div className="flex items-center justify-center gap-2 pt-1">
                       <button
                         type="button"
                         onClick={() => setPostsPage((prev) => Math.max(1, prev - 1))}
-                        disabled={postsPage === 1}
+                        disabled={postsPage === 1 || listRefreshing}
                         className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
                       >
                         {t("forum.pagination.prev")}
@@ -286,7 +302,7 @@ export default function PublicUserProfileView() {
                       <button
                         type="button"
                         onClick={() => setPostsPage((prev) => Math.min(postsPageCount, prev + 1))}
-                        disabled={postsPage === postsPageCount}
+                        disabled={postsPage === postsPageCount || listRefreshing}
                         className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
                       >
                         {t("forum.pagination.next")}
@@ -295,18 +311,22 @@ export default function PublicUserProfileView() {
                   )}
 
                   {tab === "comments" &&
-                    (comments.length === 0 ? (
+                    (commentsTotal === 0 ? (
                       <p className="border-2 border-dashed border-chess-border py-10 text-center font-pixel text-xs text-chess-muted sm:text-sm">
                         {t("profilePublic.emptyComments")}
                       </p>
                     ) : (
-                      pagedComments.map((c) => (
+                      comments.map((c) => (
                         <article
                           key={c.id}
                           className="pixel-frame pixel-hud-fill p-4 transition-[filter] hover:brightness-[1.02] dark:hover:brightness-110"
                         >
                           <Link
-                            href={`/forum/${c.post_public_id ?? c.post_id}`}
+                            href={forumPostHref({
+                              public_id: c.post_public_id,
+                              id: c.post_id,
+                              board_category: c.post_board_category,
+                            })}
                             className="font-pixel text-xs font-bold text-chess-accent [overflow-wrap:anywhere] hover:brightness-110 sm:text-sm"
                           >
                             {c.post_title}
@@ -318,17 +338,17 @@ export default function PublicUserProfileView() {
                             className="mt-3 block font-pixel text-[10px] tabular-nums text-chess-muted sm:text-[11px]"
                             dateTime={c.created_at}
                           >
-                            {new Date(c.created_at).toLocaleString()}
+                            {formatPostDateTime(c.created_at, language)}
                           </time>
                         </article>
                       ))
                     ))}
-                  {tab === "comments" && comments.length > PAGE_SIZE && (
+                  {tab === "comments" && commentsTotal > PAGE_SIZE && (
                     <div className="flex items-center justify-center gap-2 pt-1">
                       <button
                         type="button"
                         onClick={() => setCommentsPage((prev) => Math.max(1, prev - 1))}
-                        disabled={commentsPage === 1}
+                        disabled={commentsPage === 1 || listRefreshing}
                         className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
                       >
                         {t("forum.pagination.prev")}
@@ -339,7 +359,7 @@ export default function PublicUserProfileView() {
                       <button
                         type="button"
                         onClick={() => setCommentsPage((prev) => Math.min(commentsPageCount, prev + 1))}
-                        disabled={commentsPage === commentsPageCount}
+                        disabled={commentsPage === commentsPageCount || listRefreshing}
                         className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
                       >
                         {t("forum.pagination.next")}
