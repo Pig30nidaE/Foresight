@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { localFont, VT323 } from "next/font/local";
+import localFont from "next/font/local";
+import { VT323 } from "next/font/google";
 import "./globals.css";
 import Providers from "@/shared/components/layout/Providers";
 import Navbar from "@/shared/components/layout/Navbar";
@@ -7,7 +8,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { resolveApiBaseUrl } from "@/shared/lib/apiBaseUrl";
 
 const vt323 = localFont({
-  src: "../../../VCR_OSD_MONO_1.001.ttf",
+  src: "../../VCR_OSD_MONO_1.001.ttf",
   variable: "--font-pixel",
   display: "swap",
 });
