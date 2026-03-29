@@ -80,8 +80,8 @@ body {
   overflow-x: hidden;
   background-color: var(--background);
   color: var(--foreground);
-  font-size: 17px;
-  line-height: 1.6;
+  font-size: 18px;
+  line-height: 1.68;
   /* 기본 본문: 한글은 네오둥근모 유지, 영문 보조는 레거시 VT323 유지 */
   font-family: "NeoDunggeunmo", var(--font-pixel-legacy, ui-monospace), ui-monospace, monospace;
   /* 한글: 브라우저 기본(서브픽셀) 스무딩 — 전역 antialiased/none 강제보다 윤곽이 덜 흐릿한 경우가 많음 */
@@ -338,8 +338,8 @@ html.dark .dot-grid {
   font-family: var(--font-pixel), "NeoDunggeunmo", ui-monospace, monospace;
   /* Jersey 15를 영문 픽셀 UI에 우선 적용하고, 한글은 기존 폴백 유지 */
   font-size: 1.12em;
-  line-height: 1.45;
-  letter-spacing: 0.045em;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: unset;
   text-shadow:
