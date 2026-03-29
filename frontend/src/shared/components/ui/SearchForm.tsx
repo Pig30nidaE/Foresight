@@ -36,8 +36,8 @@ export default function SearchForm() {
           </div>
         )}
 
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex gap-2 sm:contents">
+        <div className="flex w-full flex-col gap-3">
+          <div className="flex w-full gap-2">
             <div className="flex shrink-0 overflow-hidden border-2 border-chess-border">
               {(["chess.com", "lichess"] as const).map((p) => (
                 <button
@@ -69,7 +69,7 @@ export default function SearchForm() {
           <button
             type="submit"
             disabled={platform === "lichess"}
-            className="font-pixel pixel-btn w-full shrink-0 bg-chess-inverse px-6 py-2.5 text-sm font-bold text-white hover:bg-chess-inverse/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
+            className="font-pixel pixel-btn w-full bg-chess-inverse px-6 py-3 text-base font-bold text-white hover:bg-chess-inverse/90 disabled:pointer-events-none disabled:opacity-50"
           >
             {t("dh.startAnalysis")}
           </button>

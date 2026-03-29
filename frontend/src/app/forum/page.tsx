@@ -276,7 +276,7 @@ export default function ForumPage() {
             </>
           )}
           {!creating && (
-            <div className="mt-3 flex w-full flex-col gap-2 text-sm text-chess-muted sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="mt-3 flex w-full flex-col items-center gap-2 text-sm text-chess-muted sm:flex-row sm:flex-wrap sm:items-center sm:justify-start">
               <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                 <span className="shrink-0 text-xs font-medium sm:text-sm">{t("board.sort.label")}</span>
                 <select
