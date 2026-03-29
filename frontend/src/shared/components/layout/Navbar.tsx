@@ -224,7 +224,7 @@ export default function Navbar() {
               className="p-2.5 rounded-[var(--pixel-radius)] border-2 border-transparent hover:border-chess-border/50 hover:bg-chess-border/30 transition-colors"
               aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
               aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={() => setMenuOpen(menuOpen ? false : true)}
             >
               {menuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
