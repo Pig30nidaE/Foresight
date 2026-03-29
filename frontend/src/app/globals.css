@@ -336,10 +336,10 @@ html.dark .dot-grid {
 /* ── Pixel UI utilities (16-bit HUD / RPG window) ───────── */
 .font-pixel {
   font-family: var(--font-pixel), "NeoDunggeunmo", ui-monospace, monospace;
-  /* Jersey 15를 영문 픽셀 UI에 우선 적용하고, 한글은 기존 폴백 유지 */
-  font-size: 1.12em;
-  line-height: 1.5;
-  letter-spacing: 0.04em;
+  /* 영문 픽셀 UI 전반 가독성 상향 */
+  font-size: 1.18em;
+  line-height: 1.55;
+  letter-spacing: 0.035em;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: unset;
   text-shadow:
