@@ -10,6 +10,9 @@ import type {
   OpeningTreeNode,
   BestWorstOpenings,
   TimePressureStats,
+  TacticalAnalysis,
+  TacticalProgressStatus,
+  AiInsightsResponse,
   MoveQualityStats,
   GameSummaryItem,
 } from "./types";
@@ -83,6 +86,58 @@ export const getTimePressure = async (
   if (untilMs) params.until_ms = untilMs;
   const { data } = await api.get(`/stats/time-pressure/${platform}/${username}`, { params });
   return data as TimePressureStats;
+};
+
+// ────────────────────────────────────────────
+// Tactical Patterns
+// ────────────────────────────────────────────
+export const getTacticalPatterns = async (
+  platform: Platform,
+  username: string,
+  timeClass: TimeClass = "blitz",
+  sinceMs?: number,
+  untilMs?: number,
+  maxGames = 300,
+): Promise<TacticalAnalysis> => {
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  // 전술 분석은 Stockfish 정밀 분석이 포함되어 수분 단위 소요될 수 있음
+  const { data } = await api.get(`/stats/tactical-patterns/${platform}/${username}`, { params, timeout: 900000 });
+  return data as TacticalAnalysis;
+};
+
+export const getTacticalProgress = async (
+  platform: Platform,
+  username: string,
+  timeClass: TimeClass = "blitz",
+  sinceMs?: number,
+  untilMs?: number,
+  maxGames = 300,
+): Promise<TacticalProgressStatus> => {
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  const { data } = await api.get(`/stats/tactical-patterns/${platform}/${username}/progress`, { params });
+  return data as TacticalProgressStatus;
+};
+
+export const getAiInsights = async (
+  platform: Platform,
+  username: string,
+  timeClass: TimeClass = "blitz",
+  sinceMs?: number,
+  untilMs?: number,
+  maxGames = 300,
+): Promise<AiInsightsResponse> => {
+  const params: Record<string, unknown> = { time_class: timeClass, max_games: maxGames };
+  if (sinceMs) params.since_ms = sinceMs;
+  if (untilMs) params.until_ms = untilMs;
+  const { data } = await api.get(
+    `/stats/tactical-patterns/${platform}/${username}/ai-insights`,
+    { params, timeout: 60_000 },
+  );
+  return data as AiInsightsResponse;
 };
 
 // ────────────────────────────────────────────

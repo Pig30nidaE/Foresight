@@ -42,7 +42,7 @@ function WinRateBar({
           }}
         />
       </div>
-      <div className="flex gap-2 tabular-nums text-[10px] leading-none font-pixel">
+      <div className="flex gap-2 tabular-nums text-[15px] leading-none font-pixel">
         <span className={color === "white" ? "text-chess-primary/85" : "text-chess-primary"}>
           W {win}%
         </span>

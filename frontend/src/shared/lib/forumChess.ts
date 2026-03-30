@@ -1,4 +1,4 @@
-import { Chess, type PieceSymbol, type Square } from "chess.js";
+import { Chess, type PieceSymbol, type Square, type Move } from "chess.js";
 import type { PieceDropHandlerArgs, PositionDataType } from "react-chessboard";
 import { fenStringToPositionObject } from "react-chessboard";
 
@@ -148,17 +148,223 @@ export function legalTargetsForSquareFromFen(fen: string, square: string): strin
 }
 
 export function movePieceOnFenIfLegal(fen: string, from: string, to: string): string | null {
+  const r = tryLegalMoveUci(fen, from, to);
+  return r?.fen ?? null;
+}
+
+/** 합법 이동 시 새 FEN과 UCI(프로모션 시 5글자). 승급 칸은 승급 없이 두면 chess.js가 수를 못 찾으므로 q/r/b/n 순으로 시도. */
+export function tryLegalMoveUci(fen: string, from: string, to: string): { fen: string; uci: string } | null {
   const chess = loadChessRelaxed(fen);
   if (!chess) return null;
   try {
     const piece = chess.get(from as Square);
     if (!piece) return null;
     const forcedTurnFen = fenWithTurn(chess.fen(), piece.color);
-    const board = loadChessRelaxed(forcedTurnFen);
-    if (!board) return null;
-    const moved = board.move({ from: from as Square, to: to as Square });
-    if (!moved) return null;
+    const promos: readonly Move["promotion"][] = ["q", "r", "b", "n"];
+
+    const tryPlay = (spec: {
+      from: Square;
+      to: Square;
+      promotion?: Move["promotion"];
+    }): { fen: string; uci: string } | null => {
+      const board = loadChessRelaxed(forcedTurnFen);
+      if (!board) return null;
+      try {
+        const moved = board.move(spec);
+        if (!moved) return null;
+        const uci = moved.from + moved.to + (moved.promotion ?? "");
+        return { fen: board.fen(), uci };
+      } catch {
+        return null;
+      }
+    };
+
+    let r = tryPlay({ from: from as Square, to: to as Square });
+    if (r) return r;
+    for (const p of promos) {
+      r = tryPlay({ from: from as Square, to: to as Square, promotion: p });
+      if (r) return r;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function _uciToMove(uci: string): { from: Square; to: Square; promotion?: string } | null {
+  if (uci.length < 4) return null;
+  const from = uci.slice(0, 2) as Square;
+  const to = uci.slice(2, 4) as Square;
+  const promotion = uci.length > 4 ? uci[4] : undefined;
+  return { from, to, promotion };
+}
+
+/** 시작 FEN에 UCI 순서를 적용한 결과 FEN. (chess.js는 불합법 수에 예외를 던질 수 있어 전부 흡수) */
+export function fenAfterUcis(startFen: string, ucis: string[]): string | null {
+  const board = loadChessRelaxed(startFen);
+  if (!board) return null;
+  try {
+    for (const uci of ucis) {
+      const m = _uciToMove(uci);
+      if (!m) return null;
+      let mv: ReturnType<Chess["move"]>;
+      try {
+        mv = board.move({
+          from: m.from,
+          to: m.to,
+          promotion: m.promotion as Move["promotion"],
+        });
+      } catch {
+        return null;
+      }
+      if (!mv) return null;
+    }
     return board.fen();
+  } catch {
+    return null;
+  }
+}
+
+function _startFenNeedsPgnHeaders(startFen: string): boolean {
+  try {
+    const def = new Chess();
+    const cur = loadChessRelaxed(startFen);
+    if (!cur) return true;
+    return def.fen().split(" ")[0] !== cur.fen().split(" ")[0];
+  } catch {
+    return true;
+  }
+}
+
+/** 수 기록 모드 저장용 PGN (비표준 시작이면 SetUp/FEN 헤더 포함). */
+export function buildPgnFromStartAndUcis(startFen: string, ucis: string[]): string | null {
+  const board = loadChessRelaxed(startFen);
+  if (!board) return null;
+  try {
+    for (const uci of ucis) {
+      const m = _uciToMove(uci);
+      if (!m) return null;
+      let mv: ReturnType<Chess["move"]>;
+      try {
+        mv = board.move({
+          from: m.from,
+          to: m.to,
+          promotion: m.promotion as Move["promotion"],
+        });
+      } catch {
+        return null;
+      }
+      if (!mv) return null;
+    }
+  } catch {
+    return null;
+  }
+  let pgn = board.pgn({ maxWidth: 0, newline: "\n" });
+  if (_startFenNeedsPgnHeaders(startFen)) {
+    const esc = startFen.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    pgn = `[Event "Forum"]\n[SetUp "1"]\n[FEN "${esc}"]\n\n${pgn}`;
+  }
+  return pgn;
+}
+
+/** PGN 헤더에서 `[FEN "..."]` 값만 추출 (이스케이프된 따옴표·역슬래시 단순 복원). */
+export function extractFenFromPgnHeaders(pgn: string): string | null {
+  const m = pgn.match(/\[FEN\s+"((?:[^"\\]|\\.)*)"\]/i);
+  if (!m?.[1]) return null;
+  return m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
+export type PgnReplayPosition = { fen: string; san: string };
+
+/** PGN에서 수가 하나 이상이면 단계별 FEN·SAN 배열, 아니면 null. */
+export function positionsFromPgnText(pgn: string): PgnReplayPosition[] | null {
+  const trimmed = pgn?.trim();
+  if (!trimmed) return null;
+  try {
+    const loaded = new Chess();
+    loaded.loadPgn(trimmed, { strict: false });
+    const hist = loaded.history({ verbose: true });
+    if (hist.length === 0) return null;
+    const fenHeader = extractFenFromPgnHeaders(trimmed);
+    const startFen = fenHeader ?? DEFAULT_START_FEN;
+    const base = loadChessRelaxed(startFen);
+    if (!base) return null;
+    const out: PgnReplayPosition[] = [{ fen: base.fen(), san: "" }];
+    for (const m of hist) {
+      const mv = base.move(m);
+      if (!mv) return null;
+      out.push({ fen: base.fen(), san: mv.san });
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** 목록/카드에서 `ForumPgnReplay`를 쓸 수 있는지 (최소 2개 국면 = 수 1수 이상) */
+export function isForumPgnReplayable(pgn: string | null | undefined): boolean {
+  const pos = positionsFromPgnText(pgn?.trim() ?? "");
+  return Boolean(pos && pos.length >= 2);
+}
+
+/** PGN 본문에서 순서대로 UCI 문자열 배열 (편집 복원용). */
+export function ucisFromPgnText(pgn: string): string[] | null {
+  const trimmed = pgn?.trim();
+  if (!trimmed) return null;
+  try {
+    const loaded = new Chess();
+    loaded.loadPgn(trimmed, { strict: false });
+    const hist = loaded.history({ verbose: true });
+    if (hist.length === 0) return [];
+    return hist.map((m) => m.from + m.to + (m.promotion ?? ""));
+  } catch {
+    return null;
+  }
+}
+
+/** 시작 FEN + UCI로 SAN 배열 (작성 UI 수순 표시). */
+export function sanListFromStartAndUcis(startFen: string, ucis: string[]): string[] {
+  const board = loadChessRelaxed(startFen);
+  if (!board) return [];
+  const out: string[] = [];
+  try {
+    for (const uci of ucis) {
+      const m = _uciToMove(uci);
+      if (!m) break;
+      let mv: ReturnType<Chess["move"]>;
+      try {
+        mv = board.move({
+          from: m.from,
+          to: m.to,
+          promotion: m.promotion as Move["promotion"],
+        });
+      } catch {
+        break;
+      }
+      if (!mv) break;
+      out.push(mv.san);
+    }
+  } catch {
+    return out;
+  }
+  return out;
+}
+
+/**
+ * PGN을 loadPgn한 뒤 되돌려, `ucisFromPgnText`와 동일한 기준의 시작 FEN을 얻습니다.
+ * `fen_initial`과 헤더 FEN이 어긋난 경우에도 수 복원과 맞춥니다.
+ */
+export function startFenMatchingPgnUcis(pgn: string): string | null {
+  const trimmed = pgn?.trim();
+  if (!trimmed) return null;
+  try {
+    const loaded = new Chess();
+    loaded.loadPgn(trimmed, { strict: false });
+    const g = loaded;
+    while (g.undo()) {
+      /* to start */
+    }
+    return g.fen();
   } catch {
     return null;
   }

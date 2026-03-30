@@ -156,7 +156,7 @@ function AdvantageBreakdown({ data }: { data: AdvantageBreakdownData }) {
             <span className="text-chess-muted">우위 유지</span>
           </div>
           <span className="text-base font-black text-chess-win pl-4">{maintained}</span>
-          <span className="text-[10px] text-chess-muted pl-4">{maintainPct.toFixed(0)}%</span>
+          <span className="text-[15px] text-chess-muted pl-4">{maintainPct.toFixed(0)}%</span>
         </div>
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-1.5">
@@ -165,7 +165,7 @@ function AdvantageBreakdown({ data }: { data: AdvantageBreakdownData }) {
           </div>
           <span className="text-base font-black text-amber-700 pl-4">{reversedMid}</span>
           {midAvgMove >= 0 && (
-            <span className="text-[10px] text-chess-muted pl-4">평균 {midAvgMove}수</span>
+            <span className="text-[15px] text-chess-muted pl-4">평균 {midAvgMove}수</span>
           )}
         </div>
         <div className="flex flex-col gap-0.5">
@@ -175,7 +175,7 @@ function AdvantageBreakdown({ data }: { data: AdvantageBreakdownData }) {
           </div>
           <span className="text-base font-black text-chess-loss pl-4">{reversedEnd}</span>
           {endAvgMove >= 0 && (
-            <span className="text-[10px] text-chess-muted pl-4">평균 {endAvgMove}수</span>
+            <span className="text-[15px] text-chess-muted pl-4">평균 {endAvgMove}수</span>
           )}
         </div>
       </div>
@@ -220,7 +220,7 @@ function GameRow({ game, rank, config }: GameRowProps) {
   const dotClass = `w-2 h-2 rounded-full shrink-0 mt-1.5 ${dot}`;
   const statusClass = `text-xs font-bold ${statusCls}`;
   const resultBadgeClass = [
-    "text-[10px] px-1.5 py-0.5 rounded-full border font-semibold",
+    "text-[15px] px-1.5 py-0.5 rounded-full border font-semibold",
     badge.cls,
     config.analysisType === "win_rate" ? "text-xs" : "opacity-70",
   ].join(" ");
@@ -267,7 +267,7 @@ function GameRow({ game, rank, config }: GameRowProps) {
 
         {/* 핵심 수치 배지 (있을 때만) */}
         {hasMetric && (
-          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border border-amber-700/30 bg-amber-700/8 text-amber-700 font-mono">
+          <span className="inline-flex items-center gap-1 text-[15px] px-1.5 py-0.5 rounded-md border border-amber-700/30 bg-amber-700/8 text-amber-700 font-mono">
             {game.metric_value!.toFixed(
               game.metric_label?.includes("비율") || game.metric_label?.includes("CP") ? 1 : 0
             )}
@@ -477,7 +477,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                   : <span className="text-xs text-chess-loss font-bold inline-flex items-center gap-0.5"><PixelCaretDownGlyph size={11} className="text-chess-loss" />약점</span>
                 }
                 {/* 분석 타입 배지 */}
-                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold inline-flex items-center gap-1 ${typeMeta.cls}`}>
+                <span className={`text-[15px] px-2 py-0.5 rounded-full border font-semibold inline-flex items-center gap-1 ${typeMeta.cls}`}>
                   <TypeMetaIcon size={12} className="shrink-0" />
                   {typeMeta.label}
                 </span>
@@ -485,26 +485,26 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
               {/* 분석 기준 설명 */}
               <p className="text-xs text-chess-muted mt-1 leading-snug">{cfg.analysisDesc}</p>
               {isAdvantageRetention && (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[15px]">
                   <span className="px-2 py-0.5 rounded-full border border-emerald-700/30 bg-emerald-700/10 text-chess-win font-semibold">완벽 유지: 역전 없이 승리</span>
                   <span className="px-2 py-0.5 rounded-full border border-amber-700/30 bg-amber-700/10 text-amber-700 font-semibold">흔들렸지만 승리: 한때 역전 후 재역전</span>
                   <span className="px-2 py-0.5 rounded-full border border-red-700/30 bg-red-700/10 text-chess-loss font-semibold">역전: 우위를 놓쳐 무승부/패배</span>
                 </div>
               )}
               {isOppositeCastle && (
-                <div className="mt-2 inline-flex items-center gap-2 text-[10px] font-semibold px-2 py-1 rounded-full border border-orange-500/30 bg-orange-500/10 text-orange-200">
+                <div className="mt-2 inline-flex items-center gap-2 text-[15px] font-semibold px-2 py-1 rounded-full border border-orange-500/30 bg-orange-500/10 text-orange-200">
                   <PixelSwordsGlyph size={12} className="shrink-0 text-orange-200" />
                   캐슬링 방향 대결 지표
                 </div>
               )}
               {isIQPStructure && (
-                <div className="mt-2 inline-flex items-center gap-2 text-[10px] font-semibold px-2 py-1 rounded-full border border-cyan-600/30 bg-cyan-600/10 text-cyan-200">
+                <div className="mt-2 inline-flex items-center gap-2 text-[15px] font-semibold px-2 py-1 rounded-full border border-cyan-600/30 bg-cyan-600/10 text-cyan-200">
                   <PixelPawnGlyph size={12} className="shrink-0 text-cyan-200" />
                   IQP 구조 운용 비교 지표
                 </div>
               )}
               {isOpeningFamiliarity && (
-                <div className="mt-2 inline-flex items-center gap-2 text-[10px] font-semibold px-2 py-1 rounded-full border border-emerald-600/30 bg-emerald-600/10 text-chess-win dark:text-emerald-200">
+                <div className="mt-2 inline-flex items-center gap-2 text-[15px] font-semibold px-2 py-1 rounded-full border border-emerald-600/30 bg-emerald-600/10 text-chess-win dark:text-emerald-200">
                   <PixelBookGlyph size={12} className="shrink-0 opacity-90" />
                   오프닝 친숙도 비교 지표
                 </div>
@@ -536,7 +536,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                 : `${pattern.games_analyzed}게임 분석 기반`}
             </p>
             {/* 성공/실패 범례 */}
-            <div className="flex items-center gap-3 text-[10px]">
+            <div className="flex items-center gap-3 text-[15px]">
               <span className="flex items-center gap-1 text-chess-win">
                 <span className="w-2 h-2 rounded-sm bg-emerald-600/60 inline-block" />
                 {cfg.successLabel}
@@ -550,17 +550,17 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
           {isOppositeCastle && castleBreakdown && (
             <div className="grid grid-cols-2 gap-2 pt-1">
               <div className="rounded-lg border border-red-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-chess-loss">반대 방향</p>
+                <p className="text-[15px] uppercase tracking-wide text-chess-loss">반대 방향</p>
                 <p className="text-2xl font-black text-chess-loss leading-tight tabular-nums">{castleBreakdown.oppositeRate}%</p>
-                <p className="text-[10px] text-chess-loss/80 tabular-nums">{castleBreakdown.oppositeGames}게임</p>
+                <p className="text-[15px] text-chess-loss/80 tabular-nums">{castleBreakdown.oppositeGames}게임</p>
               </div>
               <div className="rounded-lg border border-sky-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-sky-700">같은 방향</p>
+                <p className="text-[15px] uppercase tracking-wide text-sky-700">같은 방향</p>
                 <p className="text-2xl font-black text-sky-800 leading-tight tabular-nums">{castleBreakdown.sameRate}%</p>
-                <p className="text-[10px] text-sky-700/80 tabular-nums">{castleBreakdown.sameGames}게임</p>
+                <p className="text-[15px] text-sky-700/80 tabular-nums">{castleBreakdown.sameGames}게임</p>
               </div>
               <div className="col-span-2 rounded-lg border border-amber-200 bg-white/95 px-3 py-2 shadow-sm flex items-center justify-between">
-                <span className="text-[10px] text-amber-800 uppercase tracking-wide">반대-같은 방향 승률 차</span>
+                <span className="text-[15px] text-amber-800 uppercase tracking-wide">반대-같은 방향 승률 차</span>
                 <span className={`text-base font-extrabold tabular-nums ${castleBreakdown.delta >= 0 ? "text-chess-win" : "text-chess-loss"}`}>
                   {castleBreakdown.delta >= 0 ? "+" : ""}{castleBreakdown.delta}%p
                 </span>
@@ -570,36 +570,36 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
           {isAdvantageRetention && pattern.chart_data?.type === "advantage_breakdown" && (
             <div className="grid grid-cols-3 gap-2 pt-1">
               <div className="rounded-lg border border-emerald-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-chess-win">우위 유지 성공</p>
+                <p className="text-[15px] uppercase tracking-wide text-chess-win">우위 유지 성공</p>
                 <p className="text-2xl font-black text-chess-win leading-tight tabular-nums">{asFiniteNumber(pattern.chart_data.maintained ?? pattern.chart_data.converted)}</p>
-                <p className="text-[10px] text-chess-win/80 tabular-nums">{asFiniteNumber(pattern.chart_data.total) > 0 ? Math.round((asFiniteNumber(pattern.chart_data.maintained ?? pattern.chart_data.converted) / asFiniteNumber(pattern.chart_data.total)) * 100) : 0}%</p>
+                <p className="text-[15px] text-chess-win/80 tabular-nums">{asFiniteNumber(pattern.chart_data.total) > 0 ? Math.round((asFiniteNumber(pattern.chart_data.maintained ?? pattern.chart_data.converted) / asFiniteNumber(pattern.chart_data.total)) * 100) : 0}%</p>
               </div>
               <div className="rounded-lg border border-amber-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-amber-700">중반 역전</p>
+                <p className="text-[15px] uppercase tracking-wide text-amber-700">중반 역전</p>
                 <p className="text-2xl font-black text-amber-800 leading-tight tabular-nums">{asFiniteNumber(pattern.chart_data.reversed_mid ?? pattern.chart_data.shaky)}</p>
-                <p className="text-[10px] text-amber-700/80 tabular-nums">{pattern.chart_data.mid_avg_move != null ? `평균 ${pattern.chart_data.mid_avg_move}수` : "-"}</p>
+                <p className="text-[15px] text-amber-700/80 tabular-nums">{pattern.chart_data.mid_avg_move != null ? `평균 ${pattern.chart_data.mid_avg_move}수` : "-"}</p>
               </div>
               <div className="rounded-lg border border-red-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-chess-loss">엔드게임 역전</p>
+                <p className="text-[15px] uppercase tracking-wide text-chess-loss">엔드게임 역전</p>
                 <p className="text-2xl font-black text-chess-loss leading-tight tabular-nums">{asFiniteNumber(pattern.chart_data.reversed_end ?? pattern.chart_data.blown)}</p>
-                <p className="text-[10px] text-chess-loss/80 tabular-nums">{pattern.chart_data.end_avg_move != null ? `평균 ${pattern.chart_data.end_avg_move}수` : "-"}</p>
+                <p className="text-[15px] text-chess-loss/80 tabular-nums">{pattern.chart_data.end_avg_move != null ? `평균 ${pattern.chart_data.end_avg_move}수` : "-"}</p>
               </div>
             </div>
           )}
           {isOpeningFamiliarity && openingBreakdown && (
             <div className="grid grid-cols-2 gap-2 pt-1">
               <div className="rounded-lg border border-emerald-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-chess-win">주력 오프닝</p>
+                <p className="text-[15px] uppercase tracking-wide text-chess-win">주력 오프닝</p>
                 <p className="text-2xl font-black text-chess-win leading-tight tabular-nums">{openingBreakdown.main_rate.toFixed(0)}%</p>
-                <p className="text-[10px] text-chess-win/80 tabular-nums">{openingBreakdown.main_count}게임</p>
+                <p className="text-[15px] text-chess-win/80 tabular-nums">{openingBreakdown.main_count}게임</p>
               </div>
               <div className="rounded-lg border border-amber-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-amber-700">생소 오프닝</p>
+                <p className="text-[15px] uppercase tracking-wide text-amber-700">생소 오프닝</p>
                 <p className="text-2xl font-black text-amber-800 leading-tight tabular-nums">{openingBreakdown.unfamiliar_rate.toFixed(0)}%</p>
-                <p className="text-[10px] text-amber-700/80 tabular-nums">{openingBreakdown.unfamiliar_count}게임</p>
+                <p className="text-[15px] text-amber-700/80 tabular-nums">{openingBreakdown.unfamiliar_count}게임</p>
               </div>
               <div className="col-span-2 rounded-lg border border-lime-200 bg-white/95 px-3 py-2 shadow-sm flex items-center justify-between">
-                <span className="text-[10px] text-lime-800 uppercase tracking-wide">주력-생소 오프닝 승률 차</span>
+                <span className="text-[15px] text-lime-800 uppercase tracking-wide">주력-생소 오프닝 승률 차</span>
                 <span className={`text-base font-extrabold tabular-nums ${openingBreakdown.diff >= 0 ? "text-chess-win" : "text-chess-loss"}`}>
                   {openingBreakdown.diff >= 0 ? "+" : ""}{openingBreakdown.diff.toFixed(0)}%p
                 </span>
@@ -609,22 +609,22 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
           {isIQPStructure && iqpBreakdown && (
             <div className="grid grid-cols-3 gap-2 pt-1">
               <div className="rounded-lg border border-cyan-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-cyan-700">내 IQP</p>
+                <p className="text-[15px] uppercase tracking-wide text-cyan-700">내 IQP</p>
                 <p className="text-2xl font-black text-cyan-800 leading-tight tabular-nums">{iqpBreakdown.my_iqp_rate.toFixed(0)}%</p>
-                <p className="text-[10px] text-cyan-700/80 tabular-nums">{iqpBreakdown.my_iqp_count}게임</p>
+                <p className="text-[15px] text-cyan-700/80 tabular-nums">{iqpBreakdown.my_iqp_count}게임</p>
               </div>
               <div className="rounded-lg border border-emerald-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-chess-win">상대 IQP</p>
+                <p className="text-[15px] uppercase tracking-wide text-chess-win">상대 IQP</p>
                 <p className="text-2xl font-black text-chess-win leading-tight tabular-nums">{iqpBreakdown.opp_iqp_rate.toFixed(0)}%</p>
-                <p className="text-[10px] text-chess-win/80 tabular-nums">{iqpBreakdown.opp_iqp_count}게임</p>
+                <p className="text-[15px] text-chess-win/80 tabular-nums">{iqpBreakdown.opp_iqp_count}게임</p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wide text-slate-700">무IQP</p>
+                <p className="text-[15px] uppercase tracking-wide text-slate-700">무IQP</p>
                 <p className="text-2xl font-black text-slate-800 leading-tight tabular-nums">{iqpBreakdown.none_iqp_rate.toFixed(0)}%</p>
-                <p className="text-[10px] text-slate-700/80 tabular-nums">{iqpBreakdown.none_iqp_count}게임</p>
+                <p className="text-[15px] text-slate-700/80 tabular-nums">{iqpBreakdown.none_iqp_count}게임</p>
               </div>
               <div className="col-span-3 rounded-lg border border-sky-200 bg-white/95 px-3 py-2 shadow-sm flex items-center justify-between">
-                <span className="text-[10px] text-sky-800 uppercase tracking-wide">내 IQP - 무IQP 승률 차</span>
+                <span className="text-[15px] text-sky-800 uppercase tracking-wide">내 IQP - 무IQP 승률 차</span>
                 <span className={`text-base font-extrabold tabular-nums ${iqpBreakdown.my_vs_none_diff >= 0 ? "text-chess-win" : "text-chess-loss"}`}>
                   {iqpBreakdown.my_vs_none_diff >= 0 ? "+" : ""}{iqpBreakdown.my_vs_none_diff.toFixed(0)}%p
                 </span>
@@ -653,7 +653,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                     }`}
                   >
                     {label}
-                    <span className="ml-1 text-[10px] font-normal opacity-70">({cnt})</span>
+                    <span className="ml-1 text-[15px] font-normal opacity-70">({cnt})</span>
                     {castlingTab === id && (
                       <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />
                     )}
@@ -693,7 +693,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                     }`}
                   >
                     {label}
-                    <span className="ml-1 text-[10px] font-normal opacity-70">({cnt})</span>
+                    <span className="ml-1 text-[15px] font-normal opacity-70">({cnt})</span>
                     {openingTab === id && (
                       <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />
                     )}
@@ -734,7 +734,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                     }`}
                   >
                     {label}
-                    <span className="ml-1 text-[10px] font-normal opacity-70">({cnt})</span>
+                    <span className="ml-1 text-[15px] font-normal opacity-70">({cnt})</span>
                     {iqpTab === id && (
                       <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />
                     )}
@@ -770,7 +770,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                       <AdvantageBreakdown data={pattern.chart_data as AdvantageBreakdownData} />
                     )}
                     <div className="rounded-xl border border-chess-border bg-chess-bg/55 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-chess-muted mb-1">해석 가이드</p>
+                      <p className="text-[15px] uppercase tracking-wide text-chess-muted mb-1">해석 가이드</p>
                       <ul className="space-y-1 text-xs text-chess-primary/90">
                         <li>완벽 유지: 우위를 끝까지 지켜 승리</li>
                         <li>흔들렸지만 승리: 한때 역전됐지만 재역전</li>
@@ -798,7 +798,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                               }`}
                             >
                               {label}
-                              <span className="ml-1 text-[10px] font-normal opacity-70">({cnt})</span>
+                              <span className="ml-1 text-[15px] font-normal opacity-70">({cnt})</span>
                               {advantageTab === id && (
                                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />
                               )}
@@ -847,7 +847,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                             }`}
                           >
                             {label}
-                            <span className="ml-1 text-[10px] font-normal opacity-70">({cnt})</span>
+                            <span className="ml-1 text-[15px] font-normal opacity-70">({cnt})</span>
                             {castlingTab === id && (
                               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />
                             )}
@@ -887,7 +887,7 @@ export default function PatternGameListModal({ pattern, onClose }: Props) {
                             }`}
                           >
                             {label}
-                            <span className="ml-1 text-[10px] font-normal opacity-70">({cnt})</span>
+                            <span className="ml-1 text-[15px] font-normal opacity-70">({cnt})</span>
                             {openingTab === id && (
                               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-chess-primary rounded-full" />
                             )}

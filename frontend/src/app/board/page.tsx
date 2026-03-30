@@ -14,6 +14,7 @@ import { noticeListBadgeClass, patchListBadgeClass } from "@/shared/components/f
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDate } from "@/shared/lib/formatLocaleDate";
 import { forumPostHref } from "@/shared/lib/forumPostHref";
+import ForumPostThumbnail from "@/app/forum/ForumPostThumbnail";
 
 type BoardKind = "notice" | "patch" | "free";
 
@@ -26,6 +27,7 @@ type PostRow = {
   created_at: string;
   like_count: number;
   comment_count: number;
+  thumbnail_fen?: string | null;
 };
 
 type ListResponse = {
@@ -47,42 +49,56 @@ const listUlClass =
 function PostListRow({ p }: { p: PostRow }) {
   const { t, language } = useTranslation();
   const href = forumPostHref(p);
+  const hasThumb = Boolean(p.thumbnail_fen?.trim());
   return (
     <li>
-      <div className="flex flex-col gap-2 px-3 py-2.5 text-sm transition hover:bg-chess-elevated/40 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3 sm:gap-y-1 sm:px-4">
-        <Link
-          href={href}
-          className="order-1 min-w-0 font-medium text-chess-primary [overflow-wrap:anywhere] hover:text-chess-accent sm:order-none sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-start sm:gap-2"
-        >
-          <span className="inline-flex flex-wrap items-center gap-2">
-            {p.board_category === "notice" && (
-              <span className={noticeListBadgeClass}>{t("board.badge.notice")}</span>
-            )}
-            {p.board_category === "patch" && (
-              <span className={patchListBadgeClass}>{t("board.badge.patch")}</span>
-            )}
-            <span className="block min-w-0 max-w-full whitespace-normal break-words text-base leading-snug line-clamp-2 [overflow-wrap:anywhere] [word-break:break-word] sm:text-sm">{p.title}</span>
-          </span>
-        </Link>
-        <span className="order-2 flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs text-chess-muted sm:order-none sm:inline-flex sm:w-auto sm:shrink-0">
-          <AuthorNameLink
-            author={p.author}
-            avatarSize={22}
-            className="max-w-[min(100%,12rem)] hover:text-chess-accent hover:underline"
-          />
-          <span className="shrink-0 tabular-nums opacity-80">{formatPostDate(p.created_at, language)}</span>
-          <span className="inline-flex items-center gap-1.5 tabular-nums">
-            <span className="inline-flex items-center gap-0.5">
-              <PixelHeartGlyph className="text-red-500/90 dark:text-red-400/90" size={12} />
-              {p.like_count}
+      <div className="flex flex-row flex-wrap items-start gap-3 px-3 py-2.5 text-sm transition hover:bg-chess-elevated/40 sm:items-baseline sm:gap-x-3 sm:gap-y-1 sm:px-4">
+        {hasThumb ? (
+          <Link
+            href={href}
+            className="relative mt-0.5 h-14 w-14 shrink-0 overflow-hidden rounded-md bg-chess-surface ring-1 ring-chess-border/50 sm:mt-1 sm:h-[4.25rem] sm:w-[4.25rem]"
+            aria-label={t("forum.aria.openPostFromThumbnail")}
+          >
+            <ForumPostThumbnail thumbnailFen={p.thumbnail_fen} compactNotation />
+          </Link>
+        ) : null}
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3">
+          <div className="flex min-w-0 flex-col gap-1 sm:flex-1 sm:flex-row sm:items-start sm:gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pt-0.5">
+              {p.board_category === "notice" && (
+                <span className={noticeListBadgeClass}>{t("board.badge.notice")}</span>
+              )}
+              {p.board_category === "patch" && (
+                <span className={patchListBadgeClass}>{t("board.badge.patch")}</span>
+              )}
+            </div>
+            <Link
+              href={href}
+              className="line-clamp-2 min-w-0 max-w-full flex-1 overflow-hidden break-all text-base font-medium leading-snug text-chess-primary [overflow-wrap:anywhere] hover:text-chess-accent sm:break-words sm:text-sm"
+            >
+              {p.title}
+            </Link>
+          </div>
+          <span className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-sm text-chess-muted sm:inline-flex sm:w-auto sm:shrink-0">
+            <AuthorNameLink
+              author={p.author}
+              avatarSize={22}
+              className="max-w-[min(100%,12rem)] hover:text-chess-accent hover:underline"
+            />
+            <span className="shrink-0 tabular-nums opacity-80">{formatPostDate(p.created_at, language)}</span>
+            <span className="inline-flex items-center gap-1.5 tabular-nums">
+              <span className="inline-flex items-center gap-0.5">
+                <PixelHeartGlyph className="text-red-500/90 dark:text-red-400/90" size={14} />
+                {p.like_count}
+              </span>
+              <span className="opacity-50">·</span>
+              <span className="inline-flex items-center gap-0.5">
+                <PixelChatGlyph size={14} />
+                {p.comment_count}
+              </span>
             </span>
-            <span className="opacity-50">·</span>
-            <span className="inline-flex items-center gap-0.5">
-              <PixelChatGlyph size={12} />
-              {p.comment_count}
-            </span>
           </span>
-        </span>
+        </div>
       </div>
     </li>
   );
@@ -290,11 +306,11 @@ export default function BoardPage() {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 border-b border-chess-border/60 pb-3">
+      <div className="grid grid-cols-3 gap-1.5 border-b border-chess-border/60 pb-3 sm:gap-2">
         <button
           type="button"
           onClick={() => setTab("notice")}
-          className={`font-pixel pixel-btn px-4 py-2 text-sm font-semibold ${
+          className={`font-pixel pixel-btn min-w-0 px-2 py-2 text-center text-xs font-semibold leading-tight sm:px-3 sm:text-sm ${
             tab === "notice"
               ? "bg-chess-accent text-white border-chess-accent"
               : "bg-chess-surface/80 text-chess-muted hover:text-chess-primary"
@@ -305,7 +321,7 @@ export default function BoardPage() {
         <button
           type="button"
           onClick={() => setTab("patch")}
-          className={`font-pixel pixel-btn px-4 py-2 text-sm font-semibold ${
+          className={`font-pixel pixel-btn min-w-0 px-2 py-2 text-center text-xs font-semibold leading-tight sm:px-3 sm:text-sm ${
             tab === "patch"
               ? "bg-chess-accent text-white border-chess-accent"
               : "bg-chess-surface/80 text-chess-muted hover:text-chess-primary"
@@ -316,7 +332,7 @@ export default function BoardPage() {
         <button
           type="button"
           onClick={() => setTab("free")}
-          className={`font-pixel pixel-btn px-4 py-2 text-sm font-semibold ${
+          className={`font-pixel pixel-btn min-w-0 px-2 py-2 text-center text-xs font-semibold leading-tight sm:px-3 sm:text-sm ${
             tab === "free"
               ? "bg-chess-accent text-white border-chess-accent"
               : "bg-chess-surface/80 text-chess-muted hover:text-chess-primary"
@@ -376,12 +392,11 @@ export default function BoardPage() {
         ) : (
           <button
             type="button"
-            disabled={status === "loading"}
             onClick={() => {
               if (status !== "authenticated") router.push("/api/auth/signin?callbackUrl=%2Fpost-login");
               else router.push("/signup/consent");
             }}
-            className="min-h-[44px] w-full rounded-xl border border-chess-border/90 px-4 py-2.5 text-sm font-medium text-chess-primary disabled:opacity-50 sm:w-auto sm:min-h-0"
+            className="min-h-[44px] w-full rounded-xl border border-chess-border/90 px-4 py-2.5 text-sm font-medium text-chess-primary sm:w-auto sm:min-h-0"
           >
             {status === "authenticated" ? t("board.write.afterProfile") : t("board.write.afterSignIn")}
           </button>
