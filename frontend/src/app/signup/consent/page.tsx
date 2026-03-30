@@ -57,11 +57,38 @@ function SignupConsentContent() {
     await signOut({ callbackUrl: "/" });
   };
 
-  useEffect(() => {
-    if (!conflictMessage || status !== "authenticated") return;
-    clearBackendJwtCache();
-    void signOut({ callbackUrl: "/" });
-  }, [conflictMessage, status]);
+  const signInAgainUrl = "/api/auth/signin?callbackUrl=%2Fpost-login";
+
+  if (conflictMessage) {
+    return (
+      <section className="mx-auto w-full max-w-xl pixel-frame bg-chess-surface/75 p-6 text-center">
+        <h1 className="text-xl font-bold text-chess-primary">{t("signup.conflict.title")}</h1>
+        <p className="mt-3 text-sm leading-relaxed text-chess-muted">{t("signup.conflict.lead")}</p>
+        <p className="mt-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-3 text-sm font-medium leading-relaxed text-red-700 dark:text-red-200">
+          {conflictMessage}
+        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={async () => {
+              clearBackendJwtCache();
+              await signOut({ callbackUrl: signInAgainUrl });
+            }}
+            className="rounded-md bg-chess-accent px-4 py-2 text-sm font-semibold text-white"
+          >
+            {t("signup.conflict.ctaSignIn")}
+          </button>
+          <button
+            type="button"
+            onClick={onReject}
+            className="rounded-md border border-chess-border px-4 py-2 text-sm text-chess-primary"
+          >
+            {t("signup.conflict.ctaHome")}
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mx-auto w-full max-w-xl pixel-frame bg-chess-surface/75 p-6 text-center">
@@ -69,11 +96,6 @@ function SignupConsentContent() {
       <p className="mt-3 text-sm text-chess-muted">
         {t("signupConsent.desc")}
       </p>
-      {conflictMessage && (
-        <p className="mt-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-700 dark:text-red-200">
-          {conflictMessage}
-        </p>
-      )}
       <div className="mt-5 flex items-center justify-center gap-3">
         <button
           type="button"
