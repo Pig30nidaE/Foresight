@@ -5,10 +5,11 @@
  * 프로덕션 URL은 `app/layout.tsx` → `Providers` 가 서버에서 읽은 값으로
  * `setApiRuntimeBaseUrl` 을 호출해 덮어씁니다 (클라이언트 번들에 NEXT_PUBLIC 미주입 대비).
  */
-import axios from "axios";
+import axios, { type InternalAxiosRequestConfig } from "axios";
 import type { Platform, TimeClass, PlayerProfile, GameSummary, PerformanceSummary } from "@/shared/types";
 import type { AnalysisSSEEvent } from "@/shared/types";
 import { resolveApiBaseUrl } from "@/shared/lib/apiBaseUrl";
+import { clearBackendJwtCache, getBackendJwt } from "@/shared/lib/backendJwt";
 
 /** 서버가 내려준 베이스 URL (클라이언트에서 Providers가 설정) */
 let runtimeApiBaseUrl: string | null = null;
@@ -27,6 +28,41 @@ const api = axios.create({
   baseURL: effectiveApiBaseUrl(),
   timeout: 30000,
 });
+
+type RetryConfig = InternalAxiosRequestConfig & { __jwtRetried?: boolean };
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error: unknown) => {
+    const ax = error as {
+      config?: RetryConfig;
+      response?: { status?: number };
+    };
+    const original = ax.config;
+    if (!original || original.__jwtRetried) {
+      return Promise.reject(error);
+    }
+    if (ax.response?.status !== 401) {
+      return Promise.reject(error);
+    }
+    const authHeader = original.headers?.Authorization;
+    if (typeof authHeader !== "string" || !authHeader.startsWith("Bearer ")) {
+      return Promise.reject(error);
+    }
+    original.__jwtRetried = true;
+    clearBackendJwtCache();
+    const token = await getBackendJwt();
+    if (!token) {
+      return Promise.reject(error);
+    }
+    if (original.headers && typeof original.headers.set === "function") {
+      original.headers.set("Authorization", `Bearer ${token}`);
+    } else {
+      (original.headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+    }
+    return api.request(original);
+  }
+);
 
 export default api;
 

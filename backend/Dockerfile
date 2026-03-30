@@ -7,7 +7,7 @@ ENV PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends stockfish \
+	&& apt-get install -y --no-install-recommends stockfish libmagic1 \
 	&& mkdir -p /opt/homebrew/bin \
 	&& ln -sf /usr/games/stockfish /opt/homebrew/bin/stockfish \
 	&& rm -rf /var/lib/apt/lists/*

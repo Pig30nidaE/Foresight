@@ -310,3 +310,25 @@ export interface TacticalAnalysis {
   // 서버가 추가 필드를 내려줄 수 있으므로
   [key: string]: any;
 }
+
+/** GET /stats/tactical-patterns/.../progress */
+export interface TacticalProgressStatus {
+  status: string;
+  progress_percent?: number;
+  stage?: string;
+  message?: string;
+  total_games?: number;
+  analyzed_games?: number;
+  job_id?: string | null;
+  error?: string | null;
+  [key: string]: unknown;
+}
+
+/** GET /stats/tactical-patterns/.../ai-insights */
+export interface AiInsightsResponse {
+  username: string;
+  platform: string;
+  total_games: number;
+  insights: unknown;
+  [key: string]: unknown;
+}

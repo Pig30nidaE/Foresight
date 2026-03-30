@@ -30,11 +30,46 @@ const nextConfig = {
       },
     ];
   },
+  /** 유저 검색 허브 제거 — `/profile`만 북마크로 열리면 홈으로 보냄 (`/profile/[id]`는 유지). */
+  async redirects() {
+    return [{ source: "/profile", destination: "/", permanent: false }];
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.chesscomfiles.com" },
       { protocol: "https", hostname: "lichess1.org" },
+      { protocol: "https", hostname: "*.blob.core.windows.net" },
     ],
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+          {
+            key: "Content-Security-Policy-Report-Only",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: https: blob:",
+              "connect-src 'self' https: wss:",
+              "font-src 'self' data:",
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join("; "),
+          },
+        ],
+      },
+    ];
   },
 };
 

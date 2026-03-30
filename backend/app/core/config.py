@@ -49,6 +49,43 @@ class Settings(BaseSettings):
     LICHESS_MAX_RETRIES: int = 6
     CHESSDOTCOM_BASE_URL: str = "https://api.chess.com/pub"
 
+    # Forum / PostgreSQL
+    DATABASE_URL: str = ""
+    # Alembic sync driver; if empty, derived from DATABASE_URL (asyncpg → psycopg2)
+    DATABASE_URL_SYNC: str = ""
+    # 선택: 관리형 Postgres idle 타임아웃 회피 등. 미설정 시 엔진 기본값(기존과 동일).
+    DATABASE_POOL_RECYCLE_SECONDS: int | None = None
+    DATABASE_POOL_SIZE: int = 10
+    DATABASE_MAX_OVERFLOW: int = 20
+
+    # HTTPS 역프록시 뒤 프로덕션에서만 HSTS 권장. 0이면 헤더 미전송(로컬·HTTP와 동일 동작).
+    SECURITY_HSTS_MAX_AGE: int = 0
+
+    # false면 /docs, /redoc, /openapi.json 비활성화(배포 하드닝). 기본 true로 기존과 동일.
+    API_DOCS_ENABLED: bool = True
+
+    # HS256 — must match NextAuth AUTH_SECRET (same string) unless BRIDGE_JWT_SECRET is set.
+    JWT_SECRET: str = ""
+    # Optional: verify bridge tokens from Next /api/backend-jwt with this secret instead of JWT_SECRET.
+    BRIDGE_JWT_SECRET: str = ""
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60
+    JWT_ISSUER: str = "foresight.local"
+
+    # Azure Blob (forum image upload)
+    AZURE_STORAGE_CONNECTION_STRING: str = ""
+    AZURE_STORAGE_CONTAINER: str = "forum-uploads"
+    # Optional CDN / account URL prefix for public blobs, e.g. https://acct.blob.core.windows.net/container
+    AZURE_STORAGE_PUBLIC_BASE_URL: str = ""
+
+    # Signup email verification (SMTP). If SMTP_HOST is empty, code request returns 503.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_USE_TLS: bool = True
+
     class Config:
         env_file = str(_ROOT_ENV)
         case_sensitive = True

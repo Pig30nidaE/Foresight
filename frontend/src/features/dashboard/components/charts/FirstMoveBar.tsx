@@ -17,9 +17,8 @@ function winRateDisplayClass(wr: number) {
   return wr >= 50 ? "text-chess-win" : "text-chess-loss";
 }
 
-/** 스택 세그먼트: 동일 인셋 하이라이트로 면이 한 평면에 놓인 느낌 */
-const segmentSurface =
-  "shadow-[inset_0_1px_0_rgba(255,255,255,0.16),inset_0_-1px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),inset_0_-1px_0_rgba(0,0,0,0.38)]";
+const segmentBevel =
+  "shadow-[inset_0_2px_0_rgba(255,255,255,0.22),inset_0_-2px_0_rgba(0,0,0,0.2)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),inset_0_-2px_0_rgba(0,0,0,0.45)]";
 
 const BAR_EASE = "cubic-bezier(0.33, 1, 0.68, 1)";
 const SEG_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
@@ -43,12 +42,12 @@ function StackedSegment({
 }) {
   if (flexWeight <= 0) return null;
 
-  const bg =
+  const texture =
     tone === "win"
-      ? "bg-fm-bar-win"
+      ? "fm-texture-win"
       : tone === "draw"
-        ? "bg-fm-bar-draw"
-        : "bg-fm-bar-loss";
+        ? "fm-texture-draw"
+        : "fm-texture-loss";
 
   const segDelay = reducedMotion ? 0 : rowDelayMs + 140 + segIndex * 72;
 
@@ -59,7 +58,7 @@ function StackedSegment({
       title={title}
     >
       <div
-        className={`h-full w-full ${bg} ${segmentSurface}`}
+        className={`h-full w-full ${texture} ${segmentBevel}`}
         style={{
           transformOrigin: "left center",
           transform: drawBars || reducedMotion ? "scaleX(1)" : "scaleX(0)",
@@ -104,47 +103,47 @@ export default function FirstMoveBar({ data, side }: Props) {
   const sideTitleKey = side === "white" ? "chart.white" : "chart.black";
 
   return (
-    <div className="rounded-xl border border-chess-border/60 dark:border-chess-border/45 bg-chess-bg/80 dark:bg-chess-elevated/12 overflow-hidden shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-chess-border/50 dark:border-chess-border/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="pixel-frame pixel-hud-fill overflow-hidden">
+      <div className="flex flex-col gap-3 border-b-2 border-chess-border/55 dark:border-chess-border/45 px-4 py-3 sm:flex-row sm:items-center sm:justify-between bg-chess-bg/40 dark:bg-chess-bg/25">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-chess-muted">
+          <p className="font-pixel text-xs sm:text-sm font-bold text-chess-muted">
             {t("chart.firstMoveChartTitle")}
           </p>
-          <p className="text-sm font-semibold text-chess-primary mt-0.5">{t(sideTitleKey)}</p>
+          <p className="font-pixel text-base sm:text-lg font-bold text-chess-primary mt-0.5">{t(sideTitleKey)}</p>
         </div>
-        <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-[10px] font-medium text-chess-muted">
+        <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs sm:text-sm font-medium text-chess-muted">
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-[1px] bg-fm-bar-win shadow-sm" aria-hidden />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-[1px] bg-fm-bar-win shadow-sm" aria-hidden />
             {t("chart.win")}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-[1px] bg-fm-bar-draw shadow-sm" aria-hidden />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-[1px] bg-fm-bar-draw shadow-sm" aria-hidden />
             {t("chart.draw")}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-[1px] bg-fm-bar-loss shadow-sm" aria-hidden />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-[1px] bg-fm-bar-loss shadow-sm" aria-hidden />
             {t("chart.loss")}
           </span>
         </div>
       </div>
 
-      <div className="hidden md:grid md:grid-cols-[minmax(10rem,13rem)_1fr_minmax(4.75rem,5.25rem)] md:gap-4 md:items-end border-b border-chess-border/40 dark:border-chess-border/30 bg-chess-surface/30 dark:bg-chess-bg/20 px-4 py-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-chess-muted">
+      <div className="hidden md:grid md:grid-cols-[minmax(11rem,14rem)_1fr_minmax(5.5rem,6rem)] md:gap-4 md:items-end border-b-2 border-chess-border/40 dark:border-chess-border/30 bg-chess-surface/35 dark:bg-chess-bg/30 px-4 py-2.5">
+        <span className="text-xs font-semibold uppercase tracking-wider text-chess-muted">
           {t("chart.opening")}
         </span>
         <div>
-          <div className="mb-1 flex justify-between px-0.5 text-[9px] font-medium tabular-nums text-chess-muted/70 select-none">
+          <div className="mb-1 flex justify-between px-0.5 text-[15px] font-medium tabular-nums text-chess-muted/70 select-none">
             <span>0</span>
             <span>25</span>
             <span>50</span>
             <span>75</span>
             <span>100</span>
           </div>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-chess-muted">
+          <span className="text-xs font-semibold uppercase tracking-wider text-chess-muted">
             {t("chart.shareVsMax")}
           </span>
         </div>
-        <span className="text-right text-[10px] font-semibold uppercase tracking-wider text-chess-muted">
+        <span className="text-right text-xs font-semibold uppercase tracking-wider text-chess-muted">
           {t("chart.winRateColumn")}
         </span>
       </div>
@@ -161,20 +160,20 @@ export default function FirstMoveBar({ data, side }: Props) {
           return (
             <div
               key={entry.eco}
-              className={`px-4 py-3 md:grid md:grid-cols-[minmax(10rem,13rem)_1fr_minmax(4.75rem,5.25rem)] md:gap-4 md:items-center md:py-2.5 animate-fm-chart-row`}
+              className={`px-4 py-3 md:grid md:grid-cols-[minmax(11rem,14rem)_1fr_minmax(5.5rem,6rem)] md:gap-4 md:items-center md:py-3 animate-fm-chart-row`}
               style={reducedMotion ? undefined : { animationDelay: `${rowDelayMs}ms` }}
             >
               <div className="min-w-0">
-                <div className="flex items-baseline gap-2">
-                  <span className="font-mono text-xs font-semibold tabular-nums text-chess-muted">
+                <div className="flex items-baseline gap-2 font-sans subpixel-antialiased">
+                  <span className="text-sm font-semibold tabular-nums tracking-normal text-chess-muted">
                     {entry.eco}
                   </span>
-                  <span className="truncate text-sm font-medium leading-snug text-chess-primary">
+                  <span className="truncate text-base font-medium leading-snug tracking-normal text-chess-primary">
                     {entry.first_move_category}
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] tabular-nums text-chess-muted md:hidden">
-                  {t("chart.nGames").replace("{n}", String(entry.games))}
+                <p className="mt-1 text-sm tabular-nums text-chess-muted md:hidden">
+                  {t("chart.sampleN").replace("{n}", String(entry.games))}
                   <span className="mx-1.5 text-chess-border">·</span>
                   <span className={winRateDisplayClass(entry.win_rate)}>
                     {entry.win_rate.toFixed(1)}%
@@ -183,18 +182,18 @@ export default function FirstMoveBar({ data, side }: Props) {
               </div>
 
               <div className="mt-2 md:mt-0">
-                <div className="relative h-3 w-full rounded-sm bg-slate-200/65 dark:bg-slate-950/55 ring-1 ring-slate-300/40 dark:ring-white/[0.08]">
+                <div className="relative h-4.5 w-full border-2 border-chess-border bg-chess-bg pixel-hud-fill">
                   <div
                     className="pointer-events-none absolute inset-0 z-0 hidden md:grid md:grid-cols-4"
                     aria-hidden
                   >
-                    <div className="border-r border-chess-border/30 dark:border-chess-border/20" />
-                    <div className="border-r border-chess-border/30 dark:border-chess-border/20" />
-                    <div className="border-r border-chess-border/30 dark:border-chess-border/20" />
+                    <div className="border-r-2 border-chess-border/35 dark:border-chess-border/25" />
+                    <div className="border-r-2 border-chess-border/35 dark:border-chess-border/25" />
+                    <div className="border-r-2 border-chess-border/35 dark:border-chess-border/25" />
                     <div />
                   </div>
                   <div
-                    className="relative z-[1] flex h-full w-full min-w-0 gap-px overflow-hidden rounded-sm ring-1 ring-chess-border/25 dark:ring-white/[0.06]"
+                    className="relative z-[1] flex h-full w-full min-w-0 gap-px overflow-hidden border border-chess-border/40"
                     style={{
                       width: drawBars ? "100%" : "0%",
                       maxWidth: "100%",
@@ -232,27 +231,27 @@ export default function FirstMoveBar({ data, side }: Props) {
                     />
                   </div>
                 </div>
-                <div className="mt-1.5 hidden gap-5 text-[10px] tabular-nums md:flex">
+                <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 font-sans text-sm font-semibold tabular-nums subpixel-antialiased sm:gap-x-8">
                   <span>
-                    <span className="font-medium text-chess-muted">W</span>{" "}
-                    <span className="font-medium text-fm-bar-win">{entry.wins}</span>
+                    <span className="text-chess-muted">W</span>{" "}
+                    <span className="text-fm-bar-win">{entry.wins}</span>
                   </span>
                   <span>
-                    <span className="font-medium text-chess-muted">D</span>{" "}
-                    <span className="font-medium text-fm-bar-draw">{entry.draws}</span>
+                    <span className="text-chess-muted">D</span>{" "}
+                    <span className="text-fm-bar-draw">{entry.draws}</span>
                   </span>
                   <span>
-                    <span className="font-medium text-chess-muted">L</span>{" "}
-                    <span className="font-medium text-fm-bar-loss">{entry.losses}</span>
+                    <span className="text-chess-muted">L</span>{" "}
+                    <span className="text-fm-bar-loss">{entry.losses}</span>
                   </span>
                 </div>
               </div>
 
               <div className="hidden text-right md:block">
-                <p className={`text-sm font-semibold tabular-nums ${winRateDisplayClass(entry.win_rate)}`}>
+                <p className={`text-base font-semibold tabular-nums ${winRateDisplayClass(entry.win_rate)}`}>
                   {entry.win_rate.toFixed(1)}%
                 </p>
-                <p className="mt-0.5 text-[10px] tabular-nums text-chess-muted">
+                <p className="mt-1 font-sans text-sm tabular-nums subpixel-antialiased text-chess-muted">
                   {t("chart.sampleN").replace("{n}", String(entry.games))}
                 </p>
               </div>

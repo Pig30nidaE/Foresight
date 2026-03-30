@@ -29,20 +29,24 @@ export default function TierSection({
   if (entries.length === 0) return null;
 
   return (
-    <div className={`rounded-2xl border ${cfg.border} ${cfg.bg} overflow-hidden`}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-3 px-6 py-4 text-left hover:bg-chess-border/20 transition-colors"
-      >
-        <TierBadge tier={tier} />
-        <span className={`font-semibold ${cfg.color}`}>{tier} Tier</span>
-        <span className="text-chess-muted text-sm">{t("tier.count").replace("{n}", String(entries.length))}</span>
-        <span className="ml-auto text-chess-muted text-sm">{open ? "▼" : "▶"}</span>
-      </button>
+    <div className={`pixel-frame overflow-hidden ${cfg.border} ${cfg.bg}`}>
+      <div className={`${cfg.bg} border-b-2 ${cfg.border}`}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="w-full flex items-center gap-3 px-4 sm:px-6 py-3 sm:py-4 text-left transition-[filter] hover:brightness-[1.03] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+        >
+          <TierBadge tier={tier} />
+          <span className={`font-pixel text-sm font-bold ${cfg.color}`}>{tier} Tier</span>
+          <span className="text-chess-muted text-xs sm:text-sm font-medium">
+            {t("tier.count").replace("{n}", String(entries.length))}
+          </span>
+          <span className="ml-auto font-pixel text-chess-muted text-xs">{open ? "v" : ">"}</span>
+        </button>
+      </div>
 
       {open && (
-        <div className="px-6 pb-5">
+        <div className="pixel-hud-fill px-4 sm:px-6 pb-4 sm:pb-5 pt-3 border-t-2 border-chess-border/40">
           <OpeningTierTable entries={entries} color={color} onOpeningClick={onOpeningClick} />
         </div>
       )}

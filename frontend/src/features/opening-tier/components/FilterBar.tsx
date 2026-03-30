@@ -25,15 +25,14 @@ export default function FilterBar({
   brackets,
 }: Props) {
   return (
-    <div className="flex flex-wrap gap-3 items-center bg-chess-surface/60 dark:bg-chess-elevated/20 border border-chess-border/80 dark:border-chess-border rounded-2xl p-5">
-      {/* Time control */}
-      <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center pixel-frame pixel-hud-fill p-4 sm:p-5">
+      <div className="flex w-full overflow-hidden border-2 border-chess-border sm:w-auto sm:shrink-0">
         {TIME_CLASSES.map((tc) => (
           <button
             key={tc}
             type="button"
             onClick={() => onSpeedChange(tc)}
-            className={`px-3 py-2 text-sm capitalize transition-colors ${
+            className={`font-pixel min-h-[44px] flex-1 px-3 py-2.5 text-xs font-bold capitalize sm:min-h-0 sm:flex-none sm:py-2 ${
               speed === tc
                 ? "bg-chess-inverse text-white"
                 : "bg-chess-surface dark:bg-chess-bg/60 text-chess-muted hover:text-chess-primary"
@@ -44,11 +43,10 @@ export default function FilterBar({
         ))}
       </div>
 
-      {/* Rating bracket */}
       <select
         value={rating}
         onChange={(e) => onRatingChange(Number(e.target.value))}
-        className="bg-chess-surface dark:bg-chess-bg border border-chess-border rounded-lg px-3 py-2 text-chess-primary text-sm focus:outline-none focus:ring-2 focus:ring-chess-accent/25 focus:border-chess-accent transition-colors"
+        className="pixel-input font-pixel min-h-[44px] w-full min-w-0 px-3 py-2.5 text-base text-chess-primary sm:min-h-0 sm:min-w-[10rem] sm:text-sm"
       >
         {brackets.map((b) => (
           <option key={b.lichess_rating} value={b.lichess_rating}>
@@ -57,22 +55,21 @@ export default function FilterBar({
         ))}
       </select>
 
-      {/* Color toggle */}
-      <div className="flex rounded-lg overflow-hidden border border-chess-border shrink-0">
+      <div className="flex w-full overflow-hidden border-2 border-chess-border sm:w-auto sm:shrink-0">
         {(["white", "black"] as Color[]).map((c) => (
           <button
             key={c}
             type="button"
             onClick={() => onColorChange(c)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
+            className={`font-pixel min-h-[44px] flex-1 px-4 py-2.5 text-xs font-bold sm:min-h-0 sm:flex-none sm:py-2 ${
               color === c
                 ? c === "white"
-                  ? "bg-chess-bg dark:bg-chess-elevated text-chess-primary shadow-sm"
-                  : "bg-chess-inverse text-white shadow-sm"
+                  ? "bg-amber-200 text-slate-900 ring-2 ring-slate-900 dark:bg-slate-100 dark:ring-chess-accent"
+                  : "bg-chess-inverse text-white"
                 : "bg-chess-surface dark:bg-chess-bg/60 text-chess-muted hover:text-chess-primary"
             }`}
           >
-            {c === "white" ? "⬜ White" : "⬛ Black"}
+            {c === "white" ? "WHT" : "BLK"}
           </button>
         ))}
       </div>
