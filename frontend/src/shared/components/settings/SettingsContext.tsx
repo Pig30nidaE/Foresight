@@ -5,10 +5,10 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
-  useRef,
   useState,
   ReactNode,
 } from "react";
+import { useSession } from "next-auth/react";
 
 export type Language = "ko" | "en";
 export type Theme = "light" | "dark";
@@ -19,8 +19,9 @@ export interface Settings {
   stockfishDepth: number;
 }
 
-/** 탭/창을 닫을 때까지 유지 (브라우저 세션 캐시) */
-const SESSION_SETTINGS_KEY = "foresight.session.settings";
+/** 계정별 설정 저장 키 prefix (localStorage) */
+const USER_SETTINGS_KEY_PREFIX = "foresight.user.settings";
+const GUEST_SETTINGS_KEY = `${USER_SETTINGS_KEY_PREFIX}.guest`;
 
 const DEFAULT_SETTINGS: Settings = {
   language: "ko",
@@ -59,11 +60,11 @@ function isTheme(v: unknown): v is Theme {
   return v === "light" || v === "dark";
 }
 
-function readSessionSettings(): Settings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+function readPersistedSettings(storageKey: string): Settings | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(SESSION_SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
     const o = JSON.parse(raw) as Record<string, unknown>;
     const language = isLanguage(o.language) ? o.language : DEFAULT_SETTINGS.language;
     const theme = isTheme(o.theme) ? o.theme : DEFAULT_SETTINGS.theme;
@@ -71,17 +72,22 @@ function readSessionSettings(): Settings {
     const stockfishDepth = [12, 18, 24].includes(d) ? d : DEFAULT_SETTINGS.stockfishDepth;
     return { language, theme, stockfishDepth };
   } catch {
-    return DEFAULT_SETTINGS;
+    return null;
   }
 }
 
-function writeSessionSettings(s: Settings) {
+function writePersistedSettings(storageKey: string, s: Settings) {
   if (typeof window === "undefined") return;
   try {
-    sessionStorage.setItem(SESSION_SETTINGS_KEY, JSON.stringify(s));
+    localStorage.setItem(storageKey, JSON.stringify(s));
   } catch {
     /* quota / private mode */
   }
+}
+
+function resolveSettingsStorageKey(identity: string | null): string {
+  if (!identity) return GUEST_SETTINGS_KEY;
+  return `${USER_SETTINGS_KEY_PREFIX}.${encodeURIComponent(identity.trim().toLowerCase())}`;
 }
 
 interface SettingsContextProps extends Settings {
@@ -99,36 +105,38 @@ export function useSettings() {
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<Settings>(() => readSessionSettings());
+  const { status, data: session } = useSession();
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [storageKey, setStorageKey] = useState<string>(GUEST_SETTINGS_KEY);
+  const [hydrated, setHydrated] = useState(false);
   const { language, theme, stockfishDepth } = settings;
-  /** 로케일 자동 선택이 끝나기 전에 sessionStorage에 기본값을 쓰면 감지가 스킵되므로 게이트 */
-  const localeResolved = useRef(false);
 
   const setLanguage = (lang: Language) => setSettings((prev) => ({ ...prev, language: lang }));
   const setTheme = (next: Theme) => setSettings((prev) => ({ ...prev, theme: next }));
   const setStockfishDepth = (depth: number) =>
     setSettings((prev) => ({ ...prev, stockfishDepth: depth }));
 
-  // 세션에 설정이 없을 때만: 브라우저 로케일로 언어 자동 (paint 전에 반영)
-  useLayoutEffect(() => {
-    if (typeof window === "undefined") {
-      localeResolved.current = true;
-      return;
+  // 로그인 사용자별(또는 guest) 설정 로드
+  useEffect(() => {
+    if (status === "loading") return;
+    const identity =
+      session?.user?.email ??
+      session?.user?.name ??
+      null;
+    const key = resolveSettingsStorageKey(identity);
+    setStorageKey(key);
+
+    const stored = readPersistedSettings(key);
+    if (stored) {
+      setSettings(stored);
+    } else {
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        language: inferLanguageFromNavigator(),
+      });
     }
-    let hasStored = false;
-    try {
-      hasStored = Boolean(sessionStorage.getItem(SESSION_SETTINGS_KEY));
-    } catch {
-      // Private 모드 등에서 getItem이 실패해도 기본 ko에 고정하지 않고 로케일 추론
-      hasStored = false;
-    }
-    if (hasStored) {
-      localeResolved.current = true;
-      return;
-    }
-    setSettings((prev) => ({ ...prev, language: inferLanguageFromNavigator() }));
-    localeResolved.current = true;
-  }, []);
+    setHydrated(true);
+  }, [status, session?.user?.email, session?.user?.name]);
 
   // 테마는 paint 전에 반영해 깜빡임 최소화
   useLayoutEffect(() => {
@@ -136,9 +144,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   useEffect(() => {
-    if (!localeResolved.current) return;
-    writeSessionSettings(settings);
-  }, [settings]);
+    document.documentElement.dataset.uiLang = language;
+  }, [language]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    writePersistedSettings(storageKey, settings);
+  }, [hydrated, settings, storageKey]);
 
   return (
     <SettingsContext.Provider

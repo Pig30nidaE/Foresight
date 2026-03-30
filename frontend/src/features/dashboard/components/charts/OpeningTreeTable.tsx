@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { OpeningTreeNode } from "@/types";
 import OpeningGameListModal from "@/features/dashboard/components/modals/OpeningGameListModal";
 import { useTranslation } from "@/shared/lib/i18n";
 import { useBodyScrollLock } from "@/shared/lib/useBodyScrollLock";
+import { PixelCaretRightGlyph, PixelXGlyph } from "@/shared/components/ui/PixelGlyphs";
 
 interface Props {
   data: OpeningTreeNode[];
@@ -50,9 +51,21 @@ function OpeningPieChart({
   const { t } = useTranslation();
   const totalGames = data.reduce((sum, node) => sum + node.games, 0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  /** 화면 좌표 — 부모 overflow 클리핑을 피하기 위해 툴팁은 document body로 포털 */
+  const [tooltipPointer, setTooltipPointer] = useState<{ x: number; y: number } | null>(null);
 
+  const clearHover = useCallback(() => {
+    setHoveredIndex(null);
+    setTooltipPointer(null);
+  }, []);
+
+  /* 고정 중심(120,120)으로 path 계산 — 호버는 <g> translate만 사용해 깨짐 방지 */
   const segments = useMemo(() => {
     let currentAngle = 0;
+    const cx0 = 120;
+    const cy0 = 120;
+    const r = 85;
+    const popDist = 6;
 
     return data.map((node, index) => {
       const percentage = (node.games / totalGames) * 100;
@@ -60,29 +73,24 @@ function OpeningPieChart({
       const startAngle = currentAngle;
       currentAngle += angle;
 
-      // 호버 시 바깥으로 살짝 튀어나오는 효과
-      const isHovered = hoveredIndex === index;
-      const popOutDistance = isHovered ? 10 : 0;
-      const popOutAngle = (startAngle + angle / 2 - 90) * Math.PI / 180;
-      const popOutX = Math.cos(popOutAngle) * popOutDistance;
-      const popOutY = Math.sin(popOutAngle) * popOutDistance;
+      const midAngle = startAngle + angle / 2;
+      const popRad = (midAngle - 90) * (Math.PI / 180);
+      const popOutX = Math.cos(popRad) * popDist;
+      const popOutY = Math.sin(popRad) * popDist;
 
       const startRad = (startAngle - 90) * Math.PI / 180;
       const endRad = (startAngle + angle - 90) * Math.PI / 180;
-      const r = 85;
-      const cx = 120 + popOutX;
-      const cy = 120 + popOutY;
 
-      const x1 = cx + r * Math.cos(startRad);
-      const y1 = cy + r * Math.sin(startRad);
-      const x2 = cx + r * Math.cos(endRad);
-      const y2 = cy + r * Math.sin(endRad);
+      const x1 = cx0 + r * Math.cos(startRad);
+      const y1 = cy0 + r * Math.sin(startRad);
+      const x2 = cx0 + r * Math.cos(endRad);
+      const y2 = cy0 + r * Math.sin(endRad);
 
       const largeArc = angle > 180 ? 1 : 0;
 
       const path = angle >= 360
-        ? `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx} ${cy + r} A ${r} ${r} 0 1 1 ${cx} ${cy - r}`
-        : `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+        ? `M ${cx0} ${cy0 - r} A ${r} ${r} 0 1 1 ${cx0} ${cy0 + r} A ${r} ${r} 0 1 1 ${cx0} ${cy0 - r}`
+        : `M ${cx0} ${cy0} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
 
       return {
         node,
@@ -91,26 +99,12 @@ function OpeningPieChart({
         startAngle,
         color: OPENING_PIE_SEGMENT_COLORS[index % OPENING_PIE_SEGMENT_COLORS.length],
         path,
-        midAngle: startAngle + angle / 2,
+        midAngle,
         popOutX,
         popOutY,
       };
     });
-  }, [data, totalGames, hoveredIndex]);
-
-  // 툴팁 위치 계산
-  const tooltipPos = useMemo(() => {
-    if (hoveredIndex === null) return null;
-    const seg = segments[hoveredIndex];
-    const rad = (seg.midAngle - 90) * Math.PI / 180;
-    const r = 70;
-    const cx = 120;
-    const cy = 120;
-    return {
-      x: cx + r * Math.cos(rad),
-      y: cy + r * Math.sin(rad),
-    };
-  }, [hoveredIndex, segments]);
+  }, [data, totalGames]);
 
   const maxLegendItems = 12;
   const legendSegments = segments.slice(0, maxLegendItems);
@@ -118,44 +112,115 @@ function OpeningPieChart({
   const svgClass =
     chartSize === "lg" ? "w-[min(22rem,100%)] h-[min(22rem,100%)] max-w-full" : "w-56 h-56";
 
+  const tooltipContent =
+    hoveredIndex !== null && segments[hoveredIndex] ? (
+      <div className="pointer-events-none max-w-[min(18rem,calc(100vw-1.5rem))] pixel-frame bg-chess-surface/98 px-3 py-2 shadow-lg">
+        <div className="mb-1 flex items-start gap-2">
+          <span
+            className="mt-0.5 h-3 w-3 shrink-0 border border-chess-primary/25"
+            style={{ backgroundColor: segments[hoveredIndex].color }}
+          />
+          <span className="break-words text-sm font-bold leading-snug text-chess-primary">
+            {segments[hoveredIndex].node.name}
+          </span>
+        </div>
+        <div className="space-y-0.5 text-xs text-chess-muted">
+          <div className="flex justify-between gap-4">
+            <span className="shrink-0">{t("chart.ratio")}</span>
+            <span className="text-right font-semibold text-chess-primary tabular-nums">
+              {segments[hoveredIndex].percentage.toFixed(1)}%
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="shrink-0">{t("chart.games")}</span>
+            <span className="text-right font-semibold text-chess-primary tabular-nums">
+              {t("chart.gamesCount").replace("{n}", String(segments[hoveredIndex].node.games))}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="shrink-0">{t("chart.winRate")}</span>
+            <span
+              className={`text-right font-semibold tabular-nums ${
+                segments[hoveredIndex].node.win_rate >= 50 ? "text-chess-win" : "text-chess-loss"
+              }`}
+            >
+              {segments[hoveredIndex].node.win_rate}%
+            </span>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  const tooltipApproxW = 288;
+  const tooltipApproxH = 140;
+  const tooltipPortal =
+    typeof document !== "undefined" &&
+    tooltipContent &&
+    tooltipPointer &&
+    createPortal(
+      <div
+        className="fixed z-[100001] w-max max-w-[min(18rem,calc(100vw-1.5rem))]"
+        style={{
+          left: Math.max(
+            8,
+            Math.min(
+              tooltipPointer.x + 14,
+              (typeof window !== "undefined" ? window.innerWidth : 9999) - tooltipApproxW - 8
+            )
+          ),
+          top: Math.max(
+            8,
+            Math.min(
+              tooltipPointer.y + 14,
+              (typeof window !== "undefined" ? window.innerHeight : 9999) - tooltipApproxH - 8
+            )
+          ),
+        }}
+      >
+        {tooltipContent}
+      </div>,
+      document.body
+    );
+
   return (
     <div className="flex flex-col items-center">
-      <div className="relative shrink-0">
-        <svg viewBox="0 0 240 240" className={svgClass}>
+      <div className="relative shrink-0 overflow-visible">
+        <svg
+          viewBox="0 0 240 240"
+          className={svgClass}
+          onMouseLeave={clearHover}
+        >
           {/* 배경 원 - 흐릿한 느낌 */}
           <circle cx="120" cy="120" r="95" className="fill-chess-primary/10 dark:fill-white/10" />
 
           {segments.map((seg, i) => {
             const isHovered = hoveredIndex === i;
             return (
-              <g key={i}>
+              <g
+                key={i}
+                style={{
+                  transform: isHovered
+                    ? `translate(${seg.popOutX}px, ${seg.popOutY}px)`
+                    : "translate(0px, 0px)",
+                  transition: "transform 0.12s ease-out",
+                }}
+              >
                 <path
                   d={seg.path}
                   fill={seg.color}
-                  stroke={isHovered ? seg.color : "transparent"}
-                  strokeWidth={isHovered ? 2 : 0}
-                  strokeOpacity={isHovered ? 1 : 0}
-                  className="transition-all duration-300 ease-out cursor-pointer"
+                  className="cursor-pointer"
                   style={{
-                    opacity: isHovered ? 1 : 0.7,
-                    filter: isHovered ? 'brightness(1.1)' : 'none',
+                    opacity: isHovered ? 1 : 0.72,
+                    filter: isHovered ? "brightness(1.08)" : undefined,
                   }}
-                  onMouseEnter={() => setHoveredIndex(i)}
-                  onMouseLeave={() => setHoveredIndex(null)}
+                  onMouseEnter={(e) => {
+                    setHoveredIndex(i);
+                    setTooltipPointer({ x: e.clientX, y: e.clientY });
+                  }}
+                  onMouseMove={(e) => {
+                    setTooltipPointer({ x: e.clientX, y: e.clientY });
+                  }}
                 />
-                {/* 호버 시 실선 테두리 */}
-                {isHovered && (
-                  <path
-                    d={seg.path}
-                    fill="none"
-                    stroke="#e2e8f0"
-                    strokeWidth="2"
-                    className="pointer-events-none"
-                    style={{
-                      transform: `translate(${seg.popOutX}px, ${seg.popOutY}px)`,
-                    }}
-                  />
-                )}
               </g>
             );
           })}
@@ -178,51 +243,7 @@ function OpeningPieChart({
             {totalGames}
           </text>
         </svg>
-
-        {/* 툴팁 */}
-        {hoveredIndex !== null && tooltipPos && (
-          <div
-            className="absolute pointer-events-none z-10 bg-chess-surface/95 border border-chess-border
-                       rounded-lg px-3 py-2 shadow-xl backdrop-blur-sm transition-all duration-150"
-            style={{
-              left: `${(tooltipPos.x / 240) * 100}%`,
-              top: `${(tooltipPos.y / 240) * 100}%`,
-              transform: 'translate(-50%, -50%)',
-            }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <span
-                className="w-3 h-3 rounded-full shrink-0"
-                style={{ backgroundColor: segments[hoveredIndex].color }}
-              />
-              <span className="text-chess-primary font-bold text-sm max-w-32 truncate">
-                {segments[hoveredIndex].node.name}
-              </span>
-            </div>
-            <div className="text-xs text-chess-muted space-y-0.5">
-              <div className="flex justify-between gap-3">
-                <span>{t("chart.ratio")}</span>
-                <span className="text-chess-primary font-semibold">
-                  {segments[hoveredIndex].percentage.toFixed(1)}%
-                </span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>{t("chart.games")}</span>
-                <span className="text-chess-primary font-semibold">
-                  {t("chart.gamesCount").replace("{n}", String(segments[hoveredIndex].node.games))}
-                </span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>{t("chart.winRate")}</span>
-                <span className={`font-semibold ${
-                  segments[hoveredIndex].node.win_rate >= 50 ? "text-chess-win" : "text-chess-loss"
-                }`}>
-                  {segments[hoveredIndex].node.win_rate}%
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
+        {tooltipPortal}
       </div>
 
       {showLegend && (
@@ -231,17 +252,19 @@ function OpeningPieChart({
             {legendSegments.map((seg, i) => (
               <div
                 key={i}
-                className={`flex items-center gap-2 rounded-md transition-all duration-200 cursor-pointer min-w-0 text-xs px-2 py-1.5
+                className={`flex items-center gap-2 rounded-[var(--pixel-radius)] transition-all duration-200 cursor-pointer min-w-0 text-xs px-2 py-1.5
                   ${hoveredIndex === i ? "bg-chess-surface/50" : "hover:bg-chess-surface/30"}`}
-                onMouseEnter={() => setHoveredIndex(i)}
+                onMouseEnter={() => {
+                  setHoveredIndex(i);
+                  setTooltipPointer(null);
+                }}
                 onMouseLeave={() => setHoveredIndex(null)}
               >
                 <span
-                  className="w-3 h-3 rounded-full shrink-0"
+                  className="w-3 h-3 shrink-0 border border-chess-primary/20"
                   style={{
                     backgroundColor: seg.color,
                     opacity: hoveredIndex === i ? 1 : 0.7,
-                    boxShadow: hoveredIndex === i ? `0 0 4px ${seg.color}` : "none",
                   }}
                 />
                 <span
@@ -340,13 +363,13 @@ function OpeningDetailModal({
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-hidden overscroll-none"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
+      <div className="absolute inset-0 bg-black/65" />
 
       <div
-        className="relative w-full max-w-[min(1100px,96vw)] min-h-0 flex flex-col
+        className="relative w-full max-w-[min(1100px,96vw)] min-h-0 flex flex-col pixel-frame
                    h-[90dvh] max-h-[90dvh]
                    lg:h-[600px] lg:max-h-[min(600px,90dvh)]
-                   bg-chess-bg border border-chess-border/60 rounded-2xl shadow-2xl overflow-hidden"
+                   bg-chess-bg overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-chess-border">
@@ -361,21 +384,22 @@ function OpeningDetailModal({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="text-chess-muted hover:text-chess-primary transition-colors text-2xl leading-none shrink-0 ml-3"
+            className="text-chess-muted hover:text-chess-primary transition-colors shrink-0 ml-3 p-1"
             aria-label="닫기"
           >
-            ✕
+            <PixelXGlyph size={22} />
           </button>
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col lg:flex-row">
           {/* 원형 그래프만 (범례는 우측 목록과 통합, 색 띠로 대응) */}
-          <div className="hidden lg:flex min-w-[360px] w-[40%] max-w-[480px] flex-shrink-0 flex-col min-h-0 overflow-hidden px-5 py-6 lg:border-r border-chess-border/50 bg-chess-surface/30">
+          <div className="hidden lg:flex min-w-[360px] w-[40%] max-w-[480px] flex-shrink-0 flex-col min-h-0 overflow-visible px-5 py-6 lg:border-r border-chess-border/50 bg-chess-surface/30">
             <h3 className="shrink-0 text-sm font-semibold text-chess-primary mb-4 text-center leading-tight">
               {t("chart.gameRatioByOpening")}
             </h3>
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-visible">
               <OpeningPieChart data={data} showLegend={false} chartSize="lg" />
             </div>
           </div>
@@ -393,7 +417,7 @@ function OpeningDetailModal({
                     }
                   </span>
                 </h3>
-                <p className="hidden lg:block text-[10px] text-chess-muted/90 mt-0.5 leading-snug">
+                <p className="hidden lg:block text-[15px] text-chess-muted/90 mt-0.5 leading-snug">
                   {t("chart.pieListUnifiedHint")}
                 </p>
               </div>
@@ -434,21 +458,25 @@ function OpeningDetailModal({
                   <div key={parentNode.name} className="space-y-1">
                     {/* 부모 오프닝 (메인 계열) — 좌측 색 띠 = 파이 조각과 동일 */}
                     <div
-                      className={`flex items-stretch justify-between gap-2 py-2.5 pl-2 pr-3 rounded-lg
-                        bg-chess-surface/70 hover:bg-chess-surface border border-chess-border/40
+                      className={`flex items-stretch justify-between gap-2 py-2.5 pl-2 pr-3 rounded-[var(--pixel-radius)]
+                        bg-chess-surface/85 hover:bg-chess-surface border-2 border-chess-border/55
+                        shadow-[inset_2px_2px_0_rgba(255,255,255,0.1),inset_-2px_-2px_0_rgba(0,0,0,0.12)]
+                        dark:shadow-[inset_1px_1px_0_rgba(255,255,255,0.06),inset_-2px_-2px_0_rgba(0,0,0,0.35)]
                         transition-colors cursor-pointer group`}
                       onClick={() => hasChildren && toggleParent(parentNode.name)}
                     >
                       <span
-                        className="hidden lg:block w-1.5 shrink-0 rounded-full self-center min-h-[2.25rem]"
+                        className="hidden lg:block w-2 shrink-0 rounded-[1px] self-center min-h-[2.25rem] border border-chess-primary/20"
                         style={{ backgroundColor: pieStripe }}
                         aria-hidden
                       />
                       <div className="flex items-center gap-2 min-w-0 flex-1 lg:pl-0 pl-1">
                         {hasChildren && (
-                          <span className={`text-chess-muted text-xs w-4 shrink-0 transition-transform duration-200
-                            ${isExpanded ? 'rotate-90' : ''}`}>
-                            ▶
+                          <span
+                            className={`text-chess-muted text-xs w-4 shrink-0 inline-flex justify-center transition-transform duration-200
+                            ${isExpanded ? "rotate-90" : ""}`}
+                          >
+                            <PixelCaretRightGlyph size={12} />
                           </span>
                         )}
                         <span className="font-semibold text-sm text-chess-primary truncate">
@@ -486,7 +514,7 @@ function OpeningDetailModal({
 
                     {/* 자식 오프닝 (바리에이션) - 펼쳐진 경우에만 표시 */}
                     {isExpanded && hasChildren && (
-                      <div className="ml-4 space-y-0.5 border-l-2 border-chess-border/30 pl-3">
+                      <div className="ml-3 sm:ml-4 space-y-1 border-l-[3px] border-chess-border/50 pl-2 sm:pl-3 pixel-hud-fill py-1 rounded-[var(--pixel-radius)]">
                         {parentNode.children!.map((child, childIndex) => {
                           const childWinRateColor =
                             child.win_rate >= 50 ? "text-chess-win" : "text-chess-loss";
@@ -494,8 +522,10 @@ function OpeningDetailModal({
                           return (
                             <div
                               key={`${parentNode.name}-${childIndex}`}
-                              className="flex items-center justify-between py-2 px-3 rounded-lg
-                                bg-chess-surface/30 hover:bg-chess-surface/50 transition-colors"
+                              className="flex items-center justify-between py-2 px-3 rounded-[var(--pixel-radius)]
+                                border border-chess-border/40 bg-chess-bg/70 dark:bg-chess-bg/40
+                                shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]
+                                hover:bg-chess-surface/60 transition-colors"
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <span className="text-xs font-bold text-chess-accent shrink-0">
@@ -538,7 +568,7 @@ function OpeningDetailModal({
   return createPortal(modal, document.body);
 }
 
-export default function OpeningTreeTable({ data }: Props) {
+export default function OpeningTreeTable({ data, side = "white" }: Props) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showDetail, setShowDetail] = useState(false);
@@ -641,7 +671,7 @@ export default function OpeningTreeTable({ data }: Props) {
         <OpeningDetailModal
           data={data}
           onClose={() => setShowDetail(false)}
-          side="white"
+          side={side}
         />
       )}
     </div>

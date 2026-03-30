@@ -76,6 +76,46 @@ T5_MAX_WIN_PCT_LOSS = 14.0
 T6_MAX_CP_LOSS = 140
 T6_MAX_WIN_PCT_LOSS = 22.0
 
+
+DECISIVE_CP_THRESHOLD = 700
+MATE_LIKE_CP_THRESHOLD = 9500
+
+
+def _stabilize_win_pct_loss_for_accuracy(move: "AnalyzedMove") -> float:
+    """메이트/결정적 우세 구간에서 정확도 과민 반응을 완화합니다.
+
+    - 동일한 쪽이 이미 크게 이기고 있는 상태(양수/음수 부호 동일, 절대값 큼)에서
+      메이트 수순 길이 변화로 `win_pct_loss`가 과도하게 커지면 게임 정확도가 급락합니다.
+    - 정확도 계산용으로만 완화하여(티어 분류 로직은 유지) 체감 품질을 안정화합니다.
+    """
+    base_loss = max(0.0, float(getattr(move, "win_pct_loss", 0.0) or 0.0))
+    cp_before = getattr(move, "cp_before", None)
+    cp_after = getattr(move, "cp_after", None)
+    if cp_before is None or cp_after is None:
+        return base_loss
+
+    # 같은 쪽이 계속 우세(부호 동일)한 결정적 구간만 완화
+    same_winner = (cp_before > 0 and cp_after > 0) or (cp_before < 0 and cp_after < 0)
+    if not same_winner:
+        return base_loss
+
+    abs_before = abs(cp_before)
+    abs_after = abs(cp_after)
+    if abs_before < DECISIVE_CP_THRESHOLD or abs_after < DECISIVE_CP_THRESHOLD:
+        return base_loss
+
+    cp_delta = abs(cp_before - cp_after)
+
+    # 메이트 유사 영역에서는 페널티를 매우 작게 제한
+    if abs_before >= MATE_LIKE_CP_THRESHOLD or abs_after >= MATE_LIKE_CP_THRESHOLD:
+        return min(base_loss, 0.8)
+
+    # 결정적 우세 구간에서는 평가 변화량 기반으로 완화
+    # (예: 120cp 변화 ≈ 1.0% 수준 상한)
+    softened = cp_delta / 120.0
+    return min(base_loss, softened)
+
+
 def _compute_accuracy(analyzed_moves: list) -> float:
     """
     per-move accuracy의 조화평균으로 게임 정확도 계산 (Lichess 방식)
@@ -95,10 +135,11 @@ def _compute_accuracy(analyzed_moves: list) -> float:
     ]
     if not non_th:
         return 0.0
-    accs = [
-        max(0.0, min(100.0, 103.1668 * math.exp(-0.04354 * m.win_pct_loss) - 3.1669))
-        for m in non_th
-    ]
+    accs = []
+    for m in non_th:
+        eff_wpl = _stabilize_win_pct_loss_for_accuracy(m)
+        acc = 103.1668 * math.exp(-0.04354 * eff_wpl) - 3.1669
+        accs.append(max(0.0, min(100.0, acc)))
     n = len(accs)
     # 조화평균: acc=0인 경우 0.01로 clamp해 ZeroDivision 방지
     harmonic = n / sum(1.0 / (a if a > 0.0 else 0.01) for a in accs)
@@ -425,15 +466,16 @@ def _material_score(board: chess.Board, color: chess.Color) -> int:
 def _promote_best_t2_to_t1(
     white_moves: List[AnalyzedMove],
     black_moves: List[AnalyzedMove],
-) -> None:
+) -> Optional[AnalyzedMove]:
     """
     T2 수 중 게임에서 가장 잘 둔 수 1개만 T1으로 승격.
     정렬: cp_loss ↓, win_pct_loss ↓, is_only_best ↑, user_rank ↑
+    승격된 수를 반환 (스트리밍 클라이언트에 tier 갱신 전송용).
     """
     pool = white_moves + black_moves
     t2_only = [m for m in pool if m.tier == MoveTier.T2]
     if not t2_only:
-        return
+        return None
     t2_only.sort(
         key=lambda m: (
             m.cp_loss,
@@ -443,7 +485,9 @@ def _promote_best_t2_to_t1(
             m.halfmove,
         )
     )
-    t2_only[0].tier = MoveTier.T1
+    promoted = t2_only[0]
+    promoted.tier = MoveTier.T1
+    return promoted
 
 
 def analyze_single_game_sync(
@@ -871,7 +915,6 @@ def analyze_game_streaming(
 
     white_moves: List[AnalyzedMove] = []
     black_moves: List[AnalyzedMove] = []
-    all_plies: List[AnalyzedMove] = []
 
     try:
         with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
@@ -909,7 +952,8 @@ def analyze_game_streaming(
                         white_moves.append(analyzed)
                     else:
                         black_moves.append(analyzed)
-                    all_plies.append(analyzed)
+                    if on_move:
+                        on_move(_analyzed_move_to_dict(analyzed))
 
                 # board.push는 _analyze_single_move_with_fen 내부에서 수행
                 node = next_node
@@ -922,11 +966,9 @@ def analyze_game_streaming(
         logger.exception(f"Game analysis error: {exc}")
         raise
 
-    _promote_best_t2_to_t1(white_moves, black_moves)
-
-    if on_move:
-        for m in sorted(all_plies, key=lambda x: x.halfmove):
-            on_move(_analyzed_move_to_dict(m))
+    promoted = _promote_best_t2_to_t1(white_moves, black_moves)
+    if on_move and promoted is not None:
+        on_move(_analyzed_move_to_dict(promoted))
 
     white_analysis = PlayerAnalysisResult(
         username=white_player,

@@ -1,62 +1,36 @@
 "use client";
 
-import Link from "next/link";
 import SearchForm from "@/shared/components/ui/SearchForm";
 import { useTranslation } from "@/shared/lib/i18n";
+import { PixelPawnGlyph } from "@/shared/components/ui/PixelGlyphs";
 
 export default function Home() {
   const { t } = useTranslation();
   return (
-    <div className="relative flex flex-col items-center justify-start sm:justify-center min-h-[70vh] sm:min-h-[80vh] gap-8 sm:gap-12 text-center overflow-x-hidden pb-10 sm:pb-0">
-      {/* Dot-grid background */}
-      <div className="absolute inset-0 dot-grid opacity-[0.15] pointer-events-none" />
-
-      {/* Hero — shrink 방지: 모바일에서 세로 중앙 정렬 시 콘텐츠가 겹칠 수 있음 */}
-      <div className="flex flex-col items-center gap-3 sm:gap-4 animate-fade-in relative z-10 w-full shrink-0 pt-2 sm:pt-0">
-        <span className="text-5xl sm:text-7xl select-none">♟️</span>
-        <h1 className="text-3xl sm:text-5xl font-bold tracking-tight">
-          <span className="text-chess-primary">Fore</span>
-          <span className="text-chess-accent">sight</span>
-        </h1>
-        <p className="text-chess-muted text-base sm:text-lg max-w-sm sm:max-w-md leading-relaxed px-2">
-          {t("home.desc1")}
-          <br />
-          {t("home.desc2")}
-        </p>
+    <div className="relative flex flex-col items-center justify-start sm:justify-center min-h-[70vh] sm:min-h-[80vh] gap-8 sm:gap-10 text-center overflow-x-hidden pb-10 sm:pb-0">
+      {/* Hero — JRPG title window */}
+      <div className="flex flex-col items-center gap-4 sm:gap-5 animate-fade-in relative z-10 w-full shrink-0 pt-2 sm:pt-0 max-w-3xl mx-auto px-2">
+        <div className="relative w-full px-2 py-3 sm:px-4 sm:py-5">
+          <span className="block mb-2 mx-auto select-none" aria-hidden>
+            <PixelPawnGlyph className="opacity-90 text-chess-primary" size={84} />
+          </span>
+          <h1 className="font-pixel text-[30rem] sm:text-[36rem] md:text-[48rem] lg:text-[64rem] font-bold tracking-wide text-chess-primary pixel-glitch-title leading-tight">
+            <span className="text-chess-primary">foresight</span>
+            <span className="text-chess-accent">-chess</span>
+          </h1>
+        </div>
       </div>
 
-      {/* Search */}
-      <div className="relative z-10 w-full max-w-2xl mx-auto flex justify-center px-1 shrink-0">
-        <SearchForm />
-      </div>
-
-      {/* Feature Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-2xl mt-2 sm:mt-4 relative z-10 shrink-0">
-        <Link
-          href="/opening-tier"
-          className="bg-chess-surface/80 backdrop-blur-sm border border-chess-border rounded-xl p-4 sm:p-5 text-left hover:border-chess-accent/60 hover:bg-chess-border/60 transition-all group"
-        >
-          <div className="text-2xl mb-2 sm:mb-3">📋</div>
-          <h3 className="font-semibold text-chess-primary group-hover:text-chess-accent transition-colors">
-            {t("home.openingTiers")}
-          </h3>
-          <p className="text-chess-muted text-sm mt-1">
-            {t("home.openingTiersDesc")}
+      {/* Search — HUD console */}
+      <div className="relative z-10 w-full max-w-2xl mx-auto flex justify-center px-2 shrink-0">
+        <div className="w-full pixel-frame pixel-hud-fill p-4 sm:p-5">
+          <p className="font-pixel text-[11px] sm:text-xs text-chess-muted mb-3 text-left">
+            {typeof t === "function" ? t("home.search") : "Search"}
           </p>
-        </Link>
-        <Link
-          href="/dashboard"
-          className="bg-chess-surface/80 backdrop-blur-sm border border-chess-border rounded-xl p-4 sm:p-5 text-left hover:border-chess-accent/60 hover:bg-chess-border/60 transition-all group"
-        >
-          <div className="text-2xl mb-2 sm:mb-3">🎯</div>
-          <h3 className="font-semibold text-chess-primary group-hover:text-chess-accent transition-colors">
-            {t("home.search")}
-          </h3>
-          <p className="text-chess-muted text-sm mt-1">
-            {t("home.searchDesc")}
-          </p>
-        </Link>
+          <SearchForm />
+        </div>
       </div>
+
     </div>
   );
 }

@@ -9,15 +9,41 @@ import {
 } from "recharts";
 import type { MoveQualityStats } from "@/types";
 import { useTranslation, type I18nKey } from "@/shared/lib/i18n";
+import {
+  PixelBulletGlyph,
+  PixelCrossMarkGlyph,
+  PixelStarGlyph,
+  PixelTargetGlyph,
+} from "@/shared/components/ui/PixelGlyphs";
 
-// 플레이스홀더 (엔진 분석 결과 없을 때)
+function MoveQualityCategoryGlyph({ category }: { category: string }) {
+  const mono = "font-pixel text-[11px] leading-none shrink-0 inline-flex w-4 justify-center font-bold tabular-nums";
+  switch (category) {
+    case "Best":
+      return <PixelStarGlyph size={12} className="shrink-0 text-chess-win" />;
+    case "Excellent":
+      return <span className={`${mono} text-emerald-600 dark:text-emerald-400`}>!</span>;
+    case "Good":
+      return <PixelTargetGlyph size={12} className="shrink-0 text-emerald-500 dark:text-emerald-300" />;
+    case "Inaccuracy":
+      return <span className={`${mono} w-5 text-amber-600 dark:text-amber-400 text-[15px]`}>?!</span>;
+    case "Mistake":
+      return <span className={`${mono} text-orange-600 dark:text-orange-400`}>?</span>;
+    case "Blunder":
+      return <PixelCrossMarkGlyph size={12} className="shrink-0 text-chess-loss" />;
+    default:
+      return <PixelBulletGlyph size={10} className="shrink-0 opacity-50" />;
+  }
+}
+
+// 플레이스홀더 (엔진 분석 결과 없을 때) — API와 동일 키, emoji 필드는 응답 호환용
 const PLACEHOLDER = [
-  { category: "Best",       emoji: "★",  color: "#10b981", count: 0, percentage: 0 },
-  { category: "Excellent",  emoji: "!",  color: "#34d399", count: 0, percentage: 0 },
-  { category: "Good",       emoji: "⊙",  color: "#6ee7b7", count: 0, percentage: 0 },
-  { category: "Inaccuracy", emoji: "?!", color: "#f59e0b", count: 0, percentage: 0 },
-  { category: "Mistake",    emoji: "?",  color: "#f97316", count: 0, percentage: 0 },
-  { category: "Blunder",    emoji: "??", color: "#ef4444", count: 0, percentage: 0 },
+  { category: "Best",       emoji: "", color: "#10b981", count: 0, percentage: 0 },
+  { category: "Excellent",  emoji: "", color: "#34d399", count: 0, percentage: 0 },
+  { category: "Good",       emoji: "", color: "#6ee7b7", count: 0, percentage: 0 },
+  { category: "Inaccuracy", emoji: "", color: "#f59e0b", count: 0, percentage: 0 },
+  { category: "Mistake",    emoji: "", color: "#f97316", count: 0, percentage: 0 },
+  { category: "Blunder",    emoji: "", color: "#ef4444", count: 0, percentage: 0 },
 ];
 
 const CustomTooltip = ({
@@ -120,6 +146,7 @@ export default function MoveQualityDonut({ data, isLoading = false }: Props) {
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs w-full mt-1">
         {cats.map((entry) => (
           <div key={entry.category} className="flex items-center gap-1.5">
+            <MoveQualityCategoryGlyph category={entry.category} />
             <span
               className="w-2.5 h-2.5 rounded-sm shrink-0"
               style={{ backgroundColor: entry.color, opacity: hasData ? 1 : 0.3 }}
