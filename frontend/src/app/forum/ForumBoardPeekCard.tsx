@@ -21,11 +21,11 @@ export default function ForumBoardPeekCard({ imported, previewFen, onActivate }:
       <button
         type="button"
         onClick={onActivate}
-        className="relative aspect-square w-[min(100%,14rem)] shrink-0 overflow-hidden pixel-frame bg-chess-surface outline-none transition-colors hover:border-chess-accent/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-chess-accent sm:w-[min(100%,15rem)]"
+        className="relative aspect-square w-[min(100%,14rem)] shrink-0 touch-manipulation overflow-hidden pixel-frame bg-chess-surface outline-none transition-colors hover:border-chess-accent/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-chess-accent sm:w-[min(100%,15rem)]"
         aria-label={imported ? t("forum.peek.openEdit") : t("forum.peek.import")}
       >
         {showBoard ? (
-          <ForumPostThumbnail thumbnailFen={previewFen} />
+          <ForumPostThumbnail thumbnailFen={previewFen} nonInteractive compactNotation />
         ) : (
           <span
             className="flex h-full min-h-[9.5rem] w-full items-center justify-center text-6xl font-extralight leading-none text-chess-muted/40 select-none sm:min-h-[10.5rem] sm:text-7xl"

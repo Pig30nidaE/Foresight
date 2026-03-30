@@ -113,27 +113,12 @@ async def get_first_move_stats(
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         logger.info(f"  → API returned {len(games)} games")
-        
-        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
-        # → GameSummary의 time_class 필드가 일관되게 설정됨
-        df = analysis_svc.build_dataframe(games)
-        is_dataframe = hasattr(df, "empty") and hasattr(df, "columns")
-        logger.info(
-            f"  → DataFrame: {len(df)} rows, columns={list(df.columns) if is_dataframe and not df.empty else ('EMPTY' if is_dataframe else 'NON_DATAFRAME')}"
-        )
 
-        if not is_dataframe:
-            parsed = parse_games_bulk(games)
-            df = analysis_svc.build_dataframe(parsed)
-            is_dataframe = hasattr(df, "empty") and hasattr(df, "columns")
+        # build_dataframe / build_rows 는 list[dict] 반환 (pandas 아님). GameSummary.pgn 기준 첫 수 추출.
+        rows = analysis_svc.build_rows(games)
+        logger.info(f"  → rows: {len(rows)} (first-move stats input)")
 
-        if not is_dataframe:
-            raise ValueError("build_dataframe did not return a DataFrame")
-
-        if not df.empty:
-            logger.info(f"  → time_class distribution: {df['time_class'].value_counts().to_dict() if 'time_class' in df.columns else 'NO time_class COLUMN'}")
-
-        result = analysis_svc.get_first_move_stats(df, username.lower())
+        result = analysis_svc.get_first_move_stats(rows, username.lower())
         logger.info(f"  → Result: white={len(result['white'])}, black={len(result['black'])}, total_games={result.get('total_games', 'N/A')}")
         return result
     except Exception as e:
@@ -164,15 +149,15 @@ async def get_opening_tree(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
-        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
-        df = analysis_svc.build_dataframe(games)
-        if not df.empty and side:
-            if side == "white" and "white" in df.columns:
-                df = df[df["white"].str.lower() == username.lower()]
-            elif side == "black" and "black" in df.columns:
-                df = df[df["black"].str.lower() == username.lower()]
+        rows = analysis_svc.build_rows(games)
+        if side:
+            u = username.lower()
+            if side == "white":
+                rows = [r for r in rows if (r.get("white") or "").lower() == u]
+            elif side == "black":
+                rows = [r for r in rows if (r.get("black") or "").lower() == u]
 
-        return analysis_svc.get_opening_tree(df, depth)
+        return analysis_svc.get_opening_tree(rows, depth)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -198,9 +183,8 @@ async def get_best_worst_openings(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
-        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
-        df = analysis_svc.build_dataframe(games)
-        return analysis_svc.get_best_worst_openings(df, min_games)
+        rows = analysis_svc.build_rows(games)
+        return analysis_svc.get_best_worst_openings(rows, min_games)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -28,6 +28,7 @@ export default function Navbar() {
   const { t } = useTranslation();
   const { status: authStatus, data: session } = useSession();
   const drawerRef = useRef<HTMLDivElement>(null);
+  const menuToggleRef = useRef<HTMLButtonElement>(null);
   const mobileSearchRef = useRef<HTMLInputElement>(null);
 
   const handleSignOut = () => {
@@ -44,7 +45,9 @@ export default function Navbar() {
   useEffect(() => {
     if (!menuOpen) return;
     const onPointerDown = (e: MouseEvent | TouchEvent) => {
-      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (menuToggleRef.current?.contains(target)) return;
+      if (drawerRef.current && !drawerRef.current.contains(target)) {
         setMenuOpen(false);
       }
     };
@@ -223,6 +226,7 @@ export default function Navbar() {
           {/* ── 모바일·태블릿 우측 아이콘 (xl 미만) ── */}
           <div className="flex xl:hidden items-center gap-1 shrink-0">
             <button
+              ref={menuToggleRef}
               type="button"
               className="p-2.5 rounded-[var(--pixel-radius)] border-2 border-transparent hover:border-chess-border/50 hover:bg-chess-border/30 transition-colors"
               aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}

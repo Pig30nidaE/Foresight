@@ -132,7 +132,7 @@ export default function FirstMoveBar({ data, side }: Props) {
           {t("chart.opening")}
         </span>
         <div>
-          <div className="mb-1 flex justify-between px-0.5 text-[10px] font-medium tabular-nums text-chess-muted/70 select-none">
+          <div className="mb-1 flex justify-between px-0.5 text-[15px] font-medium tabular-nums text-chess-muted/70 select-none">
             <span>0</span>
             <span>25</span>
             <span>50</span>

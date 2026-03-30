@@ -1,29 +1,16 @@
 /**
- * Opening Tier 기능 API
+ * 오프닝 티어 API
  * ─────────────────────────────────────────
  * Endpoint: GET /api/v1/opening-tier/*
+ * 로그인 없이 조회 가능. 백엔드는 이 라우트에서 JWT를 요구하지 않음.
  */
 import api from "@/shared/lib/api";
-import { getBackendJwt } from "@/shared/lib/backendJwt";
 import type { OpeningTierResponse, BracketsResponse, OpeningDetail } from "./types";
 
-const OPENING_TIER_CLIENT_HEADER = {
+/** 선택적 식별(로그 없이 공개 조회 가능). */
+const OPENING_TIER_HEADERS = {
   "X-Foresight-Client": "web-ui",
-};
-
-/** UI에서 `forum.error.loginRequired` 등으로 매핑 */
-export const OPENING_TIER_AUTH_REQUIRED = "OPENING_TIER_AUTH_REQUIRED";
-
-async function openingTierAuthHeaders(): Promise<Record<string, string>> {
-  const token = await getBackendJwt();
-  if (!token) {
-    throw new Error(OPENING_TIER_AUTH_REQUIRED);
-  }
-  return {
-    ...OPENING_TIER_CLIENT_HEADER,
-    Authorization: `Bearer ${token}`,
-  };
-}
+} as const;
 
 export const getOpeningTiers = async (
   rating: number,
@@ -33,18 +20,16 @@ export const getOpeningTiers = async (
 ): Promise<OpeningTierResponse> => {
   const { data } = await api.get("/opening-tier/global", {
     params: { rating, speed, color, q: q?.trim() || undefined },
-    headers: await openingTierAuthHeaders(),
-    timeout: 300_000, // BFS 탐색은 첫 요청 시 최대 2–3분 소요
+    headers: { ...OPENING_TIER_HEADERS },
+    timeout: 300_000,
   });
   return data as OpeningTierResponse;
 };
 
-export const getRatingBrackets = async (
-  speed: string
-): Promise<BracketsResponse> => {
+export const getRatingBrackets = async (speed: string): Promise<BracketsResponse> => {
   const { data } = await api.get("/opening-tier/brackets", {
     params: { speed },
-    headers: await openingTierAuthHeaders(),
+    headers: { ...OPENING_TIER_HEADERS },
   });
   return data as BracketsResponse;
 };
@@ -56,7 +41,7 @@ export const getOpeningDetail = async (
 ): Promise<OpeningDetail> => {
   const { data } = await api.get("/opening-tier/detail", {
     params: { eco, name, color },
-    headers: await openingTierAuthHeaders(),
+    headers: { ...OPENING_TIER_HEADERS },
     timeout: 30_000,
   });
   return data as OpeningDetail;

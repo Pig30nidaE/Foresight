@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect, useState, useId } from "react";
+import { useMemo } from "react";
 import type { MoveTier } from "@/shared/types";
 import { useTranslation, type I18nKey } from "@/shared/lib/i18n";
 
@@ -11,29 +11,55 @@ interface TierDonutChartProps {
   strokeWidth?: number;
 }
 
-type TierGroup = "good" | "neutral" | "risk";
+const TIER_ORDER: MoveTier[] = ["TH", "TF", "T1", "T2", "T3", "T4", "T5", "T6"];
 
-/* 다크 배경에서도 무난한 채도의 에메랄드·앰버·코랄 */
-const TIER_META: Record<MoveTier, { group: TierGroup; stroke: string; labelKey: I18nKey }> = {
-  TH: { group: "good", stroke: "#2d9f72", labelKey: "tier.TH" },
-  TF: { group: "good", stroke: "#2d9f72", labelKey: "tier.TF" },
-  T1: { group: "good", stroke: "#2d9f72", labelKey: "tier.T1" },
-  T2: { group: "good", stroke: "#2d9f72", labelKey: "tier.T2" },
-  T3: { group: "good", stroke: "#2d9f72", labelKey: "tier.T3" },
-
-  T4: { group: "neutral", stroke: "#c9a227", labelKey: "tier.T4" },
-  T5: { group: "neutral", stroke: "#c9a227", labelKey: "tier.T5" },
-
-  T6: { group: "risk", stroke: "#d97066", labelKey: "tier.T6" },
+/** 기보 티어 뱃지와 동일 팔레트 — 링 구간이 등급과 1:1로 대응 */
+const TIER_RING_COLOR: Record<MoveTier, string> = {
+  TH: "#8b5cf6",
+  TF: "#0ea5e9",
+  T1: "#22c55e",
+  T2: "#10b981",
+  T3: "#34d399",
+  T4: "#84cc16",
+  T5: "#f59e0b",
+  T6: "#ef4444",
 };
 
-function withAlpha(hex: string, alpha: number) {
-  // hex: #rrggbb
-  const v = hex.replace("#", "");
-  const r = parseInt(v.slice(0, 2), 16);
-  const g = parseInt(v.slice(2, 4), 16);
-  const b = parseInt(v.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+const TIER_META: Record<MoveTier, { labelKey: I18nKey }> = {
+  TH: { labelKey: "tier.TH" },
+  TF: { labelKey: "tier.TF" },
+  T1: { labelKey: "tier.T1" },
+  T2: { labelKey: "tier.T2" },
+  T3: { labelKey: "tier.T3" },
+  T4: { labelKey: "tier.T4" },
+  T5: { labelKey: "tier.T5" },
+  T6: { labelKey: "tier.T6" },
+};
+
+function buildConicGradient(tiers: MoveTier[], tierCounts: Record<MoveTier, number>): string {
+  const totalMoves = tiers.reduce((s, t) => s + (Number(tierCounts[t]) || 0), 0);
+  if (totalMoves <= 0) {
+    return "conic-gradient(from -90deg, rgba(120,120,120,0.25) 0% 100%)";
+  }
+
+  const stops: string[] = [];
+  let accPct = 0;
+
+  for (const tier of tiers) {
+    const c = Number(tierCounts[tier]) || 0;
+    if (c <= 0) continue;
+    const span = (c / totalMoves) * 100;
+    const start = accPct;
+    accPct += span;
+    const color = TIER_RING_COLOR[tier];
+    stops.push(`${color} ${start}% ${accPct}%`);
+  }
+
+  if (accPct < 99.5) {
+    stops.push(`rgba(160, 160, 150, 0.35) ${accPct}% 100%`);
+  }
+
+  return `conic-gradient(from -90deg, ${stops.join(", ")})`;
 }
 
 export default function TierDonutChart({
@@ -43,155 +69,87 @@ export default function TierDonutChart({
   strokeWidth = 24,
 }: TierDonutChartProps) {
   const { t } = useTranslation();
-  const uid = useId().replace(/:/g, "");
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const center = size / 2;
 
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    // Delay animation trigger slightly for effect
-    const t = setTimeout(() => setMounted(true), 100);
-    return () => clearTimeout(t);
-  }, []);
+  const totalMoves = useMemo(
+    () => TIER_ORDER.reduce((s, t) => s + (Number(tierCounts[t]) || 0), 0),
+    [tierCounts]
+  );
+
+  const conicBackground = useMemo(() => buildConicGradient(TIER_ORDER, tierCounts), [tierCounts]);
 
   const segments = useMemo(() => {
-    const tiers: MoveTier[] = ["TH", "TF", "T1", "T2", "T3", "T4", "T5", "T6"];
-    let currentOffset = 0;
+    return TIER_ORDER.map((tier) => ({
+      tier,
+      percentage: tierPercentages[tier] || 0,
+      count: tierCounts[tier] || 0,
+      color: TIER_RING_COLOR[tier],
+    }));
+  }, [tierPercentages, tierCounts]);
 
-    return tiers.map((tier, idx) => {
-      const percentage = tierPercentages[tier] || 0;
-      const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`;
+  const innerSize = Math.max(size - strokeWidth * 2, size * 0.45);
 
-      const meta = TIER_META[tier];
-      // Premium look: avoid vivid colors; vary only alpha slightly.
-      const alphaBase =
-        meta.group === "good" ? 0.88 :
-        meta.group === "neutral" ? 0.65 :
-        0.60;
-      const alpha = Math.max(0.18, alphaBase - (idx / (tiers.length - 1)) * (meta.group === "risk" ? 0.20 : 0.35));
-
-      const segment = {
-        tier,
-        percentage,
-        count: tierCounts[tier] || 0,
-        stroke: withAlpha(meta.stroke, alpha),
-        strokeDasharray,
-        offset: currentOffset,
-        startOffset: currentOffset + circumference,
-      };
-
-      currentOffset -= (percentage / 100) * circumference;
-      return segment;
-    });
-  }, [tierPercentages, tierCounts, circumference]);
+  const ariaLabel = useMemo(() => {
+    if (totalMoves <= 0) return t("chart.moves").replace("{n}", "0");
+    const parts = segments
+      .filter((s) => s.count > 0)
+      .map((s) => `${s.tier} ${s.percentage.toFixed(0)}%`);
+    return `${t("chart.moves").replace("{n}", String(totalMoves))}. ${parts.join(", ")}`;
+  }, [segments, totalMoves, t]);
 
   return (
     <div className="flex flex-col items-center">
-      <div className="relative group">
-        <svg
-          width={size}
-          height={size}
-          className="transform -rotate-90"
-          style={{ filter: "drop-shadow(3px 3px 0 rgba(0,0,0,0.4))" }}
+      <div
+        className="relative shrink-0"
+        style={{ width: size, height: size }}
+        role="img"
+        aria-label={ariaLabel}
+      >
+        <div
+          className="absolute inset-0 rounded-full border-2 border-chess-border/80 shadow-[2px_2px_0_rgba(0,0,0,0.12)] dark:border-chess-border/50"
+          style={{ background: conicBackground }}
+        />
+        <div
+          className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-[3px] border-chess-border bg-chess-bg px-2 py-2 text-center pixel-hud-fill shadow-[inset_2px_2px_0_rgba(255,255,255,0.1),2px_2px_0_rgba(0,0,0,0.15)] dark:border-chess-border dark:bg-chess-surface"
+          style={{
+            width: innerSize,
+            height: innerSize,
+            maxWidth: "92%",
+            maxHeight: "92%",
+          }}
         >
-          <defs>
-            <pattern id={`${uid}-track`} width="4" height="4" patternUnits="userSpaceOnUse">
-              <rect width="4" height="4" fill="rgba(120,120,120,0.2)" />
-              <rect x="0" y="0" width="1" height="1" fill="rgba(0,0,0,0.2)" />
-              <rect x="2" y="2" width="1" height="1" fill="rgba(0,0,0,0.2)" />
-            </pattern>
-            {segments.map((s) => (
-              <pattern
-                key={`pat-${s.tier}`}
-                id={`${uid}-seg-${s.tier}`}
-                width="4"
-                height="4"
-                patternUnits="userSpaceOnUse"
-              >
-                <rect width="4" height="4" fill={s.stroke} />
-                <rect x="0" y="0" width="2" height="2" fill="rgba(0,0,0,0.18)" />
-                <rect x="2" y="2" width="2" height="2" fill="rgba(255,255,255,0.1)" />
-              </pattern>
-            ))}
-          </defs>
-
-          {/* Background Track */}
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            stroke={`url(#${uid}-track)`}
-            strokeWidth={strokeWidth}
-          />
-          
-          {/* Active Data Segments */}
-          {segments.map((segment) => {
-            if (segment.percentage === 0) return null;
-            return (
-              <circle
-                key={segment.tier}
-                cx={center}
-                cy={center}
-                r={radius}
-                fill="none"
-                stroke={`url(#${uid}-seg-${segment.tier})`}
-                strokeWidth={strokeWidth}
-                strokeDasharray={segment.strokeDasharray}
-                strokeDashoffset={mounted ? segment.offset : segment.startOffset}
-                strokeLinecap="butt"
-                className="transition-all duration-[1200ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] origin-center"
-              />
-            );
-          })}
-        </svg>
-        
-        {/* Center content (Tier ratio only) */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div
-            className="flex flex-col items-center border-[3px] border-chess-border bg-chess-bg pixel-hud-fill shadow-[inset_2px_2px_0_rgba(255,255,255,0.1),2px_2px_0_rgba(0,0,0,0.2)]"
-            style={{
-              width: size - strokeWidth * 2 - 14,
-              height: size - strokeWidth * 2 - 14,
-              justifyContent: "center",
-            }}
-          >
-            <span className="font-pixel text-2xl font-bold text-chess-primary tracking-tight">
-              T1~T6
-            </span>
-            <span className="font-pixel text-[10px] sm:text-xs font-bold text-chess-muted mt-1">
-              {t("chart.tierRatio")}
-            </span>
-          </div>
+          <span className="font-pixel text-lg font-bold leading-tight text-chess-primary tabular-nums sm:text-xl">
+            {t("chart.moves").replace("{n}", String(totalMoves))}
+          </span>
+          <span className="mt-1 font-pixel text-[9px] font-bold uppercase leading-tight tracking-wide text-chess-muted sm:text-[10px]">
+            {t("chart.tierRatio")}
+          </span>
         </div>
       </div>
 
-      {/* Legend / Stats Grid */}
-      <div className="mt-6 w-full grid grid-cols-3 sm:grid-cols-4 gap-2">
+      <div className="mt-6 w-full grid grid-cols-3 gap-2 sm:grid-cols-4">
         {segments.map((segment) => {
           const isEmpty = segment.count === 0;
           const meta = TIER_META[segment.tier];
           return (
-            <div 
-              key={segment.tier} 
+            <div
+              key={segment.tier}
               className={`flex flex-col items-center p-2 transition-colors duration-200 ${
                 isEmpty
-                  ? "opacity-40 border-2 border-transparent"
+                  ? "border-2 border-transparent opacity-40"
                   : "pixel-frame pixel-hud-fill hover:brightness-[1.03]"
               }`}
             >
               <div
-                className="w-10 h-2 mb-2 border-2 border-chess-primary/25"
+                className="mb-2 h-2 w-10 border-2 border-chess-primary/25"
                 style={{
-                  backgroundColor: segment.stroke,
-                  backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 3px)`,
+                  backgroundColor: segment.color,
+                  backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 3px)`,
                 }}
               />
-              <span className="font-pixel text-xs font-bold text-chess-primary">
+              <span className="text-center font-pixel text-[10px] font-bold leading-tight text-chess-primary sm:text-xs">
                 {segment.tier} {t(meta.labelKey)}
               </span>
-              <span className="text-[10px] text-chess-muted font-medium mt-0.5">
+              <span className="mt-0.5 text-[15px] font-medium text-chess-muted tabular-nums">
                 {segment.percentage.toFixed(0)}% ({t("chart.moves").replace("{n}", String(segment.count))})
               </span>
             </div>

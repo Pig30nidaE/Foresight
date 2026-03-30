@@ -4,31 +4,55 @@ import { useId, useMemo, useState, type CSSProperties } from "react";
 import { Chessboard, ChessboardProvider, SparePiece } from "react-chessboard";
 import { fenStringToPositionObject } from "react-chessboard";
 
+import ForumBoardAnnotationLayer from "@/app/forum/ForumBoardAnnotationLayer";
 import {
   applyPieceDropToFen,
   DEFAULT_START_FEN,
   legalTargetsForSquareFromFen,
   movePieceOnFenIfLegal,
   removePieceAtSquareFromFen,
+  tryLegalMoveUci,
 } from "@/shared/lib/forumChess";
+import { highlightsToSquareStyles, type BoardAnnotations } from "@/shared/lib/forumBoardAnnotations";
 import { useTranslation } from "@/shared/lib/i18n";
 
 const SPARE_WHITES = ["wP", "wN", "wB", "wR", "wQ", "wK"] as const;
 const SPARE_BLACKS = ["bP", "bN", "bB", "bR", "bQ", "bK"] as const;
 
-type ForumPositionEditorProps = {
+export type ForumAnnotationTool = "none" | "highlight" | "emoji" | "clear";
+
+export type ForumPositionEditorProps = {
   fen: string;
   onFenChange: (fen: string) => void;
   disabled?: boolean;
+  annotations?: BoardAnnotations;
+  annotationTool?: ForumAnnotationTool;
+  onAnnotationSquare?: (square: string) => void;
+  /** true면 합법 수만 적용하고 UCI를 부모로 전달 (FEN은 부모가 fenAfterUcis로 계산) */
+  recordMoves?: boolean;
+  onRecordMove?: (uci: string) => void;
 };
 
-export default function ForumPositionEditor({ fen, onFenChange, disabled }: ForumPositionEditorProps) {
+export default function ForumPositionEditor({
+  fen,
+  onFenChange,
+  disabled = false,
+  annotations,
+  annotationTool = "none",
+  onAnnotationSquare,
+  recordMoves = false,
+  onRecordMove,
+}: ForumPositionEditorProps) {
   const { t } = useTranslation();
   const boardId = useId().replace(/:/g, "");
   const position = useMemo(() => (fen.trim() ? fen.trim() : DEFAULT_START_FEN), [fen]);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [legalTargets, setLegalTargets] = useState<string[]>([]);
   const [deleteMode, setDeleteMode] = useState(false);
+  /** 불합법 드래그/클릭 후 react-chessboard 내부 상태를 FEN과 맞춤 */
+  const [boardSyncKey, setBoardSyncKey] = useState(0);
+
+  const ann = annotations ?? { highlights: {}, emojis: {} };
 
   const clearSelection = () => {
     setSelectedSquare(null);
@@ -40,15 +64,66 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
     setLegalTargets(legalTargetsForSquareFromFen(position, square));
   };
 
+  const handleAnnotationClick = (square: string) => {
+    if (!onAnnotationSquare || annotationTool === "none") return;
+    onAnnotationSquare(square);
+  };
+
   const onSquareClick = (square: string) => {
     if (disabled || !square) return;
+    if (onAnnotationSquare && annotationTool !== "none") {
+      handleAnnotationClick(square);
+      clearSelection();
+      return;
+    }
+
     const pos = fenStringToPositionObject(position, 8, 8);
-    if (deleteMode) {
+    if (deleteMode && !recordMoves) {
       const next = removePieceAtSquareFromFen(position, square);
       if (next !== null) onFenChange(next);
       clearSelection();
       return;
     }
+
+    if (recordMoves && onRecordMove) {
+      if (selectedSquare) {
+        if (square === selectedSquare) {
+          clearSelection();
+          return;
+        }
+        const targetOccupied = Boolean(pos[square]);
+        if (targetOccupied) {
+          const selPt = pos[selectedSquare]?.pieceType;
+          const tgtPt = pos[square]?.pieceType;
+          const sameColor = Boolean(selPt && tgtPt && selPt[0] === tgtPt[0]);
+          if (sameColor) {
+            activateSelection(square);
+            return;
+          }
+        }
+        if (!legalTargets.includes(square)) {
+          setBoardSyncKey((k) => k + 1);
+          clearSelection();
+          return;
+        }
+        const r = tryLegalMoveUci(position, selectedSquare, square);
+        if (r) {
+          onRecordMove(r.uci);
+          clearSelection();
+          return;
+        }
+        setBoardSyncKey((k) => k + 1);
+        clearSelection();
+        return;
+      }
+      if (pos[square]) {
+        activateSelection(square);
+      } else {
+        clearSelection();
+      }
+      return;
+    }
+
     if (selectedSquare) {
       const moved = movePieceOnFenIfLegal(position, selectedSquare, square);
       if (moved) {
@@ -65,24 +140,32 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
   };
 
   const customSquareStyles = useMemo(() => {
-    const styles: Record<string, CSSProperties> = {};
+    const styles: Record<string, CSSProperties> = {
+      ...highlightsToSquareStyles(ann.highlights),
+    };
     if (selectedSquare) {
       styles[selectedSquare] = {
+        ...styles[selectedSquare],
         boxShadow: "inset 0 0 0 3px rgba(166, 124, 68, 0.9)",
       };
     }
     for (const sq of legalTargets) {
+      const base = styles[sq] ?? {};
       styles[sq] = {
-        boxShadow: "inset 0 0 0 9999px rgba(166, 124, 68, 0.2)",
+        ...base,
+        backgroundImage:
+          "radial-gradient(circle at center, rgba(166, 124, 68, 0.92) 16%, rgba(166, 124, 68, 0.35) 18%, transparent 20%)",
       };
     }
     return styles;
-  }, [selectedSquare, legalTargets]);
+  }, [selectedSquare, legalTargets, ann.highlights]);
+
+  const spareEnabled = !disabled && !recordMoves;
 
   return (
-    <div className="space-y-1.5">
-      <p className="text-[11px] leading-snug text-chess-muted">{t("forum.editor.help")}</p>
-      {!disabled && (
+    <div className="space-y-1.5 font-sans antialiased">
+      <p className="text-xs leading-snug text-chess-muted">{t("forum.editor.help")}</p>
+      {!disabled && !recordMoves && (
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -90,7 +173,7 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
               setDeleteMode((prev) => !prev);
               clearSelection();
             }}
-            className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition ${
+            className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
               deleteMode
                 ? "border-red-500/70 bg-red-500/10 text-red-700 dark:text-red-300"
                 : "border-chess-border bg-chess-surface/70 text-chess-primary hover:bg-chess-elevated/70"
@@ -98,7 +181,7 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
           >
             {deleteMode ? t("forum.editor.deleteModeOn") : t("forum.editor.deleteModeOff")}
           </button>
-          <span className="text-[10px] text-chess-muted">{t("forum.editor.deleteHint")}</span>
+          <span className="text-xs text-chess-muted">{t("forum.editor.deleteHint")}</span>
         </div>
       )}
       <div className="mx-auto w-full max-w-[min(100%,18.5rem)]">
@@ -107,12 +190,12 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
             options={{
               id: `forum-editor-${boardId}`,
               position,
-              allowDragging: !disabled,
-              allowDragOffBoard: true,
+              allowDragging: !disabled && annotationTool === "none" && !recordMoves,
+              allowDragOffBoard: spareEnabled,
               showAnimations: false,
               animationDurationInMs: 0,
               boardOrientation: "white",
-              showNotation: false,
+              showNotation: true,
               allowDrawingArrows: false,
               squareStyles: customSquareStyles,
               boardStyle: {
@@ -122,7 +205,19 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
                 boxShadow: "0 1px 0 rgba(0,0,0,0.06)",
               },
               onPieceDrop: ({ piece, sourceSquare, targetSquare }) => {
-                if (disabled) return false;
+                if (disabled || annotationTool !== "none") return false;
+                if (recordMoves && onRecordMove && sourceSquare && targetSquare && !piece.isSparePiece) {
+                  const r = tryLegalMoveUci(position, sourceSquare, targetSquare);
+                  if (r) {
+                    onRecordMove(r.uci);
+                    clearSelection();
+                    return true;
+                  }
+                  setBoardSyncKey((k) => k + 1);
+                  clearSelection();
+                  return false;
+                }
+                if (piece.isSparePiece && recordMoves) return false;
                 const next = applyPieceDropToFen(position, { piece, sourceSquare, targetSquare });
                 if (next === null) return false;
                 onFenChange(next);
@@ -134,7 +229,7 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
                 onSquareClick(square);
               },
               onSquareRightClick: ({ piece, square }) => {
-                if (disabled || !piece || !square) return;
+                if (disabled || recordMoves || !piece || !square) return;
                 const next = removePieceAtSquareFromFen(position, square);
                 if (next === null) return;
                 onFenChange(next);
@@ -143,12 +238,20 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
             }}
           >
             <div className="relative aspect-square w-full overflow-hidden rounded-lg ring-1 ring-chess-border/50">
-              <Chessboard options={{}} />
+              <Chessboard key={`${position}-${boardSyncKey}`} options={{}} />
+              {Object.keys(ann.emojis).length > 0 || onAnnotationSquare ? (
+                <ForumBoardAnnotationLayer
+                  annotations={{ highlights: {}, emojis: ann.emojis }}
+                  onSquareClick={
+                    onAnnotationSquare && annotationTool !== "none" ? handleAnnotationClick : undefined
+                  }
+                />
+              ) : null}
             </div>
-            {!disabled && (
+            {spareEnabled && (
               <div className="mt-1.5 w-full rounded-md border border-chess-border/80 bg-chess-surface/50 px-1 py-1 dark:bg-chess-elevated/40">
                 <div className="px-0.5 pb-px">
-                  <span className="text-[9px] font-medium uppercase tracking-wide text-chess-muted">
+                  <span className="text-[15px] font-medium uppercase tracking-wide text-chess-muted">
                     {t("forum.editor.white")}
                   </span>
                 </div>
@@ -165,7 +268,7 @@ export default function ForumPositionEditor({ fen, onFenChange, disabled }: Foru
                   ))}
                 </div>
                 <div className="px-0.5 pt-0.5 pb-px">
-                  <span className="text-[9px] font-medium uppercase tracking-wide text-chess-muted">
+                  <span className="text-[15px] font-medium uppercase tracking-wide text-chess-muted">
                     {t("forum.editor.black")}
                   </span>
                 </div>

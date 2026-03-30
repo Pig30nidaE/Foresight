@@ -159,12 +159,12 @@ function SacDonutChart({ counts, t }: { counts: { t1: number; t2: number; t3: nu
         {/* 중앙 텍스트 */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <span className="text-[11px] font-bold text-chess-primary">T1~T5</span>
-          <span className="text-[9px] text-chess-muted">{t("sac.ratio")}</span>
-          <span className="text-[9px] text-chess-muted mt-0.5">{t("sac.totalCount").replace("{n}", String(total))}</span>
+          <span className="text-[15px] text-chess-muted">{t("sac.ratio")}</span>
+          <span className="text-[15px] text-chess-muted mt-0.5">{t("sac.totalCount").replace("{n}", String(total))}</span>
         </div>
       </div>
       {/* 범례 */}
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[15px]">
         {data.map((entry) => {
           const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
           return (
@@ -247,7 +247,7 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
       <div className="flex items-start justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-chess-primary truncate">{game.opening_name ?? t("sac.board")}</p>
-          <p className="text-[10px] text-chess-muted">
+          <p className="text-[15px] text-chess-muted">
             {game.played_at ? new Date(game.played_at).toLocaleDateString(t("term.win") === "Win" ? "en-US" : "ko-KR", { year: "numeric", month: "short", day: "numeric" }) : ""}
             {game.white && game.black && <span className="ml-1">{game.white} vs {game.black}</span>}
           </p>
@@ -266,7 +266,7 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
               style={{ backgroundColor: orientation === "white" ? "#4a5568" : "#e2e8f0" }} />
             {orientation === "white" ? game.black : game.white}
           </span>
-          <span className="text-chess-muted text-[10px]">{orientation === "white" ? t("sac.black") : t("sac.white")}</span>
+          <span className="text-chess-muted text-[15px]">{orientation === "white" ? t("sac.black") : t("sac.white")}</span>
         </div>
         
         <Chessboard options={{
@@ -287,7 +287,7 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
               style={{ backgroundColor: orientation === "white" ? "#e2e8f0" : "#4a5568" }} />
             {orientation === "white" ? game.white : game.black}
           </span>
-          <span className="text-chess-muted text-[10px]">{orientation === "white" ? t("sac.white") : t("sac.black")}</span>
+          <span className="text-chess-muted text-[15px]">{orientation === "white" ? t("sac.white") : t("sac.black")}</span>
         </div>
       </div>
 
@@ -332,7 +332,7 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
       <a
         href={toAnalysisUrl(game.url, game.sacrifice_move_no ?? undefined, game.sacrifice_color as "white" | "black" | undefined)}
         target="_blank" rel="noopener noreferrer"
-        className="text-[10px] text-center text-chess-muted hover:text-chess-primary underline underline-offset-2">
+        className="text-[15px] text-center text-chess-muted hover:text-chess-primary underline underline-offset-2">
         {t("sac.analyzeMove")}
       </a>
     </div>
@@ -421,24 +421,24 @@ function SacGameRow({ game, rank, isSelected, onSelect, t }: {
           ? `${tierMeta.border} ${tierMeta.bg} shadow-sm`
           : "border-chess-border bg-chess-bg/80 hover:border-chess-muted hover:bg-chess-surface"}`}>
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono text-chess-muted w-4 shrink-0 text-right">#{rank}</span>
+        <span className="text-[15px] font-mono text-chess-muted w-4 shrink-0 text-right">#{rank}</span>
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${tierMeta.dot}`} />
         <div className="flex-1 min-w-0">
           <p className="text-xs text-chess-primary font-medium truncate">{game.opening_name ?? t("pattern.noOpeningInfo")}</p>
-          <p className="text-[10px] text-chess-muted truncate">
+          <p className="text-[15px] text-chess-muted truncate">
             {game.played_at ? new Date(game.played_at).toLocaleDateString(t("term.win") === "Win" ? "en-US" : "ko-KR", { month: "short", day: "numeric" }) : t("pattern.unknownDate")}
             {game.white && game.black && <span className="ml-1 opacity-60">{game.white} vs {game.black}</span>}
           </p>
         </div>
         <div className="flex flex-col items-end gap-0.5 shrink-0">
-          <span className={`text-[10px] font-bold ${tierMeta.text}`}>{t(SAC_TIER_LABEL_KEY[tier])}</span>
-          <span className={`text-[9px] px-1 py-0.5 rounded-full border font-semibold ${badgeCls.cls}`}>{badgeLabel}</span>
+          <span className={`text-[15px] font-bold ${tierMeta.text}`}>{t(SAC_TIER_LABEL_KEY[tier])}</span>
+          <span className={`text-[15px] px-1 py-0.5 rounded-full border font-semibold ${badgeCls.cls}`}>{badgeLabel}</span>
         </div>
         <span className={`inline-flex shrink-0 ${isSelected ? "text-amber-500" : "text-chess-muted"}`}>
           <PixelCaretRightGlyph size={10} />
         </span>
       </div>
-      {game.context && <p className="text-[10px] text-chess-muted italic truncate mt-0.5 pl-6">{game.context}</p>}
+      {game.context && <p className="text-[15px] text-chess-muted italic truncate mt-0.5 pl-6">{game.context}</p>}
     </button>
   );
 }
@@ -517,13 +517,13 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
                     {t("sac.weakness")}
                   </span>
                 )}
-                <span className="text-[10px] px-2 py-0.5 rounded-full border border-blue-700/30 bg-blue-700/8 text-blue-700 font-semibold inline-flex items-center gap-1">
+                <span className="text-[15px] px-2 py-0.5 rounded-full border border-blue-700/30 bg-blue-700/8 text-blue-700 font-semibold inline-flex items-center gap-1">
                   <PixelMicroscopeGlyph size={11} className="shrink-0" />
                   Stockfish
                 </span>
                 <div className="relative group">
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-chess-muted/40 text-[10px] font-bold text-chess-muted cursor-help">!</span>
-                  <div className="pointer-events-none absolute left-0 top-6 z-20 hidden w-72 rounded-xl border border-chess-border bg-chess-surface/95 p-3 text-[10px] text-chess-muted shadow-xl group-hover:block">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-chess-muted/40 text-[15px] font-bold text-chess-muted cursor-help">!</span>
+                  <div className="pointer-events-none absolute left-0 top-6 z-20 hidden w-72 rounded-xl border border-chess-border bg-chess-surface/95 p-3 text-[15px] text-chess-muted shadow-xl group-hover:block">
                     <p className="font-semibold text-chess-primary mb-2">{t("sac.tierExplanation")}</p>
                     {([1, 2, 3, 4, 5] as const).map((tier) => (
                       <div key={tier} className="flex items-start gap-2 py-1">
@@ -563,13 +563,13 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
                   <div className="w-full bg-chess-border/60 rounded-full h-1.5 overflow-hidden">
                     <div className={`h-full rounded-full ${scoreBg}`} style={{ width: `${pattern.score}%` }} />
                   </div>
-                  <p className="text-[10px] text-chess-muted">{t("sac.gamesAnalyzed").replace("{n}", String(pattern.games_analyzed))}</p>
+                  <p className="text-[15px] text-chess-muted">{t("sac.gamesAnalyzed").replace("{n}", String(pattern.games_analyzed))}</p>
                   {sacChart && (
-                    <p className="text-[10px] text-chess-muted">
+                    <p className="text-[15px] text-chess-muted">
                       {t("sac.declined").replace("{n}", String(sacChart.declined ?? 0)).replace("{unn}", String(sacChart.unnecessary ?? 0))}
                     </p>
                   )}
-                  {pattern.insight && <p className="text-[10px] text-chess-muted border-l-2 border-chess-muted/30 pl-2 line-clamp-2">{pattern.insight}</p>}
+                  {pattern.insight && <p className="text-[15px] text-chess-muted border-l-2 border-chess-muted/30 pl-2 line-clamp-2">{pattern.insight}</p>}
                 </div>
               </div>
             </div>
@@ -584,12 +584,12 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
                         <span className={`inline-block h-2 w-2 rounded-full ${meta.dot}`} />
                         <span className={`text-[11px] font-bold ${meta.text}`}>{t(SAC_TIER_LABEL_KEY[tier])}</span>
                       </div>
-                      <span className="text-[10px] text-chess-muted">
+                      <span className="text-[15px] text-chess-muted">
                         {t("sac.nGamesShort").replace("{n}", String(games.length))}
                       </span>
                     </div>
                     {games.length === 0 ? (
-                      <p className="px-2 py-2 text-[10px] text-chess-muted">{t("sac.noRepGame")}</p>
+                      <p className="px-2 py-2 text-[15px] text-chess-muted">{t("sac.noRepGame")}</p>
                     ) : (
                       games.map((g, i) => (
                         <SacGameRow key={`${tier}-${g.url}-${i}`} game={g} rank={i + 1}
@@ -607,8 +607,8 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
 
             {/* 푸터 */}
             <div className="px-4 py-2.5 border-t border-chess-border bg-chess-bg/50 shrink-0 flex items-center justify-between">
-              <p className="text-[10px] text-chess-muted">{t("sac.selectGameHint")}</p>
-              <button onClick={onClose} className="text-[10px] text-chess-muted hover:text-chess-primary px-2.5 py-1 rounded-lg border border-chess-border transition-colors">{t("sac.close")}</button>
+              <p className="text-[15px] text-chess-muted">{t("sac.selectGameHint")}</p>
+              <button onClick={onClose} className="text-[15px] text-chess-muted hover:text-chess-primary px-2.5 py-1 rounded-lg border border-chess-border transition-colors">{t("sac.close")}</button>
             </div>
           </div>
 

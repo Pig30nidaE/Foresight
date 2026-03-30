@@ -8,10 +8,31 @@ import { useSession } from "next-auth/react";
 
 import ForumBoardEditOverlay from "@/app/forum/ForumBoardEditOverlay";
 import ForumBoardPeekCard from "@/app/forum/ForumBoardPeekCard";
+import ForumRecordedMoveChips from "@/app/forum/ForumRecordedMoveChips";
+import ForumPgnReplay from "@/app/forum/ForumPgnReplay";
 import ForumPostThumbnail from "@/app/forum/ForumPostThumbnail";
 import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
-import { composerPreviewFen, DEFAULT_START_FEN, getFinalFenFromPgn } from "@/shared/lib/forumChess";
+import {
+  buildPgnFromStartAndUcis,
+  composerPreviewFen,
+  DEFAULT_START_FEN,
+  extractFenFromPgnHeaders,
+  fenAfterUcis,
+  getFinalFenFromPgn,
+  normalizeFenForDisplay,
+  positionsFromPgnText,
+  sanListFromStartAndUcis,
+  startFenMatchingPgnUcis,
+  ucisFromPgnText,
+} from "@/shared/lib/forumChess";
+import {
+  boardAnnotationsToPayload,
+  emptyBoardAnnotations,
+  normalizeBoardAnnotationsFromApi,
+  pruneAnnotationsBeyondPly,
+  type BoardAnnotations,
+} from "@/shared/lib/forumBoardAnnotations";
 import { AuthorNameLink } from "@/shared/components/forum/AuthorName";
 import { PixelHeartGlyph } from "@/shared/components/ui/PixelGlyphs";
 import {
@@ -32,8 +53,16 @@ type CommentItem = {
   id: string;
   body: string;
   created_at: string;
+  parent_comment_id?: string | null;
   can_edit?: boolean;
   author: { id: string; public_id: string; display_name: string; role?: string; avatar_url?: string | null };
+};
+
+type EditChessSnapshot = {
+  pgnText: string | null;
+  fenInitial: string | null;
+  finalFenNorm: string | null;
+  annotations: BoardAnnotations;
 };
 
 type PostDetail = {
@@ -43,6 +72,7 @@ type PostDetail = {
   body: string;
   pgn_text: string | null;
   fen_initial: string | null;
+  board_annotations?: unknown;
   board_category?: string | null;
   author: { id: string; public_id: string; display_name: string; role?: string; avatar_url?: string | null };
   created_at: string;
@@ -75,6 +105,13 @@ export default function ForumPostDetailPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const [editFen, setEditFen] = useState(DEFAULT_START_FEN);
+  const [editBoardAnnotations, setEditBoardAnnotations] = useState<BoardAnnotations>(() =>
+    emptyBoardAnnotations()
+  );
+  const [editRecordMoves, setEditRecordMoves] = useState(false);
+  const [editMoveUcis, setEditMoveUcis] = useState<string[]>([]);
+  const [editRecordStartFen, setEditRecordStartFen] = useState(DEFAULT_START_FEN);
+  const [editChessSnapshot, setEditChessSnapshot] = useState<EditChessSnapshot | null>(null);
   const [chessImported, setChessImported] = useState(false);
   const [boardOverlayOpen, setBoardOverlayOpen] = useState(false);
   const [editBoardSectionExpanded, setEditBoardSectionExpanded] = useState(true);
@@ -87,6 +124,7 @@ export default function ForumPostDetailPage() {
   const [reportBusy, setReportBusy] = useState(false);
   const [reportSubmittedFlash, setReportSubmittedFlash] = useState(false);
   const [commentPage, setCommentPage] = useState(1);
+  const [replyingTo, setReplyingTo] = useState<CommentItem | null>(null);
   const reportFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { t, language } = useTranslation();
 
@@ -126,6 +164,26 @@ export default function ForumPostDetailPage() {
     if (!post || post.board_category) return null;
     return getFinalFenFromPgn(post.pgn_text) ?? post.fen_initial ?? null;
   }, [post]);
+
+  const pgnReplayPositions = useMemo(() => {
+    if (!post?.pgn_text?.trim()) return null;
+    return positionsFromPgnText(post.pgn_text);
+  }, [post?.pgn_text]);
+
+  const showPgnReplay = Boolean(pgnReplayPositions && pgnReplayPositions.length >= 2);
+
+  const editPeekFen = useMemo(() => {
+    if (!chessImported) return null;
+    if (editRecordMoves) {
+      return fenAfterUcis(editRecordStartFen, editMoveUcis) ?? normalizeFenForDisplay(editRecordStartFen);
+    }
+    return composerPreviewFen(editFen);
+  }, [chessImported, editRecordMoves, editRecordStartFen, editMoveUcis, editFen]);
+
+  const editSanList = useMemo(
+    () => sanListFromStartAndUcis(editRecordStartFen, editMoveUcis),
+    [editRecordStartFen, editMoveUcis]
+  );
 
   const getRequiredToken = async () => {
     const token = await getBackendJwt();
@@ -203,10 +261,14 @@ export default function ForumPostDetailPage() {
       const token = await getRequiredToken();
       await api.post(
         `/forum/posts/${post.id}/comments`,
-        { body: commentBody },
+        {
+          body: commentBody,
+          ...(replyingTo ? { parent_comment_id: replyingTo.id } : {}),
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setCommentBody("");
+      setReplyingTo(null);
       await load();
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
@@ -233,6 +295,7 @@ export default function ForumPostDetailPage() {
   };
 
   const beginEditComment = (c: CommentItem) => {
+    setReplyingTo(null);
     setEditingCommentId(c.id);
     setEditCommentBody(c.body);
   };
@@ -313,8 +376,38 @@ export default function ForumPostDetailPage() {
     if (post.board_category) {
       setEditFen(DEFAULT_START_FEN);
       setChessImported(false);
+      setEditChessSnapshot(null);
+      setEditBoardAnnotations(emptyBoardAnnotations());
+      setEditRecordMoves(false);
+      setEditMoveUcis([]);
+      setEditRecordStartFen(DEFAULT_START_FEN);
     } else {
-      setEditFen(post.fen_initial?.trim() || getFinalFenFromPgn(post.pgn_text) || DEFAULT_START_FEN);
+      const finalNorm = normalizeFenForDisplay(
+        getFinalFenFromPgn(post.pgn_text) ?? post.fen_initial ?? null
+      );
+      const pgnTrim = post.pgn_text?.trim() ?? "";
+      const existingUcis = pgnTrim ? ucisFromPgnText(pgnTrim) ?? [] : [];
+      const pgnAlignedStart =
+        pgnTrim && existingUcis.length > 0 ? startFenMatchingPgnUcis(pgnTrim) : null;
+      const gameStart =
+        (pgnAlignedStart && (normalizeFenForDisplay(pgnAlignedStart) ?? pgnAlignedStart)) ||
+        post.fen_initial?.trim() ||
+        (pgnTrim ? extractFenFromPgnHeaders(pgnTrim) : null) ||
+        (pgnTrim ? positionsFromPgnText(pgnTrim)?.[0]?.fen : null) ||
+        finalNorm ||
+        DEFAULT_START_FEN;
+
+      setEditChessSnapshot({
+        pgnText: pgnTrim ? post.pgn_text : null,
+        fenInitial: post.fen_initial?.trim() ? post.fen_initial : null,
+        finalFenNorm: finalNorm,
+        annotations: normalizeBoardAnnotationsFromApi(post.board_annotations),
+      });
+      setEditBoardAnnotations(normalizeBoardAnnotationsFromApi(post.board_annotations));
+      setEditRecordMoves(false);
+      setEditMoveUcis(existingUcis);
+      setEditRecordStartFen(gameStart);
+      setEditFen(getFinalFenFromPgn(post.pgn_text) ?? post.fen_initial?.trim() ?? DEFAULT_START_FEN);
       setChessImported(Boolean(post.pgn_text?.trim() || post.fen_initial?.trim()));
     }
     setBoardOverlayOpen(false);
@@ -342,16 +435,66 @@ export default function ForumPostDetailPage() {
     setBusy(true);
     try {
       const token = await getRequiredToken();
-      await api.patch(
-        `/forum/posts/${post.id}`,
-        {
-          title: editTitle.trim(),
-          body: editBody,
-          pgn_text: "",
-          fen_initial: post.board_category ? "" : chessImported ? editFen.trim() || "" : "",
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const annPayload = chessImported ? boardAnnotationsToPayload(editBoardAnnotations) : null;
+
+      if (post.board_category) {
+        await api.patch(
+          `/forum/posts/${post.id}`,
+          {
+            title: editTitle.trim(),
+            body: editBody,
+            pgn_text: "",
+            fen_initial: "",
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } else if (!chessImported) {
+        await api.patch(
+          `/forum/posts/${post.id}`,
+          {
+            title: editTitle.trim(),
+            body: editBody,
+            pgn_text: null,
+            fen_initial: null,
+            board_annotations: null,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } else {
+        const curNorm = normalizeFenForDisplay(editFen);
+        let pgnOut: string | null;
+        let fenOut: string | null;
+        if (editMoveUcis.length > 0) {
+          const pgn = buildPgnFromStartAndUcis(editRecordStartFen, editMoveUcis);
+          if (!pgn) {
+            setError(t("forum.error.pgnBuildFailed"));
+            return;
+          }
+          pgnOut = pgn;
+          fenOut = editRecordStartFen.trim() || null;
+        } else if (
+          editChessSnapshot &&
+          curNorm === editChessSnapshot.finalFenNorm &&
+          (editChessSnapshot.pgnText?.trim() || editChessSnapshot.fenInitial?.trim())
+        ) {
+          pgnOut = editChessSnapshot.pgnText;
+          fenOut = editChessSnapshot.fenInitial?.trim() || null;
+        } else {
+          pgnOut = null;
+          fenOut = editFen.trim() || null;
+        }
+        await api.patch(
+          `/forum/posts/${post.id}`,
+          {
+            title: editTitle.trim(),
+            body: editBody,
+            pgn_text: pgnOut,
+            fen_initial: fenOut,
+            board_annotations: annPayload,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
       setEditing(false);
       setBoardOverlayOpen(false);
       setEditBoardSectionExpanded(true);
@@ -367,16 +510,26 @@ export default function ForumPostDetailPage() {
   const importBoard = () => {
     setChessImported(true);
     setBoardOverlayOpen(true);
+    setEditRecordMoves(false);
+    setEditMoveUcis([]);
+    setEditRecordStartFen(editFen);
+    setEditBoardAnnotations(emptyBoardAnnotations());
   };
 
   const removeBoard = () => {
     setChessImported(false);
     setBoardOverlayOpen(false);
     setEditFen(DEFAULT_START_FEN);
+    setEditBoardAnnotations(emptyBoardAnnotations());
+    setEditRecordMoves(false);
+    setEditMoveUcis([]);
+    setEditRecordStartFen(DEFAULT_START_FEN);
+    setEditChessSnapshot(null);
   };
 
   const onDeletePost = async () => {
     if (!post) return;
+    if (!window.confirm(t("forum.deletePostConfirm"))) return;
     setBusy(true);
     try {
       const token = await getRequiredToken();
@@ -456,9 +609,24 @@ export default function ForumPostDetailPage() {
                         <div className="flex w-full flex-col items-center">
                           <ForumBoardPeekCard
                             imported={chessImported}
-                            previewFen={composerPreviewFen(editFen)}
+                            previewFen={editPeekFen}
                             onActivate={() => (chessImported ? setBoardOverlayOpen(true) : importBoard())}
                           />
+                          {chessImported && editMoveUcis.length > 0 && (
+                            <div className="mb-2 flex w-full max-w-md flex-col items-center gap-1">
+                              <ForumRecordedMoveChips
+                                sanList={editSanList}
+                                onDeleteFromChipIndex={(keep) => {
+                                  const nextUcis = editMoveUcis.slice(0, keep);
+                                  setEditMoveUcis(nextUcis);
+                                  setEditBoardAnnotations((a) => pruneAnnotationsBeyondPly(a, keep === 0 ? -1 : keep));
+                                  const nf = fenAfterUcis(editRecordStartFen, nextUcis);
+                                  if (nf) setEditFen(nf);
+                                }}
+                                active={editRecordMoves}
+                              />
+                            </div>
+                          )}
                           {chessImported && (
                             <button
                               type="button"
@@ -531,18 +699,28 @@ export default function ForumPostDetailPage() {
                   · {formatPostDateTime(post.created_at, language)}
                 </span>
               </div>
-              {displayFen && (
-                <div className="relative mx-auto mt-6 aspect-square w-full max-w-xs overflow-hidden pixel-frame bg-chess-surface sm:max-w-sm">
-                  <ForumPostThumbnail thumbnailFen={displayFen} />
+              {showPgnReplay && post.pgn_text ? (
+                <div className="mt-6">
+                  <ForumPgnReplay pgnText={post.pgn_text} boardAnnotations={post.board_annotations} />
                 </div>
+              ) : (
+                displayFen && (
+                  <div className="relative mx-auto mt-6 aspect-square w-full max-w-sm overflow-hidden pixel-frame bg-chess-surface sm:max-w-md">
+                    <ForumPostThumbnail
+                      thumbnailFen={displayFen}
+                      boardAnnotations={post.board_annotations}
+                      pgnText={post.pgn_text}
+                    />
+                  </div>
+                )
               )}
               <p className="mt-4 whitespace-pre-wrap break-words text-xl leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.2rem]">
                 {post.body}
               </p>
-              {post.pgn_text?.trim() && !post.board_category && (
-                <div className="mt-4 pixel-frame bg-chess-surface/45 p-3">
-                  <p className="text-xs font-medium text-chess-muted">{t("forum.pgnLabel")}</p>
-                  <pre className="mt-2 max-h-48 overflow-auto break-words whitespace-pre-wrap font-mono text-xs text-chess-primary [overflow-wrap:anywhere]">
+              {post.pgn_text?.trim() && !post.board_category && !showPgnReplay && (
+                <div className="mt-4 pixel-frame bg-chess-surface/45 p-3 font-sans antialiased">
+                  <p className="text-sm font-medium text-chess-muted sm:text-base">{t("forum.pgnLabel")}</p>
+                  <pre className="mt-2 max-h-48 overflow-auto break-words whitespace-pre-wrap font-mono text-[0.9375rem] leading-relaxed text-chess-primary sm:text-base [overflow-wrap:anywhere]">
                     {post.pgn_text}
                   </pre>
                 </div>
@@ -601,11 +779,21 @@ export default function ForumPostDetailPage() {
               open={boardOverlayOpen}
               onClose={() => setBoardOverlayOpen(false)}
               boardFen={editFen}
+              recordStartFen={editRecordStartFen}
               onBoardFenChange={onOverlayBoardFen}
               onDeleteBoard={removeBoard}
               busy={busy}
               inputClassName={inputClass}
               ariaTitleId="forum-board-overlay-title-edit"
+              annotations={editBoardAnnotations}
+              onAnnotationsChange={setEditBoardAnnotations}
+              recordMoves={editRecordMoves}
+              onRecordMovesChange={setEditRecordMoves}
+              moveUcis={editMoveUcis}
+              onMoveUcisChange={setEditMoveUcis}
+              onRecordStartFenChange={setEditRecordStartFen}
+              recordingStartHint={post.pgn_text?.trim() ? editRecordStartFen : null}
+              preserveMovesWhenEnteringRecord={Boolean(post.pgn_text?.trim())}
             />
           )}
 
@@ -616,6 +804,20 @@ export default function ForumPostDetailPage() {
             <form onSubmit={onAddComment} className="mt-3 space-y-2">
               {sessionLoading && (
                 <p className="text-xs text-chess-muted">{t("forum.checkingAccount")}</p>
+              )}
+              {replyingTo && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-chess-border/70 bg-chess-surface/50 px-3 py-2 text-sm text-chess-primary dark:bg-chess-elevated/30">
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                    {t("forum.replyingTo").replace("{name}", replyingTo.author.display_name)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setReplyingTo(null)}
+                    className="font-pixel shrink-0 pixel-btn px-2 py-1 text-xs text-chess-muted hover:text-chess-primary"
+                  >
+                    {t("forum.cancelReply")}
+                  </button>
+                </div>
               )}
               <textarea
                 value={commentBody}
@@ -636,7 +838,14 @@ export default function ForumPostDetailPage() {
             </form>
             <div className="mt-4 space-y-3">
               {pagedComments.map((c) => (
-                <article key={c.id} className="pixel-frame p-3">
+                <article
+                  key={c.id}
+                  className={`pixel-frame p-3 ${
+                    c.parent_comment_id
+                      ? "ml-3 border-l-2 border-chess-border/60 pl-3 sm:ml-4"
+                      : ""
+                  }`}
+                >
                   {editingCommentId === c.id ? (
                     <form onSubmit={onSaveComment} className="space-y-2">
                       <textarea
@@ -683,6 +892,18 @@ export default function ForumPostDetailPage() {
                     </div>
                     {editingCommentId !== c.id && status === "authenticated" && (
                       <div className="flex flex-wrap items-center gap-2">
+                        {!c.parent_comment_id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCommentId(null);
+                              setReplyingTo((prev) => (prev?.id === c.id ? null : c));
+                            }}
+                            className="text-xs text-chess-muted hover:text-chess-accent hover:underline"
+                          >
+                            {t("forum.reply")}
+                          </button>
+                        )}
                         {c.can_edit && (
                           <>
                             <button
@@ -716,7 +937,7 @@ export default function ForumPostDetailPage() {
                 </article>
               ))}
             </div>
-            {comments.length > COMMENT_PAGE_SIZE && (
+            {commentsPageCount > 1 && (
               <div className="mt-3 flex items-center justify-center gap-2">
                 <button
                   type="button"

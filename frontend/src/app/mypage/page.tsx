@@ -268,6 +268,10 @@ export default function MyPage() {
 
   const postsPageCount = Math.max(1, Math.ceil(postsTotal / PAGE_SIZE));
   const commentsPageCount = Math.max(1, Math.ceil(commentsTotal / PAGE_SIZE));
+  const postsRangeStart = postsTotal > 0 ? (postsPage - 1) * PAGE_SIZE + 1 : 0;
+  const postsRangeEnd = postsTotal > 0 ? Math.min(postsPage * PAGE_SIZE, postsTotal) : 0;
+  const commentsRangeStart = commentsTotal > 0 ? (commentsPage - 1) * PAGE_SIZE + 1 : 0;
+  const commentsRangeEnd = commentsTotal > 0 ? Math.min(commentsPage * PAGE_SIZE, commentsTotal) : 0;
 
   return (
     <section className="mx-auto w-full max-w-4xl space-y-5">
@@ -295,8 +299,8 @@ export default function MyPage() {
       )}
 
       {me && !me.signup_completed && (
-        <div className="pixel-frame pixel-hud-fill p-4 text-sm text-chess-primary">
-          <p>{t("mypage.incompleteHint")}</p>
+        <div className="pixel-frame pixel-hud-fill p-4 text-chess-primary">
+          <p className="text-sm leading-relaxed">{t("mypage.incompleteHint")}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href="/signup/consent"
@@ -318,7 +322,7 @@ export default function MyPage() {
         <>
           <form onSubmit={onSaveSettings} className="space-y-3 pixel-frame pixel-hud-fill p-4 sm:p-5">
             <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.appSettings")}</h2>
-            <p className="text-xs text-chess-muted">{t("mypage.appSettingsHint")}</p>
+            <p className="text-sm text-chess-muted">{t("mypage.appSettingsHint")}</p>
             <div>
               <label className="block text-sm font-medium text-chess-primary">{t("mypage.label.language")}</label>
               <select
@@ -382,8 +386,9 @@ export default function MyPage() {
                 </Link>
               )}
             </div>
-            <p className="text-xs text-chess-muted">
-              {t("mypage.email")} {me.email ?? "-"}
+            <p className="text-sm leading-relaxed text-chess-muted">
+              {t("mypage.email")}{" "}
+              <span className="font-sans tracking-normal [overflow-wrap:anywhere]">{me.email ?? "-"}</span>
             </p>
 
             <div>
@@ -391,7 +396,7 @@ export default function MyPage() {
               <div className="mt-2 flex flex-wrap items-start gap-4">
                 <AvatarThumb key={avatarRenderKey} src={me.avatar_url} alt="" size={64} />
                 <div className="min-w-0 flex-1 space-y-2">
-                  <p className="text-xs leading-relaxed text-chess-muted">{t("profile.photoHint")}</p>
+                  <p className="text-sm leading-relaxed text-chess-muted">{t("profile.photoHint")}</p>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -459,7 +464,7 @@ export default function MyPage() {
                 {busy ? t("mypage.saving") : t("mypage.save")}
               </button>
               {profileSaved && (
-                <span className="font-pixel text-[11px] text-chess-win tabular-nums">{t("mypage.flash.profileSaved")}</span>
+                <span className="font-pixel text-sm text-chess-win tabular-nums">{t("mypage.flash.profileSaved")}</span>
               )}
             </div>
           </form>
@@ -476,44 +481,54 @@ export default function MyPage() {
                 </p>
               ) : (
                 posts.map((p) => (
-                  <article key={p.id} className="pixel-frame pixel-hud-fill p-3">
+                  <article key={p.id} className="min-w-0 max-w-full pixel-frame pixel-hud-fill p-3">
                     <Link
                       href={forumPostHref(p)}
-                      className="font-pixel text-sm font-bold text-chess-primary hover:text-chess-accent [overflow-wrap:anywhere]"
+                      className="block min-w-0 max-w-full font-pixel text-sm font-bold text-chess-primary no-underline hover:text-chess-accent"
                     >
-                      {p.title}
+                      <span className="line-clamp-2 w-full min-w-0 max-w-full break-all [overflow-wrap:anywhere] [word-break:break-word]">
+                        {p.title}
+                      </span>
                     </Link>
                     <p className="mt-1 max-w-full whitespace-pre-wrap break-words text-sm text-chess-muted [overflow-wrap:anywhere]">
                       {p.body_preview}
                     </p>
-                    <p className="mt-1 font-pixel text-[10px] tabular-nums text-chess-muted">
+                    <p className="mt-1 font-pixel text-xs tabular-nums text-chess-muted">
                       {formatPostDateTime(p.created_at, language)}
                     </p>
                   </article>
                 ))
               )}
             </div>
-            {postsTotal > PAGE_SIZE && (
-              <div className="mt-3 flex items-center justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPostsPage((prev) => Math.max(1, prev - 1))}
-                  disabled={postsPage === 1 || activityLoading}
-                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
-                >
-                  {t("forum.pagination.prev")}
-                </button>
-                <span className="font-pixel text-xs text-chess-muted tabular-nums">
-                  {postsPage} / {postsPageCount}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPostsPage((prev) => Math.min(postsPageCount, prev + 1))}
-                  disabled={postsPage === postsPageCount || activityLoading}
-                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
-                >
-                  {t("forum.pagination.next")}
-                </button>
+            {postsPageCount > 1 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-center text-xs text-chess-muted tabular-nums sm:text-sm">
+                  {t("forum.pagination.showing")
+                    .replace("{start}", String(postsRangeStart))
+                    .replace("{end}", String(postsRangeEnd))
+                    .replace("{total}", String(postsTotal))}
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPostsPage((prev) => Math.max(1, prev - 1))}
+                    disabled={postsPage === 1 || activityLoading}
+                    className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    {t("forum.pagination.prev")}
+                  </button>
+                  <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                    {postsPage} / {postsPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPostsPage((prev) => Math.min(postsPageCount, prev + 1))}
+                    disabled={postsPage === postsPageCount || activityLoading}
+                    className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    {t("forum.pagination.next")}
+                  </button>
+                </div>
               </div>
             )}
           </section>
@@ -544,34 +559,42 @@ export default function MyPage() {
                     <p className="mt-1 max-w-full whitespace-pre-wrap break-words text-sm text-chess-primary [overflow-wrap:anywhere]">
                       {c.body}
                     </p>
-                    <p className="mt-1 font-pixel text-[10px] tabular-nums text-chess-muted">
+                    <p className="mt-1 font-pixel text-xs tabular-nums text-chess-muted">
                       {formatPostDateTime(c.created_at, language)}
                     </p>
                   </article>
                 ))
               )}
             </div>
-            {commentsTotal > PAGE_SIZE && (
-              <div className="mt-3 flex items-center justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCommentsPage((prev) => Math.max(1, prev - 1))}
-                  disabled={commentsPage === 1 || activityLoading}
-                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
-                >
-                  {t("forum.pagination.prev")}
-                </button>
-                <span className="font-pixel text-xs text-chess-muted tabular-nums">
-                  {commentsPage} / {commentsPageCount}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCommentsPage((prev) => Math.min(commentsPageCount, prev + 1))}
-                  disabled={commentsPage === commentsPageCount || activityLoading}
-                  className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
-                >
-                  {t("forum.pagination.next")}
-                </button>
+            {commentsPageCount > 1 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-center text-xs text-chess-muted tabular-nums sm:text-sm">
+                  {t("forum.pagination.showing")
+                    .replace("{start}", String(commentsRangeStart))
+                    .replace("{end}", String(commentsRangeEnd))
+                    .replace("{total}", String(commentsTotal))}
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCommentsPage((prev) => Math.max(1, prev - 1))}
+                    disabled={commentsPage === 1 || activityLoading}
+                    className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    {t("forum.pagination.prev")}
+                  </button>
+                  <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                    {commentsPage} / {commentsPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCommentsPage((prev) => Math.min(commentsPageCount, prev + 1))}
+                    disabled={commentsPage === commentsPageCount || activityLoading}
+                    className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    {t("forum.pagination.next")}
+                  </button>
+                </div>
               </div>
             )}
           </section>

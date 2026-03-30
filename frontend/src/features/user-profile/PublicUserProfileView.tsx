@@ -91,6 +91,7 @@ export default function PublicUserProfileView() {
 
   useEffect(() => {
     setPostsPage(1);
+    setCommentsPage(1);
   }, [tab]);
 
   const posts = profile?.posts ?? [];
@@ -99,6 +100,10 @@ export default function PublicUserProfileView() {
   const commentsTotal = profile?.comments_total ?? 0;
   const postsPageCount = Math.max(1, Math.ceil(postsTotal / PAGE_SIZE));
   const commentsPageCount = Math.max(1, Math.ceil(commentsTotal / PAGE_SIZE));
+  const postsRangeStart = postsTotal > 0 ? (postsPage - 1) * PAGE_SIZE + 1 : 0;
+  const postsRangeEnd = postsTotal > 0 ? Math.min(postsPage * PAGE_SIZE, postsTotal) : 0;
+  const commentsRangeStart = commentsTotal > 0 ? (commentsPage - 1) * PAGE_SIZE + 1 : 0;
+  const commentsRangeEnd = commentsTotal > 0 ? Math.min(commentsPage * PAGE_SIZE, commentsTotal) : 0;
 
   return (
     <div className="min-h-[60vh] pb-16">
@@ -193,7 +198,7 @@ export default function PublicUserProfileView() {
                     <div className="pixel-frame pixel-hud-fill px-3 py-2.5 sm:px-4 sm:py-3">
                       <div className="flex items-center gap-2 text-chess-muted">
                         <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                        <span className="font-pixel text-[10px] font-medium uppercase tracking-wide sm:text-[11px]">
+                        <span className="font-pixel text-[15px] font-medium uppercase tracking-wide sm:text-[15px]">
                           {t("profilePublic.posts")}
                         </span>
                       </div>
@@ -204,7 +209,7 @@ export default function PublicUserProfileView() {
                     <div className="pixel-frame pixel-hud-fill px-3 py-2.5 sm:px-4 sm:py-3">
                       <div className="flex items-center gap-2 text-chess-muted">
                         <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                        <span className="font-pixel text-[10px] font-medium uppercase tracking-wide sm:text-[11px]">
+                        <span className="font-pixel text-[15px] font-medium uppercase tracking-wide sm:text-[15px]">
                           {t("profilePublic.commentsTab")}
                         </span>
                       </div>
@@ -232,7 +237,7 @@ export default function PublicUserProfileView() {
                     <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
                     {t("profilePublic.tabPosts")}
                     <span
-                      className={`min-w-[1.25rem] px-1.5 py-0.5 text-[10px] tabular-nums sm:text-[11px] ${
+                      className={`min-w-[1.25rem] px-1.5 py-0.5 text-[15px] tabular-nums sm:text-[15px] ${
                         tab === "posts" ? "bg-white/20 text-white" : "bg-chess-border/40 text-chess-muted"
                       }`}
                     >
@@ -251,7 +256,7 @@ export default function PublicUserProfileView() {
                     <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
                     {t("profilePublic.commentsTab")}
                     <span
-                      className={`min-w-[1.25rem] px-1.5 py-0.5 text-[10px] tabular-nums sm:text-[11px] ${
+                      className={`min-w-[1.25rem] px-1.5 py-0.5 text-[15px] tabular-nums sm:text-[15px] ${
                         tab === "comments" ? "bg-white/20 text-white" : "bg-chess-border/40 text-chess-muted"
                       }`}
                     >
@@ -274,19 +279,21 @@ export default function PublicUserProfileView() {
                       posts.map((p) => (
                         <article
                           key={p.id}
-                          className="group pixel-frame pixel-hud-fill p-4 transition-[filter] hover:brightness-[1.02] dark:hover:brightness-110"
+                          className="group min-w-0 max-w-full pixel-frame pixel-hud-fill p-4 transition-[filter] hover:brightness-[1.02] dark:hover:brightness-110"
                         >
                           <Link
                             href={forumPostHref(p)}
-                            className="font-pixel text-sm font-bold text-chess-primary [overflow-wrap:anywhere] group-hover:text-chess-accent sm:text-base"
+                            className="block min-w-0 max-w-full font-pixel text-sm font-bold text-chess-primary no-underline group-hover:text-chess-accent sm:text-base"
                           >
-                            {p.title}
+                            <span className="line-clamp-2 w-full min-w-0 max-w-full break-all [overflow-wrap:anywhere] [word-break:break-word]">
+                              {p.title}
+                            </span>
                           </Link>
                           <p className="mt-2 max-w-full break-words text-sm leading-relaxed text-chess-muted [overflow-wrap:anywhere] line-clamp-4">
                             {p.body_preview}
                           </p>
                           <time
-                            className="mt-3 block font-pixel text-[10px] tabular-nums text-chess-muted sm:text-[11px]"
+                            className="mt-3 block font-pixel text-[15px] tabular-nums text-chess-muted sm:text-[15px]"
                             dateTime={p.created_at}
                           >
                             {formatPostDateTime(p.created_at, language)}
@@ -294,27 +301,35 @@ export default function PublicUserProfileView() {
                         </article>
                       ))
                     ))}
-                  {tab === "posts" && postsTotal > PAGE_SIZE && (
-                    <div className="flex items-center justify-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setPostsPage((prev) => Math.max(1, prev - 1))}
-                        disabled={postsPage === 1 || listRefreshing}
-                        className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
-                      >
-                        {t("forum.pagination.prev")}
-                      </button>
-                      <span className="font-pixel text-xs text-chess-muted tabular-nums">
-                        {postsPage} / {postsPageCount}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setPostsPage((prev) => Math.min(postsPageCount, prev + 1))}
-                        disabled={postsPage === postsPageCount || listRefreshing}
-                        className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
-                      >
-                        {t("forum.pagination.next")}
-                      </button>
+                  {tab === "posts" && postsPageCount > 1 && (
+                    <div className="space-y-2 pt-1">
+                      <p className="text-center font-pixel text-[11px] text-chess-muted tabular-nums sm:text-xs">
+                        {t("forum.pagination.showing")
+                          .replace("{start}", String(postsRangeStart))
+                          .replace("{end}", String(postsRangeEnd))
+                          .replace("{total}", String(postsTotal))}
+                      </p>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPostsPage((prev) => Math.max(1, prev - 1))}
+                          disabled={postsPage === 1 || listRefreshing}
+                          className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                        >
+                          {t("forum.pagination.prev")}
+                        </button>
+                        <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                          {postsPage} / {postsPageCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPostsPage((prev) => Math.min(postsPageCount, prev + 1))}
+                          disabled={postsPage === postsPageCount || listRefreshing}
+                          className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                        >
+                          {t("forum.pagination.next")}
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -343,7 +358,7 @@ export default function PublicUserProfileView() {
                             {c.body}
                           </p>
                           <time
-                            className="mt-3 block font-pixel text-[10px] tabular-nums text-chess-muted sm:text-[11px]"
+                            className="mt-3 block font-pixel text-[15px] tabular-nums text-chess-muted sm:text-[15px]"
                             dateTime={c.created_at}
                           >
                             {formatPostDateTime(c.created_at, language)}
@@ -351,27 +366,35 @@ export default function PublicUserProfileView() {
                         </article>
                       ))
                     ))}
-                  {tab === "comments" && commentsTotal > PAGE_SIZE && (
-                    <div className="flex items-center justify-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setCommentsPage((prev) => Math.max(1, prev - 1))}
-                        disabled={commentsPage === 1 || listRefreshing}
-                        className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
-                      >
-                        {t("forum.pagination.prev")}
-                      </button>
-                      <span className="font-pixel text-xs text-chess-muted tabular-nums">
-                        {commentsPage} / {commentsPageCount}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setCommentsPage((prev) => Math.min(commentsPageCount, prev + 1))}
-                        disabled={commentsPage === commentsPageCount || listRefreshing}
-                        className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
-                      >
-                        {t("forum.pagination.next")}
-                      </button>
+                  {tab === "comments" && commentsPageCount > 1 && (
+                    <div className="space-y-2 pt-1">
+                      <p className="text-center font-pixel text-[11px] text-chess-muted tabular-nums sm:text-xs">
+                        {t("forum.pagination.showing")
+                          .replace("{start}", String(commentsRangeStart))
+                          .replace("{end}", String(commentsRangeEnd))
+                          .replace("{total}", String(commentsTotal))}
+                      </p>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCommentsPage((prev) => Math.max(1, prev - 1))}
+                          disabled={commentsPage === 1 || listRefreshing}
+                          className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                        >
+                          {t("forum.pagination.prev")}
+                        </button>
+                        <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                          {commentsPage} / {commentsPageCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setCommentsPage((prev) => Math.min(commentsPageCount, prev + 1))}
+                          disabled={commentsPage === commentsPageCount || listRefreshing}
+                          className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                        >
+                          {t("forum.pagination.next")}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </section>

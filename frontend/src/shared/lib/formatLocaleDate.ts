@@ -25,3 +25,13 @@ export function formatPostDate(value: string | number | Date, language: Language
     day: "numeric",
   });
 }
+
+/** 오프닝 티어 수집 기준일: 한국어 `2025년 3월`, 영어 `March 2025` */
+export function formatCollectedYearMonth(value: string | number | Date, language: Language): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  if (language === "ko") {
+    return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
+  }
+  return date.toLocaleDateString(BCP47[language], { month: "long", year: "numeric" });
+}

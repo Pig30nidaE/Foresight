@@ -417,7 +417,7 @@ function OpeningDetailModal({
                     }
                   </span>
                 </h3>
-                <p className="hidden lg:block text-[10px] text-chess-muted/90 mt-0.5 leading-snug">
+                <p className="hidden lg:block text-[15px] text-chess-muted/90 mt-0.5 leading-snug">
                   {t("chart.pieListUnifiedHint")}
                 </p>
               </div>
