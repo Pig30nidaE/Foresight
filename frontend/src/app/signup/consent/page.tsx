@@ -1,8 +1,8 @@
 "use client";
 
+import { Suspense, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useEffect, useMemo } from "react";
 
 import api from "@/shared/lib/api";
 import { clearBackendJwtCache, getBackendJwt } from "@/shared/lib/backendJwt";
@@ -13,7 +13,7 @@ type MeSignup = {
   email_conflict?: boolean;
 };
 
-export default function SignupConsentPage() {
+function SignupConsentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { status } = useSession();
@@ -109,5 +109,20 @@ export default function SignupConsentPage() {
         </button>
       </div>
     </section>
+  );
+}
+
+export default function SignupConsentPage() {
+  const { t } = useTranslation();
+  return (
+    <Suspense
+      fallback={
+        <section className="mx-auto w-full max-w-xl pixel-frame bg-chess-surface/75 p-6 text-center text-sm text-chess-muted">
+          {t("forum.loadingShort")}
+        </section>
+      }
+    >
+      <SignupConsentContent />
+    </Suspense>
   );
 }
