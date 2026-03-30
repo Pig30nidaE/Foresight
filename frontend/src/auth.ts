@@ -11,6 +11,16 @@ if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
     Google({
       clientId: process.env.AUTH_GOOGLE_ID,
       clientSecret: process.env.AUTH_GOOGLE_SECRET,
+      // OIDC 디스커버리에 authorization_response_iss_parameter_supported 가 켜져 있으면
+      // oauth4webapi가 콜백 쿼리의 iss 를 요구하는데, Google 리다이렉트에는 보통 없어
+      // CallbackRouteError("iss" missing)가 난다. 엔드포인트를 고정하면 디스커버리를
+      // 거치지 않아 해당 검증을 피한다.
+      issuer: "https://accounts.google.com",
+      authorization: {
+        url: "https://accounts.google.com/o/oauth2/v2/auth",
+      },
+      token: { url: "https://oauth2.googleapis.com/token" },
+      userinfo: { url: "https://openidconnect.googleapis.com/v1/userinfo" },
     })
   );
 }
