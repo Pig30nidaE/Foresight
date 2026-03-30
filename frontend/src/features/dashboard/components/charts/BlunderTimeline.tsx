@@ -155,7 +155,7 @@ export default function BlunderTimeline({ data }: Props) {
               >
                 {Math.round(upq.severe_under_pressure_ratio * 100)}%
               </p>
-              <p className="mt-1 text-[10px] text-chess-muted leading-tight">
+              <p className="mt-1 text-[15px] text-chess-muted leading-tight">
                 {t("chart.pressureQualityFootnote")}
               </p>
             </div>

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,7 @@ class PostListItem(BaseModel):
     has_pgn: bool = False
     has_fen: bool = False
     thumbnail_fen: str | None = None
+    pgn_text: str | None = Field(None, max_length=200_000)
 
 
 class PostListResponse(BaseModel):
@@ -42,6 +43,7 @@ class CommentOut(BaseModel):
     id: uuid.UUID
     body: str
     created_at: datetime
+    parent_comment_id: uuid.UUID | None = None
     author: AuthorOut
     can_edit: bool = False
 
@@ -55,6 +57,7 @@ class PostDetail(BaseModel):
     body: str
     pgn_text: str | None = None
     fen_initial: str | None = None
+    board_annotations: dict[str, Any] | None = None
     board_category: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -71,6 +74,7 @@ class PostCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=50_000)
     pgn_text: str | None = Field(None, max_length=200_000)
     fen_initial: str | None = Field(None, max_length=120)
+    board_annotations: dict[str, Any] | None = None
 
 
 class BoardPostCreate(BaseModel):
@@ -84,10 +88,12 @@ class PostUpdate(BaseModel):
     body: str | None = Field(None, min_length=1, max_length=50_000)
     pgn_text: str | None = Field(None, max_length=200_000)
     fen_initial: str | None = Field(None, max_length=120)
+    board_annotations: dict[str, Any] | None = None
 
 
 class CommentCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=10_000)
+    parent_comment_id: uuid.UUID | None = None
 
 
 class CommentUpdate(BaseModel):

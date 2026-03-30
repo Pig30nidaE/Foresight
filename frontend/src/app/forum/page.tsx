@@ -1,17 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { ChevronDown, ChevronUp, Loader2, PenLine } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 import ForumBoardEditOverlay from "@/app/forum/ForumBoardEditOverlay";
 import ForumBoardPeekCard from "@/app/forum/ForumBoardPeekCard";
+import ForumRecordedMoveChips from "@/app/forum/ForumRecordedMoveChips";
+import ForumPgnReplay from "@/app/forum/ForumPgnReplay";
 import ForumPostThumbnail from "@/app/forum/ForumPostThumbnail";
 import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
-import { composerPreviewFen, DEFAULT_START_FEN } from "@/shared/lib/forumChess";
+import {
+  buildPgnFromStartAndUcis,
+  composerPreviewFen,
+  DEFAULT_START_FEN,
+  fenAfterUcis,
+  isForumPgnReplayable,
+  normalizeFenForDisplay,
+  sanListFromStartAndUcis,
+} from "@/shared/lib/forumChess";
+import {
+  boardAnnotationsToPayload,
+  emptyBoardAnnotations,
+  pruneAnnotationsBeyondPly,
+  type BoardAnnotations,
+} from "@/shared/lib/forumBoardAnnotations";
 import { AuthorNameLink } from "@/shared/components/forum/AuthorName";
 import { PixelChatGlyph, PixelHeartGlyph } from "@/shared/components/ui/PixelGlyphs";
 import { useTranslation } from "@/shared/lib/i18n";
@@ -36,6 +52,8 @@ type PostItem = {
   thumbnail_fen?: string | null;
   has_pgn?: boolean;
   has_fen?: boolean;
+  /** 목록에서 수순 재생 (API `PostListItem.pgn_text`) */
+  pgn_text?: string | null;
   board_category?: string | null;
 };
 
@@ -52,6 +70,10 @@ function resetComposeState(setters: {
   setChessImported: (v: boolean) => void;
   setBoardOverlayOpen: (v: boolean) => void;
   setComposeBoardSectionExpanded: (v: boolean) => void;
+  setComposeBoardAnnotations: Dispatch<SetStateAction<BoardAnnotations>>;
+  setComposeRecordMoves: (v: boolean) => void;
+  setComposeMoveUcis: (v: string[]) => void;
+  setComposeRecordStartFen: (v: string) => void;
 }) {
   setters.setCreateTitle("");
   setters.setCreateBody("");
@@ -59,6 +81,10 @@ function resetComposeState(setters: {
   setters.setChessImported(false);
   setters.setBoardOverlayOpen(false);
   setters.setComposeBoardSectionExpanded(false);
+  setters.setComposeBoardAnnotations(emptyBoardAnnotations());
+  setters.setComposeRecordMoves(false);
+  setters.setComposeMoveUcis([]);
+  setters.setComposeRecordStartFen(DEFAULT_START_FEN);
 }
 
 export default function ForumPage() {
@@ -84,6 +110,12 @@ export default function ForumPage() {
   const [chessImported, setChessImported] = useState(false);
   const [boardOverlayOpen, setBoardOverlayOpen] = useState(false);
   const [composeBoardSectionExpanded, setComposeBoardSectionExpanded] = useState(false);
+  const [composeBoardAnnotations, setComposeBoardAnnotations] = useState<BoardAnnotations>(() =>
+    emptyBoardAnnotations()
+  );
+  const [composeRecordMoves, setComposeRecordMoves] = useState(false);
+  const [composeMoveUcis, setComposeMoveUcis] = useState<string[]>([]);
+  const [composeRecordStartFen, setComposeRecordStartFen] = useState(DEFAULT_START_FEN);
   const [busyCreate, setBusyCreate] = useState(false);
   const [sort, setSort] = useState("new");
   const TITLE_MAX_LENGTH = 200;
@@ -175,15 +207,36 @@ export default function ForumPage() {
     void loadMe();
   }, [status]);
 
+  const composePeekFen = useMemo(() => {
+    if (!chessImported) return null;
+    if (composeRecordMoves) {
+      return fenAfterUcis(composeRecordStartFen, composeMoveUcis) ?? normalizeFenForDisplay(composeRecordStartFen);
+    }
+    return composerPreviewFen(createBoardFen);
+  }, [chessImported, composeRecordMoves, composeRecordStartFen, composeMoveUcis, createBoardFen]);
+
+  const composeSanList = useMemo(
+    () => sanListFromStartAndUcis(composeRecordStartFen, composeMoveUcis),
+    [composeRecordStartFen, composeMoveUcis]
+  );
+
   const importBoard = () => {
     setChessImported(true);
     setBoardOverlayOpen(true);
+    setComposeRecordMoves(false);
+    setComposeMoveUcis([]);
+    setComposeRecordStartFen(DEFAULT_START_FEN);
+    setComposeBoardAnnotations(emptyBoardAnnotations());
   };
 
   const removeBoard = () => {
     setChessImported(false);
     setBoardOverlayOpen(false);
     setCreateBoardFen(DEFAULT_START_FEN);
+    setComposeRecordMoves(false);
+    setComposeMoveUcis([]);
+    setComposeRecordStartFen(DEFAULT_START_FEN);
+    setComposeBoardAnnotations(emptyBoardAnnotations());
   };
 
   const closeBoardOverlay = () => {
@@ -209,14 +262,33 @@ export default function ForumPage() {
     try {
       const token = await getBackendJwt();
       if (!token) throw new Error(t("forum.error.noLoginToken"));
-      const fenOut = chessImported ? createBoardFen : null;
+      let fen_initial: string | null = null;
+      let pgn_text: string | null = null;
+      let board_annotations = null;
+      if (chessImported) {
+        board_annotations = boardAnnotationsToPayload(composeBoardAnnotations);
+        if (composeMoveUcis.length > 0) {
+          const pgn = buildPgnFromStartAndUcis(composeRecordStartFen, composeMoveUcis);
+          if (!pgn) {
+            setPostsError(t("forum.error.pgnBuildFailed"));
+            return;
+          }
+          pgn_text = pgn;
+          fen_initial = composeRecordStartFen.trim() || null;
+        } else {
+          pgn_text = null;
+          const fenSrc = composeRecordMoves ? composeRecordStartFen : createBoardFen;
+          fen_initial = fenSrc.trim() || null;
+        }
+      }
       const { data } = await api.post(
         "/forum/posts",
         {
           title: createTitle.trim(),
           body: createBody,
-          pgn_text: null,
-          fen_initial: fenOut,
+          pgn_text,
+          fen_initial,
+          board_annotations,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -227,6 +299,10 @@ export default function ForumPage() {
         setChessImported,
         setBoardOverlayOpen,
         setComposeBoardSectionExpanded,
+        setComposeBoardAnnotations,
+        setComposeRecordMoves,
+        setComposeMoveUcis,
+        setComposeRecordStartFen,
       });
       setCreating(false);
       await loadPosts(false);
@@ -253,6 +329,10 @@ export default function ForumPage() {
       setChessImported,
       setBoardOverlayOpen,
       setComposeBoardSectionExpanded,
+      setComposeBoardAnnotations,
+      setComposeRecordMoves,
+      setComposeMoveUcis,
+      setComposeRecordStartFen,
     });
   };
 
@@ -267,8 +347,8 @@ export default function ForumPage() {
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+      <div className="flex w-full flex-col gap-4 md:flex-row md:flex-wrap md:items-end md:justify-between">
+        <div className="w-full min-w-0 md:flex-1">
           {creating && canWrite && (
             <>
               <h2 className="text-2xl font-semibold tracking-tight text-chess-primary">{t("forum.compose.title")}</h2>
@@ -276,13 +356,13 @@ export default function ForumPage() {
             </>
           )}
           {!creating && (
-            <div className="mt-3 flex w-full flex-col items-center gap-2 text-sm text-chess-muted sm:flex-row sm:flex-wrap sm:items-center sm:justify-start">
-              <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                <span className="shrink-0 text-xs font-medium sm:text-sm">{t("board.sort.label")}</span>
+            <div className="mt-0 flex w-full flex-col gap-3 text-sm text-chess-muted md:mt-3 md:flex-row md:flex-wrap md:items-end md:gap-4">
+              <label className="flex w-full flex-col gap-1 md:w-auto md:flex-row md:items-center md:gap-2">
+                <span className="shrink-0 text-xs font-medium md:text-sm">{t("board.sort.label")}</span>
                 <select
                   value={sort}
                   onChange={(e) => setSort(e.target.value)}
-                  className="pixel-input min-h-[44px] w-full px-3 py-2.5 text-base text-chess-primary sm:min-h-0 sm:w-auto sm:text-sm"
+                  className="pixel-input min-h-[44px] w-full px-3 py-2.5 text-base text-chess-primary md:min-h-0 md:w-auto md:min-w-[10rem] md:text-sm"
                 >
                   <option value="new">{t("board.sort.new")}</option>
                   <option value="old">{t("board.sort.old")}</option>
@@ -292,7 +372,7 @@ export default function ForumPage() {
               </label>
               <form
                 onSubmit={onSearchSubmit}
-                className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:gap-2"
+                className="flex w-full min-w-0 flex-row items-stretch gap-2 md:w-auto md:max-w-xl md:flex-1"
               >
                 <input
                   type="search"
@@ -300,11 +380,11 @@ export default function ForumPage() {
                   value={searchDraft}
                   onChange={(e) => setSearchDraft(e.target.value)}
                   placeholder={t("forum.search.placeholder")}
-                  className="pixel-input min-h-[44px] w-full px-3 py-2.5 text-base text-chess-primary sm:min-w-[12rem] sm:flex-1 sm:text-sm"
+                  className="pixel-input min-h-[44px] min-w-0 flex-1 px-3 py-2.5 text-base text-chess-primary md:min-w-[12rem] md:text-sm"
                 />
                 <button
                   type="submit"
-                  className="font-pixel pixel-btn min-h-[44px] w-full px-4 py-2.5 text-sm bg-chess-surface/80 text-chess-primary sm:w-auto sm:min-h-0"
+                  className="font-pixel pixel-btn min-h-[44px] shrink-0 px-4 py-2.5 text-sm bg-chess-surface/80 text-chess-primary md:min-h-0"
                 >
                   {t("board.search.submit")}
                 </button>
@@ -313,7 +393,7 @@ export default function ForumPage() {
           )}
         </div>
         {sessionLoading ? (
-          <p className="font-pixel text-xs text-chess-muted sm:self-end">{t("forum.checkingAccount")}</p>
+          <p className="font-pixel text-xs text-chess-muted md:self-end">{t("forum.checkingAccount")}</p>
         ) : canWrite ? (
           <button
             type="button"
@@ -321,7 +401,7 @@ export default function ForumPage() {
               if (creating) closeCompose();
               else setCreating(true);
             }}
-            className="font-pixel pixel-btn inline-flex min-h-[44px] w-full items-center justify-center gap-2 bg-chess-accent px-4 py-2.5 text-sm font-semibold text-white border-chess-accent hover:brightness-105 sm:w-auto sm:min-h-0"
+            className="font-pixel pixel-btn inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 bg-chess-accent px-4 py-2.5 text-sm font-semibold text-white border-chess-accent hover:brightness-105 md:w-auto md:min-w-[8.5rem]"
           >
             {creating ? (
               t("board.write.close")
@@ -343,7 +423,7 @@ export default function ForumPage() {
                 router.push("/signup/consent");
               }
             }}
-            className="font-pixel pixel-btn min-h-[44px] w-full bg-chess-surface/70 px-4 py-2.5 text-sm font-medium text-chess-primary hover:bg-chess-elevated/80 disabled:opacity-50 sm:w-auto sm:min-h-0"
+            className="font-pixel pixel-btn min-h-[44px] w-full shrink-0 bg-chess-surface/70 px-4 py-2.5 text-sm font-medium text-chess-primary hover:bg-chess-elevated/80 disabled:opacity-50 md:w-auto"
           >
             {status === "authenticated" ? t("board.write.afterProfile") : t("board.write.afterSignIn")}
           </button>
@@ -403,9 +483,24 @@ export default function ForumPage() {
                   <div className="flex w-full flex-col items-center">
                     <ForumBoardPeekCard
                       imported={chessImported}
-                      previewFen={composerPreviewFen(createBoardFen)}
+                      previewFen={composePeekFen}
                       onActivate={() => (chessImported ? setBoardOverlayOpen(true) : importBoard())}
                     />
+                    {chessImported && composeMoveUcis.length > 0 && (
+                      <div className="mb-2 flex w-full max-w-md flex-col items-center gap-1">
+                        <ForumRecordedMoveChips
+                          sanList={composeSanList}
+                          onDeleteFromChipIndex={(keep) => {
+                            const nextUcis = composeMoveUcis.slice(0, keep);
+                            setComposeMoveUcis(nextUcis);
+                            setComposeBoardAnnotations((a) => pruneAnnotationsBeyondPly(a, keep === 0 ? -1 : keep));
+                            const nf = fenAfterUcis(composeRecordStartFen, nextUcis);
+                            if (nf) setCreateBoardFen(nf);
+                          }}
+                          active={composeRecordMoves}
+                        />
+                      </div>
+                    )}
                     {chessImported && (
                       <button
                         type="button"
@@ -462,10 +557,18 @@ export default function ForumPage() {
           open={boardOverlayOpen}
           onClose={closeBoardOverlay}
           boardFen={createBoardFen}
+          recordStartFen={composeRecordStartFen}
           onBoardFenChange={onOverlayBoardFen}
           onDeleteBoard={removeBoard}
           busy={busyCreate}
           inputClassName={inputClass}
+          annotations={composeBoardAnnotations}
+          onAnnotationsChange={setComposeBoardAnnotations}
+          recordMoves={composeRecordMoves}
+          onRecordMovesChange={setComposeRecordMoves}
+          moveUcis={composeMoveUcis}
+          onMoveUcisChange={setComposeMoveUcis}
+          onRecordStartFenChange={setComposeRecordStartFen}
         />
       )}
 
@@ -478,57 +581,70 @@ export default function ForumPage() {
             </p>
           </div>
         )}
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 [grid-template-columns:repeat(2,minmax(0,1fr))] sm:grid-cols-3 sm:[grid-template-columns:repeat(3,minmax(0,1fr))] sm:gap-3 lg:grid-cols-4 lg:[grid-template-columns:repeat(4,minmax(0,1fr))]">
           {posts.map((p) => (
             <article
               key={p.id}
-              className="group flex min-h-0 flex-col overflow-hidden pixel-frame bg-chess-bg/85 transition-colors hover:border-chess-accent/50 dark:bg-chess-surface/40"
+              className="group flex min-h-0 min-w-0 flex-col overflow-hidden pixel-frame bg-chess-bg/85 transition-colors hover:border-chess-accent/50 dark:bg-chess-surface/40"
             >
-              <Link
-                href={forumPostHref(p)}
-                className="relative block aspect-square w-full shrink-0 overflow-hidden bg-chess-surface"
-              >
-                <ForumPostThumbnail thumbnailFen={p.thumbnail_fen} />
-              </Link>
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2.5 sm:p-3">
-                <h3 className="text-xl font-semibold leading-snug tracking-tight text-chess-primary sm:text-lg">
+              <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-chess-surface">
+                {isForumPgnReplayable(p.pgn_text) ? (
+                  <ForumPgnReplay variant="card" pgnText={p.pgn_text!} postHref={forumPostHref(p)} />
+                ) : (
                   <Link
                     href={forumPostHref(p)}
-                    className="block break-words [overflow-wrap:anywhere] [word-break:break-word] transition group-hover:text-chess-accent"
+                    className="absolute inset-0 block min-h-0 min-w-0"
+                    aria-label={t("forum.aria.openPostFromThumbnail")}
                   >
-                    {p.title}
+                    <ForumPostThumbnail
+                      thumbnailFen={p.thumbnail_fen?.trim() ? p.thumbnail_fen : null}
+                      compactNotation
+                      nonInteractive
+                    />
+                  </Link>
+                )}
+              </div>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2.5 sm:p-3">
+                <h3 className="min-w-0 max-w-full overflow-hidden text-base font-semibold leading-snug tracking-tight text-chess-primary sm:text-lg">
+                  <Link
+                    href={forumPostHref(p)}
+                    className="block min-w-0 max-w-full overflow-hidden no-underline transition group-hover:text-chess-accent"
+                  >
+                    <span className="line-clamp-2 w-full min-w-0 max-w-full break-all [overflow-wrap:anywhere] [word-break:break-word]">
+                      {p.title}
+                    </span>
                   </Link>
                 </h3>
-                <p className="mt-2 line-clamp-4 flex-1 overflow-hidden break-words text-lg leading-relaxed text-chess-muted [overflow-wrap:anywhere] sm:line-clamp-3 sm:text-[1.05rem]">
+                <p className="mt-2 line-clamp-2 flex-1 overflow-hidden break-all text-sm leading-relaxed text-chess-muted [overflow-wrap:anywhere] sm:line-clamp-3 sm:break-words sm:text-[1.05rem] lg:line-clamp-4">
                   {p.body_preview}
                 </p>
                 <div
-                  className="mt-3 min-w-0 text-base leading-relaxed text-chess-muted/90 sm:text-[1rem]"
+                  className="mt-3 min-w-0 text-sm leading-relaxed text-chess-muted/90 sm:text-base"
                   title={`${p.author.display_name} · ${formatPostDate(p.created_at, language)}`}
                 >
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <AuthorNameLink
                       author={p.author}
-                      avatarSize={22}
-                      className="min-w-0 max-w-[min(100%,14rem)] font-medium text-chess-primary hover:text-chess-accent hover:underline underline-offset-2"
+                      avatarSize={24}
+                      className="min-w-0 max-w-[min(100%,14rem)] text-sm font-medium text-chess-primary hover:text-chess-accent hover:underline underline-offset-2 sm:text-base"
                     />
-                    <span className="shrink-0 tabular-nums text-chess-muted/80">
+                    <span className="shrink-0 tabular-nums text-sm text-chess-muted/85 sm:text-base">
                       {formatPostDate(p.created_at, language)}
                     </span>
                   </div>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-sm tabular-nums sm:text-base">
                     <span
-                      className="inline-flex items-center gap-1 tabular-nums"
+                      className="inline-flex items-center gap-1"
                       aria-label={t("forum.aria.likes").replace("{n}", String(p.like_count))}
                     >
-                      <PixelHeartGlyph className="text-red-500 dark:text-red-400" size={14} />
+                      <PixelHeartGlyph className="text-red-500 dark:text-red-400" size={16} />
                       {p.like_count}
                     </span>
                     <span
-                      className="inline-flex items-center gap-1 tabular-nums"
+                      className="inline-flex items-center gap-1"
                       aria-label={t("forum.aria.comments").replace("{n}", String(p.comment_count))}
                     >
-                      <PixelChatGlyph size={14} />
+                      <PixelChatGlyph size={16} />
                       {p.comment_count}
                     </span>
                   </p>

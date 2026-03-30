@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # ── Lichess Explorer 설정 ────────────────────────────────────────────
 EXPLORER_URL = "https://explorer.lichess.org/lichess"
 TOP_N_MOVES = 5
-MIN_GAMES = 100
+MIN_GAMES = 300
 REQUEST_DELAY = 0.5          # BFS 단건 요청 간격 (초)
 CATALOG_REQUEST_DELAY = 0.3  # 카탈로그 병렬 요청 슬롯 내 딜레이 (초)
 MAX_CONCURRENT = 3           # 동시 API 요청 최대 수

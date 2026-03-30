@@ -3,27 +3,20 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import type { TimeClass } from "@/shared/types";
 import type { Color, OpeningTierEntry, Tier } from "@/features/opening-tier/types";
-import {
-  getOpeningTiers,
-  getRatingBrackets,
-  OPENING_TIER_AUTH_REQUIRED,
-} from "@/features/opening-tier/api";
+import { getOpeningTiers, getRatingBrackets } from "@/features/opening-tier/api";
 import FilterBar from "@/features/opening-tier/components/FilterBar";
 import TierSection from "@/features/opening-tier/components/TierSection";
 import OpeningMovesModal from "@/features/opening-tier/components/OpeningMovesModal";
 import { useTranslation } from "@/shared/lib/i18n";
+import { formatCollectedYearMonth } from "@/shared/lib/formatLocaleDate";
 import PixelHudPanelChrome from "@/shared/components/ui/PixelHudPanelChrome";
 
 const TIER_ORDER: Tier[] = ["S", "A", "B", "C", "D"];
 
 export default function OpeningTierPage() {
-  const { t } = useTranslation();
-  const { status } = useSession();
-  const router = useRouter();
+  const { t, language } = useTranslation();
   const [speed, setSpeed] = useState<TimeClass>("blitz");
   const [rating, setRating] = useState<number | null>(null);
   const [color, setColor] = useState<Color>("white");
@@ -31,10 +24,13 @@ export default function OpeningTierPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOpening, setSelectedOpening] = useState<OpeningTierEntry | null>(null);
 
-  const { data: bracketsData } = useQuery({
+  const {
+    data: bracketsData,
+    isLoading: bracketsLoading,
+    isError: bracketsError,
+  } = useQuery({
     queryKey: ["opening-tier-brackets", speed],
     queryFn: () => getRatingBrackets(speed),
-    enabled: status === "authenticated",
   });
 
   const brackets = bracketsData?.brackets ?? [];
@@ -56,7 +52,7 @@ export default function OpeningTierPage() {
   } = useQuery({
     queryKey: ["opening-tiers", rating, speed, color, searchQuery],
     queryFn: () => getOpeningTiers(rating as number, speed, color, searchQuery),
-    enabled: status === "authenticated" && rating !== null,
+    enabled: rating !== null,
     staleTime: 86_400_000 * 30,
     retry: 1,
     refetchInterval: (query) => {
@@ -83,14 +79,8 @@ export default function OpeningTierPage() {
   const showLoading = isLoading || isFetching || data?.state === "warming";
   const tierErrorMessage = useMemo(() => {
     if (!error) return null;
-    if (error instanceof Error && error.message === OPENING_TIER_AUTH_REQUIRED) {
-      return t("forum.error.loginRequired");
-    }
     if (isAxiosError(error)) {
       const statusCode = error.response?.status;
-      if (statusCode === 401) {
-        return t("tier.page.error401");
-      }
       if (statusCode === 403) {
         return t("tier.page.error403");
       }
@@ -98,25 +88,22 @@ export default function OpeningTierPage() {
     return t("tier.error");
   }, [error, t]);
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.replace("/api/auth/signin?callbackUrl=%2Fopening-tier");
-    }
-  }, [status, router]);
-
-  useEffect(() => {
-    if (!error || !isAxiosError(error)) return;
-    if (error.response?.status === 401) {
-      router.replace("/api/auth/signin?callbackUrl=%2Fopening-tier");
-    }
-  }, [error, router]);
-
-  if (status !== "authenticated") {
+  if (bracketsLoading) {
     return (
-      <div className="max-w-5xl mx-auto">
+      <div className="mx-auto max-w-5xl">
         <div className="pixel-frame pixel-hud-fill px-5 py-10 text-center">
-          <p className="font-pixel text-sm text-chess-primary">{t("tier.page.authLoading")}</p>
-          <p className="mt-2 text-xs text-chess-muted">{t("tier.page.checkingSession")}</p>
+          <p className="font-pixel text-sm text-chess-primary">{t("tier.page.bracketsLoading")}</p>
+          <p className="mt-2 text-xs text-chess-muted">{t("tier.loadingDetail")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (bracketsError) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <div className="pixel-frame border-red-600/45 bg-red-500/10 px-5 py-6 text-center text-sm text-chess-loss">
+          {t("tier.error")}
         </div>
       </div>
     );
@@ -221,7 +208,14 @@ export default function OpeningTierPage() {
               </p>
               {data.collected_at && (
                 <p>
-                  <span dangerouslySetInnerHTML={{ __html: t("tier.lastCollected").replace("{date}", `<span class="text-chess-primary font-bold">${data.collected_at}</span>`) }} />
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: t("tier.periodBasis").replace(
+                        "{date}",
+                        `<span class="text-chess-primary font-bold">${formatCollectedYearMonth(data.collected_at, language)}</span>`
+                      ),
+                    }}
+                  />
                 </p>
               )}
             </div>

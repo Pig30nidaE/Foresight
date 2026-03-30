@@ -55,6 +55,7 @@ from app.shared.signup_helpers import (
 )
 from app.shared.display_name import normalize_display_name
 from app.shared.forum_blob import upload_image_bytes
+from app.shared.forum_board_annotations import validate_board_annotations_payload
 from app.shared.forum_chess import thumbnail_fen_for_post, validate_fen_optional, validate_pgn_optional
 from app.shared.forum_public_id import new_post_public_id, try_parse_uuid
 
@@ -120,6 +121,31 @@ def _author_out(user: User) -> AuthorOut:
         avatar_url=user.avatar_url,
         role=user.role,
     )
+
+
+def _comment_visible_for_detail(c: Comment) -> bool:
+    return c.deleted_at is None and not c.is_hidden
+
+
+def _ordered_threaded_comments(comments: list[Comment]) -> list[Comment]:
+    """Roots first (by created_at), then direct replies under each root; orphans last."""
+    vis = [c for c in comments if _comment_visible_for_detail(c)]
+    roots = [c for c in vis if c.parent_comment_id is None]
+    roots.sort(key=lambda x: x.created_at)
+    ordered: list[Comment] = []
+    seen: set[uuid.UUID] = set()
+    for r in roots:
+        ordered.append(r)
+        seen.add(r.id)
+        children = [c for c in vis if c.parent_comment_id == r.id]
+        children.sort(key=lambda x: x.created_at)
+        for ch in children:
+            ordered.append(ch)
+            seen.add(ch.id)
+    for c in vis:
+        if c.id not in seen:
+            ordered.append(c)
+    return ordered
 
 
 def _is_admin_user(user: User) -> bool:
@@ -385,16 +411,25 @@ async def update_my_profile(
 async def get_my_posts(
     db: AsyncSession = Depends(get_async_session),
     me: User = Depends(get_current_user_completed),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
 ):
+    where_posts = (Post.author_id == me.id, Post.deleted_at.is_(None))
+    total = (
+        await db.execute(select(func.count()).select_from(Post).where(*where_posts))
+    ).scalar_one()
+    offset = (page - 1) * page_size
     rows = (
         await db.execute(
             select(Post)
-            .where(Post.author_id == me.id, Post.deleted_at.is_(None))
+            .where(*where_posts)
             .order_by(Post.created_at.desc())
-            .limit(100)
+            .offset(offset)
+            .limit(page_size)
         )
     ).scalars().all()
     return MyPostListResponse(
+        total=int(total),
         items=[
             MyPostListItem(
                 id=p.id,
@@ -403,9 +438,10 @@ async def get_my_posts(
                 body_preview=p.body if len(p.body) <= _PREVIEW_LEN else p.body[:_PREVIEW_LEN] + "…",
                 created_at=p.created_at,
                 updated_at=p.updated_at,
+                board_category=p.board_category,
             )
             for p in rows
-        ]
+        ],
     )
 
 
@@ -413,21 +449,35 @@ async def get_my_posts(
 async def get_my_comments(
     db: AsyncSession = Depends(get_async_session),
     me: User = Depends(get_current_user_completed),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
 ):
+    where_comments = (
+        Comment.author_id == me.id,
+        Comment.deleted_at.is_(None),
+        Post.deleted_at.is_(None),
+    )
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(Comment)
+            .join(Post, Post.id == Comment.post_id)
+            .where(*where_comments)
+        )
+    ).scalar_one()
+    offset = (page - 1) * page_size
     rows = (
         await db.execute(
             select(Comment, Post)
             .join(Post, Post.id == Comment.post_id)
-            .where(
-                Comment.author_id == me.id,
-                Comment.deleted_at.is_(None),
-                Post.deleted_at.is_(None),
-            )
+            .where(*where_comments)
             .order_by(Comment.created_at.desc())
-            .limit(100)
+            .offset(offset)
+            .limit(page_size)
         )
     ).all()
     return MyCommentListResponse(
+        total=int(total),
         items=[
             MyCommentListItem(
                 id=c.id,
@@ -436,9 +486,10 @@ async def get_my_comments(
                 post_id=p.id,
                 post_public_id=p.public_id,
                 post_title=p.title,
+                post_board_category=p.board_category,
             )
             for c, p in rows
-        ]
+        ],
     )
 
 
@@ -449,6 +500,10 @@ async def get_user_public_profile(
     user_id: str,
     db: AsyncSession = Depends(get_async_session),
     me: User | None = Depends(get_optional_current_user),
+    posts_page: int = Query(1, ge=1),
+    posts_page_size: int = Query(10, ge=1, le=50),
+    comments_page: int = Query(1, ge=1),
+    comments_page_size: int = Query(10, ge=1, le=50),
 ):
     _ = request
     uid = try_parse_uuid(user_id)
@@ -467,34 +522,58 @@ async def get_user_public_profile(
             id=user.id,
             public_id=user.public_id,
             display_name=user.display_name,
-            avatar_url=user.avatar_url,
+            avatar_url=None,
             profile_public=False,
             activity_visible=False,
             posts=[],
             comments=[],
+            posts_total=0,
+            comments_total=0,
         )
 
+    where_posts = (
+        Post.author_id == user.id,
+        Post.deleted_at.is_(None),
+        Post.is_hidden.is_(False),
+    )
+    posts_total = (
+        await db.execute(select(func.count()).select_from(Post).where(*where_posts))
+    ).scalar_one()
+    p_off = (posts_page - 1) * posts_page_size
     posts = (
         await db.execute(
             select(Post)
-            .where(Post.author_id == user.id, Post.deleted_at.is_(None), Post.is_hidden.is_(False))
+            .where(*where_posts)
             .order_by(Post.created_at.desc())
-            .limit(100)
+            .offset(p_off)
+            .limit(posts_page_size)
         )
     ).scalars().all()
+
+    where_comments = (
+        Comment.author_id == user.id,
+        Comment.deleted_at.is_(None),
+        Comment.is_hidden.is_(False),
+        Post.deleted_at.is_(None),
+        Post.is_hidden.is_(False),
+    )
+    comments_total = (
+        await db.execute(
+            select(func.count())
+            .select_from(Comment)
+            .join(Post, Post.id == Comment.post_id)
+            .where(*where_comments)
+        )
+    ).scalar_one()
+    c_off = (comments_page - 1) * comments_page_size
     comments = (
         await db.execute(
             select(Comment, Post)
             .join(Post, Post.id == Comment.post_id)
-            .where(
-                Comment.author_id == user.id,
-                Comment.deleted_at.is_(None),
-                Comment.is_hidden.is_(False),
-                Post.deleted_at.is_(None),
-                Post.is_hidden.is_(False),
-            )
+            .where(*where_comments)
             .order_by(Comment.created_at.desc())
-            .limit(100)
+            .offset(c_off)
+            .limit(comments_page_size)
         )
     ).all()
     return UserPublicProfileResponse(
@@ -504,6 +583,8 @@ async def get_user_public_profile(
         avatar_url=user.avatar_url,
         profile_public=user.profile_public,
         activity_visible=True,
+        posts_total=int(posts_total),
+        comments_total=int(comments_total),
         posts=[
             MyPostListItem(
                 id=p.id,
@@ -512,6 +593,7 @@ async def get_user_public_profile(
                 body_preview=p.body if len(p.body) <= _PREVIEW_LEN else p.body[:_PREVIEW_LEN] + "…",
                 created_at=p.created_at,
                 updated_at=p.updated_at,
+                board_category=p.board_category,
             )
             for p in posts
         ],
@@ -523,6 +605,7 @@ async def get_user_public_profile(
                 post_id=p.id,
                 post_public_id=p.public_id,
                 post_title=p.title,
+                post_board_category=p.board_category,
             )
             for c, p in comments
         ],
@@ -627,6 +710,7 @@ async def _list_posts_core(
     items: list[PostListItem] = []
     for post, cc, lc, lm in rows:
         body_preview = post.body if len(post.body) <= _PREVIEW_LEN else post.body[:_PREVIEW_LEN] + "…"
+        pgn_stripped = post.pgn_text.strip() if post.pgn_text and post.pgn_text.strip() else None
         items.append(
             PostListItem(
                 id=post.id,
@@ -640,9 +724,10 @@ async def _list_posts_core(
                 comment_count=int(cc),
                 like_count=int(lc),
                 liked_by_me=bool(lm),
-                has_pgn=bool(post.pgn_text and post.pgn_text.strip()),
+                has_pgn=bool(pgn_stripped),
                 has_fen=bool(post.fen_initial and post.fen_initial.strip()),
                 thumbnail_fen=thumbnail_fen_for_post(post.pgn_text, post.fen_initial),
+                pgn_text=pgn_stripped,
             )
         )
 
@@ -737,15 +822,14 @@ async def get_post(
         )
 
     comments_out = []
-    for c in sorted(post.comments, key=lambda x: x.created_at):
-        if c.deleted_at is not None or c.is_hidden:
-            continue
+    for c in _ordered_threaded_comments(post.comments):
         can_c = me is not None and (c.author_id == me.id or _can_moderate_all_content(me))
         comments_out.append(
             CommentOut(
                 id=c.id,
                 body=c.body,
                 created_at=c.created_at,
+                parent_comment_id=c.parent_comment_id,
                 author=_author_out(c.author),
                 can_edit=can_c,
             )
@@ -758,6 +842,7 @@ async def get_post(
         body=post.body,
         pgn_text=post.pgn_text,
         fen_initial=post.fen_initial,
+        board_annotations=post.board_annotations,
         board_category=post.board_category,
         created_at=post.created_at,
         updated_at=post.updated_at,
@@ -782,6 +867,7 @@ async def create_post(
     try:
         validate_pgn_optional(body.pgn_text)
         validate_fen_optional(body.fen_initial)
+        ann = validate_board_annotations_payload(body.board_annotations)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -793,6 +879,7 @@ async def create_post(
         body=body.body,
         pgn_text=body.pgn_text.strip() if body.pgn_text else None,
         fen_initial=body.fen_initial.strip() if body.fen_initial else None,
+        board_annotations=ann,
         board_category=None,
     )
     db.add(post)
@@ -853,14 +940,23 @@ async def update_post(
     if not _can_edit_post(me, post):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
 
-    if body.title is not None:
-        post.title = body.title.strip()
-    if body.body is not None:
-        post.body = body.body
-    if body.pgn_text is not None:
-        post.pgn_text = body.pgn_text.strip() or None
-    if body.fen_initial is not None:
-        post.fen_initial = body.fen_initial.strip() or None
+    patch = body.model_dump(exclude_unset=True)
+    if "title" in patch:
+        post.title = body.title.strip()  # type: ignore[union-attr]
+    if "body" in patch:
+        post.body = body.body  # type: ignore[assignment]
+    if "pgn_text" in patch:
+        post.pgn_text = body.pgn_text.strip() if body.pgn_text else None  # type: ignore[union-attr]
+    if "fen_initial" in patch:
+        post.fen_initial = body.fen_initial.strip() if body.fen_initial else None  # type: ignore[union-attr]
+    if "board_annotations" in patch:
+        try:
+            if body.board_annotations is None:
+                post.board_annotations = None
+            else:
+                post.board_annotations = validate_board_annotations_payload(body.board_annotations)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     try:
         validate_pgn_optional(post.pgn_text)
@@ -950,7 +1046,32 @@ async def add_comment(
     post = await db.get(Post, pid)
     if post is None or post.deleted_at is not None or post.is_hidden:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-    c = Comment(post_id=pid, author_id=me.id, body=body.body.strip())
+
+    parent_id = body.parent_comment_id
+    if parent_id is not None:
+        parent = await db.get(Comment, parent_id)
+        if (
+            parent is None
+            or parent.post_id != pid
+            or parent.deleted_at is not None
+            or parent.is_hidden
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parent comment not found",
+            )
+        if parent.parent_comment_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="답글에는 답글을 달 수 없습니다.",
+            )
+
+    c = Comment(
+        post_id=pid,
+        author_id=me.id,
+        body=body.body.strip(),
+        parent_comment_id=parent_id,
+    )
     db.add(c)
     await db.commit()
     await db.refresh(c)

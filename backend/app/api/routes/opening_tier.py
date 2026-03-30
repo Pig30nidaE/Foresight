@@ -6,19 +6,16 @@ GET  /api/v1/opening-tier/brackets  → 레이팅 구간 목록 (Lichess + Chess
 GET  /api/v1/opening-tier/detail    → 오프닝 핵심 포인트 + YouTube 링크
 GET  /api/v1/opening-tier/export    → CSV 또는 JSON 파일 다운로드
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from app.api.deps import get_current_user
 from app.features.opening_tier.services.opening_tier_service import OpeningTierService, RATING_BRACKETS
 from app.features.opening_tier.services.opening_detail_service import get_opening_detail
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter()
 
 _VALID_RATINGS = set(RATING_BRACKETS)  # 서비스 정의와 자동 동기화
 _VALID_SPEEDS = {"bullet", "blitz", "rapid", "classical"}
-_OPENING_TIER_CLIENT_HEADER = "x-foresight-client"
-_OPENING_TIER_CLIENT_VALUE = "web-ui"
 
 
 def _get_service(request: Request) -> OpeningTierService:
@@ -53,12 +50,6 @@ def _validate_color(color: str) -> None:
         )
 
 
-def _require_opening_tier_client(request: Request) -> None:
-    """브라우저 주소창 직접 접근을 줄이기 위한 최소 헤더 검증."""
-    if request.headers.get(_OPENING_TIER_CLIENT_HEADER) != _OPENING_TIER_CLIENT_VALUE:
-        raise HTTPException(status_code=403, detail="직접 접근은 허용되지 않습니다.")
-
-
 @router.get("/global")
 async def get_global_opening_tiers(
     request: Request,
@@ -78,7 +69,6 @@ async def get_global_opening_tiers(
     _validate_rating(rating)
     _validate_speed(speed)
     _validate_color(color)
-    _require_opening_tier_client(request)
 
     _service = _get_service(request)
     try:

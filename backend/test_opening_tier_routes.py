@@ -3,14 +3,12 @@ from httpx import ASGITransport, AsyncClient
 import pytest
 
 from app.api.routes.opening_tier import router as opening_router
-from app.api.deps import get_current_user
 from app.features.opening_tier.services.opening_tier_service import OpeningTierService
 
 
 @pytest.fixture()
 def app():
     app = FastAPI()
-    app.dependency_overrides[get_current_user] = lambda: {"id": 1}
     app.include_router(opening_router, prefix="/api/v1/opening-tier")
     return app
 
@@ -38,6 +36,20 @@ async def test_global_endpoint_success(app):
             "/api/v1/opening-tier/global",
             params={"rating": 1600, "speed": "blitz", "color": "white"},
             headers={"x-foresight-client": "web-ui"},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["rating"] == 1600
+    assert data["total_openings"] == 1
+
+
+@pytest.mark.anyio
+async def test_global_endpoint_public_no_extra_headers(app):
+    """로그인·클라이언트 헤더 없이도 티어 데이터 조회 가능해야 함."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        resp = await client.get(
+            "/api/v1/opening-tier/global",
+            params={"rating": 1600, "speed": "blitz", "color": "white"},
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -76,7 +88,11 @@ async def test_global_endpoint_bad_rating(app):
 @pytest.mark.anyio
 async def test_brackets_endpoint(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        resp = await client.get("/api/v1/opening-tier/brackets", params={"speed": "blitz"})
+        resp = await client.get(
+            "/api/v1/opening-tier/brackets",
+            params={"speed": "blitz"},
+            headers={"x-foresight-client": "web-ui"},
+        )
     assert resp.status_code == 200
     data = resp.json()
     assert data["speed"] == "blitz"

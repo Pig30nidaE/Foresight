@@ -26,7 +26,7 @@ function MoveQualityCategoryGlyph({ category }: { category: string }) {
     case "Good":
       return <PixelTargetGlyph size={12} className="shrink-0 text-emerald-500 dark:text-emerald-300" />;
     case "Inaccuracy":
-      return <span className={`${mono} w-5 text-amber-600 dark:text-amber-400 text-[9px]`}>?!</span>;
+      return <span className={`${mono} w-5 text-amber-600 dark:text-amber-400 text-[15px]`}>?!</span>;
     case "Mistake":
       return <span className={`${mono} text-orange-600 dark:text-orange-400`}>?</span>;
     case "Blunder":

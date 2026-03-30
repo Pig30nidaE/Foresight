@@ -144,6 +144,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   useEffect(() => {
+    document.documentElement.dataset.uiLang = language;
+  }, [language]);
+
+  useEffect(() => {
     if (!hydrated) return;
     writePersistedSettings(storageKey, settings);
   }, [hydrated, settings, storageKey]);

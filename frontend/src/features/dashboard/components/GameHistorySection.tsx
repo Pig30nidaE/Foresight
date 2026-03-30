@@ -436,7 +436,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
             <div className="flex items-center gap-2 sm:gap-3 mb-1.5 flex-wrap">
               <span className={`text-base sm:text-lg font-bold ${resultColor}`}>{resultLabel}</span>
               {ratingDiff !== null && (
-                <span className={`text-xs sm:text-sm font-semibold px-1.5 sm:px-2 py-0.5 sm:py-1 border-2 bg-chess-bg/60 ${
+                <span className={`text-sm sm:text-sm font-semibold px-1.5 sm:px-2 py-0.5 sm:py-1 border-2 bg-chess-bg/60 ${
                   ratingDiff > 0
                     ? "text-chess-win border-chess-win/45 dark:border-chess-win/35"
                     : ratingDiff < 0
@@ -448,30 +448,30 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
               )}
             </div>
 
-            <div className="space-y-0.5 sm:space-y-1">
-              <p className="text-sm sm:text-base font-semibold text-chess-primary truncate leading-tight">
+            <div className="space-y-0.5 sm:space-y-1 min-w-0">
+              <p className="line-clamp-2 text-sm sm:text-base font-semibold text-chess-primary leading-tight sm:truncate sm:line-clamp-none">
                 {game.opening_name ?? game.opening_eco ?? t("gh.card.noOpening")}
               </p>
-              <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-chess-muted flex-wrap">
-                <span className="flex items-center gap-1">
-                  <MyKingGlyph size={14} className={isWhite ? "text-chess-primary" : "text-chess-muted"} />
-                  <span className="font-medium text-chess-primary truncate max-w-[80px] sm:max-w-none">{username}</span>
-                  {myRating != null && <span className="text-chess-muted hidden sm:inline">({myRating})</span>}
+              <div className="flex items-center gap-2 sm:gap-3 text-sm sm:text-sm text-chess-muted flex-wrap">
+                <span className="flex items-center gap-1 min-w-0">
+                  <MyKingGlyph size={16} className={`shrink-0 ${isWhite ? "text-chess-primary" : "text-chess-muted"}`} />
+                  <span className="font-medium text-chess-primary truncate max-w-[min(100%,7.5rem)] sm:max-w-none">{username}</span>
+                  {myRating != null && <span className="text-chess-muted hidden sm:inline shrink-0">({myRating})</span>}
                 </span>
-                <span className="text-chess-muted/55">vs</span>
-                <span className="flex items-center gap-1">
-                  <OppKingGlyph size={14} className={!isWhite ? "text-chess-primary" : "text-chess-muted"} />
-                  <span className="font-medium text-chess-primary truncate max-w-[80px] sm:max-w-none">{opponent}</span>
-                  {oppRating != null && <span className="text-chess-muted hidden sm:inline">({oppRating})</span>}
+                <span className="text-chess-muted/55 shrink-0">vs</span>
+                <span className="flex items-center gap-1 min-w-0">
+                  <OppKingGlyph size={16} className={`shrink-0 ${!isWhite ? "text-chess-primary" : "text-chess-muted"}`} />
+                  <span className="font-medium text-chess-primary truncate max-w-[min(100%,7.5rem)] sm:max-w-none">{opponent}</span>
+                  {oppRating != null && <span className="text-chess-muted hidden sm:inline shrink-0">({oppRating})</span>}
                 </span>
               </div>
             </div>
           </div>
 
           {/* 우측 정보 */}
-          <div className="flex flex-col items-end gap-1 sm:gap-2 text-xs sm:text-sm shrink-0">
-            <div className="text-chess-muted font-medium">{dateStr}</div>
-            <div className="text-chess-muted/70 text-[10px] sm:text-xs hidden sm:block">{timeStr}</div>
+          <div className="flex flex-col items-end gap-0.5 sm:gap-1 text-sm shrink-0">
+            <div className="text-chess-muted font-medium tabular-nums leading-tight">{dateStr}</div>
+            <div className="text-chess-muted/85 text-xs sm:text-sm tabular-nums leading-tight">{timeStr}</div>
           </div>
 
           <span className={`inline-flex text-chess-muted transition-transform duration-200 shrink-0 ${open ? "rotate-180" : ""}`}>
@@ -536,7 +536,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
               <div className="bg-chess-elevated/70 dark:bg-chess-bg/55 rounded-lg p-2.5 sm:p-3 ring-1 ring-chess-border/25 dark:ring-white/[0.06]">
                 <p className="text-xs text-chess-muted mb-1">{t("gh.card.movesCount")}</p>
                 <p className="text-xs sm:text-sm font-semibold text-chess-primary">{moveCount} {t("gh.card.moves")}</p>
-                {lengthLabel && <p className="text-[10px] sm:text-xs text-chess-muted/70">({lengthLabel})</p>}
+                {lengthLabel && <p className="text-[15px] sm:text-[15px] text-chess-muted/70">({lengthLabel})</p>}
               </div>
             )}
             {timeControl && (
@@ -548,7 +548,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
             <div className="bg-chess-elevated/70 dark:bg-chess-bg/55 rounded-lg p-2.5 sm:p-3 ring-1 ring-chess-border/25 dark:ring-white/[0.06]">
               <p className="text-xs text-chess-muted mb-1">{t("gh.card.playTime")}</p>
               <p className="text-xs sm:text-sm font-semibold text-chess-primary">{dateStr}</p>
-              <p className="text-[10px] sm:text-xs text-chess-muted/70">{timeStr}</p>
+              <p className="text-[15px] sm:text-[15px] text-chess-muted/70">{timeStr}</p>
             </div>
           </div>
 
@@ -725,6 +725,14 @@ const MOVE_TIER_DESC_KEY: Record<MoveTier, I18nKey> = {
   T5: "tier.t5.desc",
   T6: "tier.t6.desc",
 };
+
+/** API `win_pct_*`는 방금 수를 둔 색 관점 → 포지션 기준 백 승률(0~100)으로 통일 */
+function whiteWinPercentAfterMove(m: AnalyzedMove): number {
+  const w = m.color === "white" ? m.win_pct_after : 100 - m.win_pct_after;
+  if (!Number.isFinite(w)) return 50;
+  return Math.min(100, Math.max(0, w));
+}
+
 function GameAnalysisPanel({
   data,
   selectedTier,
@@ -956,33 +964,79 @@ function GameAnalysisPanel({
               />
             </div>
 
-            {/* 엔진 평가 바 */}
+            {/* 엔진 평가 + 승률 손실 + 백/흑 승률 막대 */}
             {selectedMove && (
-              <div className="w-full max-w-[400px] xl:mx-0 flex items-stretch gap-3 pixel-frame bg-chess-surface dark:bg-chess-elevated/25 p-2 sm:p-3">
-                <div className="flex flex-col justify-center min-w-0">
-                  <span className="text-[10px] uppercase tracking-widest text-chess-primary/70 font-bold mb-0.5">{t("ga.eval")}</span>
-                  <span className="text-sm font-bold text-chess-primary font-mono whitespace-nowrap inline-flex items-center gap-1">
-                    {selectedMove.cp_before !== null ? `${selectedMove.cp_before > 0 ? "+" : ""}${selectedMove.cp_before}` : "?"}
-                    <PixelCaretRightGlyph size={12} className="text-chess-muted shrink-0" />
-                    {selectedMove.cp_after !== null ? `${selectedMove.cp_after > 0 ? "+" : ""}${selectedMove.cp_after}` : "?"}
-                  </span>
+              <div className="w-full max-w-[400px] xl:mx-0 flex flex-col gap-2.5 pixel-frame bg-chess-surface dark:bg-chess-elevated/25 p-2 sm:p-3">
+                <div className="flex items-stretch gap-3">
+                  <div className="flex min-w-0 flex-1 flex-col justify-center">
+                    <span className="mb-0.5 text-[15px] font-bold uppercase tracking-widest text-chess-primary/70">
+                      {t("ga.eval")}
+                    </span>
+                    <span className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-sm font-bold text-chess-primary">
+                      {selectedMove.cp_before !== null ? `${selectedMove.cp_before > 0 ? "+" : ""}${selectedMove.cp_before}` : "?"}
+                      <PixelCaretRightGlyph size={12} className="shrink-0 text-chess-muted" />
+                      {selectedMove.cp_after !== null ? `${selectedMove.cp_after > 0 ? "+" : ""}${selectedMove.cp_after}` : "?"}
+                    </span>
+                  </div>
+                  <div className="w-px shrink-0 bg-chess-border/80" />
+                  <div className="flex shrink-0 flex-col justify-center sm:min-w-[5.5rem]">
+                    <span className="mb-0.5 text-[15px] font-bold uppercase tracking-widest text-chess-primary/70">
+                      {t("ga.winPctLoss")}
+                    </span>
+                    <span
+                      className="font-mono text-sm font-bold"
+                      style={{
+                        color:
+                          selectedMove.win_pct_loss >= 10
+                            ? "#e11d48"
+                            : selectedMove.win_pct_loss >= 3
+                              ? "#d97706"
+                              : "#059669",
+                      }}
+                    >
+                      {selectedMove.win_pct_loss.toFixed(1)}%
+                    </span>
+                  </div>
                 </div>
-                <div className="w-px bg-chess-border/80" />
-                <div className="flex flex-col justify-center">
-                  <span className="text-[10px] uppercase tracking-widest text-chess-primary/70 font-bold mb-0.5">{t("ga.winPctLoss")}</span>
-                  <span
-                    className="text-sm font-bold font-mono"
-                    style={{
-                      color: selectedMove.win_pct_loss >= 10
-                        ? "#e11d48"
-                        : selectedMove.win_pct_loss >= 3
-                          ? "#d97706"
-                          : "#059669",
-                    }}
-                  >
-                    {selectedMove.win_pct_loss.toFixed(1)}%
-                  </span>
-                </div>
+
+                {(() => {
+                  const whitePct = whiteWinPercentAfterMove(selectedMove);
+                  const blackPct = 100 - whitePct;
+                  const aria = t("ga.evalBarAria")
+                    .replace("{white}", whitePct.toFixed(1))
+                    .replace("{black}", blackPct.toFixed(1));
+                  return (
+                    <div className="border-t border-chess-border/55 pt-2.5 dark:border-chess-border/50">
+                      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-chess-primary/65 sm:text-[11px]">
+                        {t("ga.evalWinShareCaption")}
+                      </p>
+                      <div
+                        className="flex h-5 w-full overflow-hidden border-2 border-chess-border/90 shadow-[inset_1px_1px_0_rgba(255,255,255,0.12)] dark:border-chess-border/70"
+                        role="img"
+                        aria-label={aria}
+                      >
+                        <div
+                          className="h-full bg-gradient-to-b from-zinc-100 to-zinc-200 dark:from-zinc-300 dark:to-zinc-400"
+                          style={{ width: `${whitePct}%`, minWidth: whitePct > 0 ? "2px" : undefined }}
+                        />
+                        <div
+                          className="h-full bg-gradient-to-b from-neutral-700 to-neutral-900 dark:from-neutral-800 dark:to-neutral-950"
+                          style={{ width: `${blackPct}%`, minWidth: blackPct > 0 ? "2px" : undefined }}
+                        />
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-2 font-sans text-[11px] font-semibold tabular-nums text-chess-primary sm:text-xs">
+                        <span className="min-w-0 truncate">
+                          <span className="text-chess-muted">{t("ga.evalBarWhiteLabel")}</span>{" "}
+                          <span className="text-chess-primary">{whitePct.toFixed(1)}%</span>
+                        </span>
+                        <span className="min-w-0 truncate text-right">
+                          <span className="text-chess-muted">{t("ga.evalBarBlackLabel")}</span>{" "}
+                          <span className="text-chess-primary">{blackPct.toFixed(1)}%</span>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1069,24 +1123,27 @@ function GameAnalysisPanel({
               <div className="border-b border-chess-border bg-chess-surface/60 px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1">
                 {(["TH", "TF", "T1", "T2", "T3", "T4", "T5", "T6"] as MoveTier[]).map((tier) => {
                   const tierBg = MOVE_TIER_COLOR[tier];
+                  const desc = t(MOVE_TIER_DESC_KEY[tier]).trim();
                   return (
                     <div key={tier} className="flex items-center gap-1.5 py-0.5">
                       <span
-                        className="shrink-0 w-7 text-center rounded text-[10px] font-black text-white py-0.5 leading-none"
+                        className="shrink-0 w-7 text-center rounded text-[15px] font-black text-white py-0.5 leading-none"
                         style={{ backgroundColor: tierBg }}
                       >
                         {tier}
                       </span>
-                      <span className="text-[11px] font-semibold text-chess-primary whitespace-nowrap">
+                      <span className="min-w-0 text-[11px] font-semibold text-chess-primary sm:whitespace-normal">
                         {t(MOVE_TIER_LABEL_KEY[tier])}
                       </span>
-                      <span className="text-[10px] text-chess-muted truncate hidden sm:inline">
-                        — {t(MOVE_TIER_DESC_KEY[tier])}
-                      </span>
+                      {desc ? (
+                        <span className="hidden text-[15px] text-chess-muted truncate sm:inline">
+                          — {desc}
+                        </span>
+                      ) : null}
                     </div>
                   );
                 })}
-                <p className="col-span-2 text-[10px] text-chess-muted mt-1 sm:hidden">{t("ga.tierLegendMobile")}</p>
+                <p className="col-span-2 text-[15px] text-chess-muted mt-1 sm:hidden">{t("ga.tierLegendMobile")}</p>
               </div>
             )}
 
@@ -1112,7 +1169,7 @@ function GameAnalysisPanel({
                     >
                       {/* 색 인디케이터 */}
                       <div
-                        className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[9px] sm:text-[10px] shrink-0 font-bold border shadow-sm ${
+                        className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[15px] sm:text-[15px] shrink-0 font-bold border shadow-sm ${
                           move.color === "white"
                             ? "bg-white text-gray-800 border-gray-200"
                             : "bg-gray-800 text-white border-gray-900"
@@ -1122,7 +1179,7 @@ function GameAnalysisPanel({
                       </div>
                       {/* 티어 뱃지 */}
                       <span
-                        className="w-7 sm:w-8 text-center shrink-0 rounded text-[9px] sm:text-[10px] font-black py-0.5 text-white shadow-sm"
+                        className="w-7 sm:w-8 text-center shrink-0 rounded text-[15px] sm:text-[15px] font-black py-0.5 text-white shadow-sm"
                         style={{ backgroundColor: moveTierBg }}
                       >
                         {move.tier}
@@ -1134,12 +1191,12 @@ function GameAnalysisPanel({
                           {move.move_number}. {move.san}
                         </span>
                         {move.is_only_best && move.tier !== "TH" && (
-                          <span className="shrink-0 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-100 text-chess-win border border-emerald-200 font-bold whitespace-nowrap">
+                          <span className="shrink-0 text-[15px] sm:text-[15px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-100 text-chess-win border border-emerald-200 font-bold whitespace-nowrap">
                             {t("ga.onlyBest")}
                           </span>
                         )}
                         {/* 손실% - 모바일: 오른쪽 끝에 작게, PC: 두 번째 줄 */}
-                        <span className="ml-auto shrink-0 text-[10px] font-semibold text-chess-primary/70 sm:hidden tabular-nums">
+                        <span className="ml-auto shrink-0 text-[15px] font-semibold text-chess-primary/70 sm:hidden tabular-nums">
                           {move.win_pct_loss.toFixed(1)}%
                         </span>
                         <p className="hidden sm:block text-[11px] font-semibold mt-0.5">
@@ -1177,7 +1234,7 @@ function GameAnalysisPanel({
               <PixelKingWhiteGlyph size={16} />
             </div>
             <span className="text-xs font-bold text-chess-primary truncate flex-1 min-w-0">{data.white_player}</span>
-            <span className="text-[10px] text-chess-primary/60 uppercase shrink-0">{t("ga.white")}</span>
+            <span className="text-[15px] text-chess-primary/60 uppercase shrink-0">{t("ga.white")}</span>
             <span className="text-base font-black text-chess-accent shrink-0 tabular-nums">{white.accuracy.toFixed(1)}%</span>
           </div>
           {/* 흑 */}
@@ -1186,7 +1243,7 @@ function GameAnalysisPanel({
               <PixelKingBlackGlyph size={16} className="text-white" />
             </div>
             <span className="text-xs font-bold text-chess-primary truncate flex-1 min-w-0">{data.black_player}</span>
-            <span className="text-[10px] text-chess-primary/60 uppercase shrink-0">{t("ga.black")}</span>
+            <span className="text-[15px] text-chess-primary/60 uppercase shrink-0">{t("ga.black")}</span>
             <span className="text-base font-black text-chess-accent shrink-0 tabular-nums">{black.accuracy.toFixed(1)}%</span>
           </div>
         </div>
@@ -1205,7 +1262,7 @@ function GameAnalysisPanel({
               </div>
               <div className="ml-auto text-right shrink-0">
                 <p className="text-2xl font-black text-chess-accent">{white.accuracy.toFixed(1)}%</p>
-                <p className="text-[10px] text-chess-primary/70 font-bold uppercase tracking-widest">{t("ga.accuracy")}</p>
+                <p className="text-[15px] text-chess-primary/70 font-bold uppercase tracking-widest">{t("ga.accuracy")}</p>
               </div>
             </div>
             <TierDonutChart
@@ -1228,7 +1285,7 @@ function GameAnalysisPanel({
               </div>
               <div className="ml-auto text-right shrink-0">
                 <p className="text-2xl font-black text-chess-accent">{black.accuracy.toFixed(1)}%</p>
-                <p className="text-[10px] text-chess-primary/70 font-bold uppercase tracking-widest">{t("ga.accuracy")}</p>
+                <p className="text-[15px] text-chess-primary/70 font-bold uppercase tracking-widest">{t("ga.accuracy")}</p>
               </div>
             </div>
             <TierDonutChart
