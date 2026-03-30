@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { OpeningTreeNode, PatternGameItem } from "@/types";
 import { useTranslation } from "@/shared/lib/i18n";
 import { useBodyScrollLock } from "@/shared/lib/useBodyScrollLock";
+import { PixelXGlyph } from "@/shared/components/ui/PixelGlyphs";
 
 interface Props {
   node: OpeningTreeNode | null;
@@ -123,11 +124,12 @@ export default function OpeningGameListModal({ node, onClose }: Props) {
 
           {/* Close button */}
           <button
+            type="button"
             onClick={onClose}
-            className="shrink-0 text-chess-muted hover:text-chess-primary transition-colors text-xl leading-none mt-0.5"
+            className="shrink-0 text-chess-muted hover:text-chess-primary transition-colors mt-0.5 p-0.5"
             aria-label={t("sac.close")}
           >
-            ✕
+            <PixelXGlyph size={20} />
           </button>
         </div>
 

@@ -14,8 +14,15 @@ const SQ_KEYFRAMES = `
 }
 `;
 
-import { useTranslation } from "@/shared/lib/i18n";
+import { useTranslation, type I18nKey } from "@/shared/lib/i18n";
 import type { TacticalPattern, PatternGameItem } from "@/types";
+import {
+  PixelCaretDownGlyph,
+  PixelCaretRightGlyph,
+  PixelChartGlyph,
+  PixelMicroscopeGlyph,
+  PixelXGlyph,
+} from "@/shared/components/ui/PixelGlyphs";
 
 // ─── Chess.com 분석 URL (특정 수로 이동) ────────────────────
 function toAnalysisUrl(url: string, moveNo?: number, color?: "white" | "black"): string {
@@ -152,12 +159,12 @@ function SacDonutChart({ counts, t }: { counts: { t1: number; t2: number; t3: nu
         {/* 중앙 텍스트 */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <span className="text-[11px] font-bold text-chess-primary">T1~T5</span>
-          <span className="text-[9px] text-chess-muted">{t("sac.ratio")}</span>
-          <span className="text-[9px] text-chess-muted mt-0.5">{t("sac.totalCount").replace("{n}", String(total))}</span>
+          <span className="text-[15px] text-chess-muted">{t("sac.ratio")}</span>
+          <span className="text-[15px] text-chess-muted mt-0.5">{t("sac.totalCount").replace("{n}", String(total))}</span>
         </div>
       </div>
       {/* 범례 */}
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[15px]">
         {data.map((entry) => {
           const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
           return (
@@ -215,7 +222,7 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
       <div className="flex flex-col h-full gap-3">
         <div className="flex items-center justify-between">
           <span className="text-xs text-chess-muted">{t("sac.noPgn")}</span>
-          <button onClick={onClose} className="text-chess-muted hover:text-chess-primary text-lg">✕</button>
+          <button type="button" onClick={onClose} className="text-chess-muted hover:text-chess-primary p-0.5" aria-label={t("ga.close")}><PixelXGlyph size={18} /></button>
         </div>
         <div className="flex-1 flex items-center justify-center">
           <a href={toAnalysisUrl(game.url)} target="_blank" rel="noopener noreferrer"
@@ -240,12 +247,12 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
       <div className="flex items-start justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-chess-primary truncate">{game.opening_name ?? t("sac.board")}</p>
-          <p className="text-[10px] text-chess-muted">
+          <p className="text-[15px] text-chess-muted">
             {game.played_at ? new Date(game.played_at).toLocaleDateString(t("term.win") === "Win" ? "en-US" : "ko-KR", { year: "numeric", month: "short", day: "numeric" }) : ""}
             {game.white && game.black && <span className="ml-1">{game.white} vs {game.black}</span>}
           </p>
         </div>
-        <button onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary text-lg leading-none ml-2">✕</button>
+        <button type="button" onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary ml-2 p-0.5" aria-label={t("ga.close")}><PixelXGlyph size={18} /></button>
       </div>
 
       {/* 보드 — 고정 크기로 스크롤 없이 표시 */}
@@ -259,7 +266,7 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
               style={{ backgroundColor: orientation === "white" ? "#4a5568" : "#e2e8f0" }} />
             {orientation === "white" ? game.black : game.white}
           </span>
-          <span className="text-chess-muted text-[10px]">{orientation === "white" ? t("sac.black") : t("sac.white")}</span>
+          <span className="text-chess-muted text-[15px]">{orientation === "white" ? t("sac.black") : t("sac.white")}</span>
         </div>
         
         <Chessboard options={{
@@ -280,7 +287,7 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
               style={{ backgroundColor: orientation === "white" ? "#e2e8f0" : "#4a5568" }} />
             {orientation === "white" ? game.white : game.black}
           </span>
-          <span className="text-chess-muted text-[10px]">{orientation === "white" ? t("sac.white") : t("sac.black")}</span>
+          <span className="text-chess-muted text-[15px]">{orientation === "white" ? t("sac.white") : t("sac.black")}</span>
         </div>
       </div>
 
@@ -325,83 +332,88 @@ function SacrificeBoardPanel({ game, onClose, t }: { game: any; onClose: () => v
       <a
         href={toAnalysisUrl(game.url, game.sacrifice_move_no ?? undefined, game.sacrifice_color as "white" | "black" | undefined)}
         target="_blank" rel="noopener noreferrer"
-        className="text-[10px] text-center text-chess-muted hover:text-chess-primary underline underline-offset-2">
+        className="text-[15px] text-center text-chess-muted hover:text-chess-primary underline underline-offset-2">
         {t("sac.analyzeMove")}
       </a>
     </div>
   );
 }
 
-// ─── 희생 등급 메타 ──────────────────────────────────────────
-const SAC_TIER_META: Record<1 | 2 | 3 | 4 | 5, {
-  label: string;
+// ─── 희생 등급 스타일 (라벨/설명은 i18n sac.tN.*) ─────────────
+const SAC_TIER_STYLE: Record<1 | 2 | 3 | 4 | 5, {
   short: string;
   dot: string;
   border: string;
   bg: string;
   text: string;
-  desc: string;
 }> = {
   1: {
-    label: "T1 유일강수",
     short: "T1",
     dot: "bg-emerald-500",
     border: "border-emerald-600/35",
     bg: "bg-emerald-600/8",
     text: "text-chess-win",
-    desc: "사실상 유일하게 유리할 수 있는 희생이며 평가가 크게 상승한 수",
   },
   2: {
-    label: "T2 전술상승",
     short: "T2",
     dot: "bg-lime-500",
     border: "border-lime-600/35",
     bg: "bg-lime-600/8",
     text: "text-lime-700",
-    desc: "최선은 아닐 수 있지만 전술적 보상이 있고 평가가 근소하게 오른 수",
   },
   3: {
-    label: "T3 선택형",
     short: "T3",
     dot: "bg-amber-500",
     border: "border-amber-600/35",
     bg: "bg-amber-600/8",
     text: "text-amber-700",
-    desc: "희생을 해도 되고 안 해도 되며 평가 차이가 크지 않은 수",
   },
   4: {
-    label: "T4 큰하락",
     short: "T4",
     dot: "bg-rose-400",
     border: "border-rose-600/35",
     bg: "bg-rose-600/8",
     text: "text-chess-loss",
-    desc: "추천수 4순위 이하에서 ca가 cb 대비 크게 떨어지는 수",
   },
   5: {
-    label: "T5 두면안됨",
     short: "T5",
     dot: "bg-slate-700",
     border: "border-slate-600/45",
     bg: "bg-slate-700/10",
     text: "text-slate-700",
-    desc: "ca 하락으로 유리한 국면 역전을 허용하거나 명백히 불리해지는 치명 악수",
   },
 };
 
-// ─── 게임 선택 행 ────────────────────────────────────────────
-const RESULT_BADGE: Record<string, { label: string; cls: string }> = {
-  win:  { label: "승", cls: "text-chess-win border-emerald-700/30 bg-emerald-700/10" },
-  loss: { label: "패", cls: "text-chess-loss border-red-600/30 bg-red-600/10" },
-  draw: { label: "무", cls: "text-chess-muted border-chess-border bg-chess-border/20" },
+const SAC_TIER_LABEL_KEY: Record<1 | 2 | 3 | 4 | 5, I18nKey> = {
+  1: "sac.t1.label",
+  2: "sac.t2.label",
+  3: "sac.t3.label",
+  4: "sac.t4.label",
+  5: "sac.t5.label",
+};
+
+const SAC_TIER_DESC_KEY: Record<1 | 2 | 3 | 4 | 5, I18nKey> = {
+  1: "sac.t1.desc",
+  2: "sac.t2.desc",
+  3: "sac.t3.desc",
+  4: "sac.t4.desc",
+  5: "sac.t5.desc",
+};
+
+const RESULT_BADGE_CLS: Record<string, { cls: string }> = {
+  win: { cls: "text-chess-win border-emerald-700/30 bg-emerald-700/10" },
+  loss: { cls: "text-chess-loss border-red-600/30 bg-red-600/10" },
+  draw: { cls: "text-chess-muted border-chess-border bg-chess-border/20" },
 };
 
 function SacGameRow({ game, rank, isSelected, onSelect, t }: {
-  game: any; rank: number; isSelected: boolean; onSelect: () => void; t: any;
+  game: any; rank: number; isSelected: boolean; onSelect: () => void; t: (key: I18nKey) => string;
 }) {
-  const badge = RESULT_BADGE[game.result] ?? RESULT_BADGE.draw;
+  const badgeCls = RESULT_BADGE_CLS[game.result] ?? RESULT_BADGE_CLS.draw;
+  const badgeLabel =
+    game.result === "win" ? t("chart.win") : game.result === "loss" ? t("chart.loss") : t("chart.draw");
   const tier = (game.sac_tier && game.sac_tier >= 1 && game.sac_tier <= 5 ? game.sac_tier : 5) as 1 | 2 | 3 | 4 | 5;
-  const tierMeta = SAC_TIER_META[tier];
+  const tierMeta = SAC_TIER_STYLE[tier];
   return (
     <button type="button" onClick={onSelect}
       className={`w-full text-left rounded-xl border transition-all duration-150 px-3 py-2.5
@@ -409,22 +421,24 @@ function SacGameRow({ game, rank, isSelected, onSelect, t }: {
           ? `${tierMeta.border} ${tierMeta.bg} shadow-sm`
           : "border-chess-border bg-chess-bg/80 hover:border-chess-muted hover:bg-chess-surface"}`}>
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono text-chess-muted w-4 shrink-0 text-right">#{rank}</span>
+        <span className="text-[15px] font-mono text-chess-muted w-4 shrink-0 text-right">#{rank}</span>
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${tierMeta.dot}`} />
         <div className="flex-1 min-w-0">
           <p className="text-xs text-chess-primary font-medium truncate">{game.opening_name ?? t("pattern.noOpeningInfo")}</p>
-          <p className="text-[10px] text-chess-muted truncate">
+          <p className="text-[15px] text-chess-muted truncate">
             {game.played_at ? new Date(game.played_at).toLocaleDateString(t("term.win") === "Win" ? "en-US" : "ko-KR", { month: "short", day: "numeric" }) : t("pattern.unknownDate")}
             {game.white && game.black && <span className="ml-1 opacity-60">{game.white} vs {game.black}</span>}
           </p>
         </div>
         <div className="flex flex-col items-end gap-0.5 shrink-0">
-          <span className={`text-[10px] font-bold ${tierMeta.text}`}>{tierMeta.label}</span>
-          <span className={`text-[9px] px-1 py-0.5 rounded-full border font-semibold ${badge.cls}`}>{badge.label}</span>
+          <span className={`text-[15px] font-bold ${tierMeta.text}`}>{t(SAC_TIER_LABEL_KEY[tier])}</span>
+          <span className={`text-[15px] px-1 py-0.5 rounded-full border font-semibold ${badgeCls.cls}`}>{badgeLabel}</span>
         </div>
-        <span className={`text-[10px] shrink-0 ${isSelected ? "text-amber-500" : "text-chess-muted"}`}>{isSelected ? "▶" : "›"}</span>
+        <span className={`inline-flex shrink-0 ${isSelected ? "text-amber-500" : "text-chess-muted"}`}>
+          <PixelCaretRightGlyph size={10} />
+        </span>
       </div>
-      {game.context && <p className="text-[10px] text-chess-muted italic truncate mt-0.5 pl-6">{game.context}</p>}
+      {game.context && <p className="text-[15px] text-chess-muted italic truncate mt-0.5 pl-6">{game.context}</p>}
     </button>
   );
 }
@@ -451,7 +465,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
   const allGames = pattern.top_games ?? [];
   const tierGroups = ([1, 2, 3, 4, 5] as const).map((tier) => ({
     tier,
-    meta: SAC_TIER_META[tier],
+    meta: SAC_TIER_STYLE[tier],
     games: allGames.filter((g) => (g.sac_tier ?? 5) === tier),
   }));
 
@@ -491,22 +505,32 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
         {/* 헤더 */}
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-chess-border bg-chess-bg/70 shrink-0">
           <div className="flex items-start gap-3 min-w-0">
-            <span className="text-2xl leading-none">{pattern.icon}</span>
+            <PixelChartGlyph size={26} className="text-chess-accent shrink-0 mt-0.5 opacity-90" />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-chess-primary">{pattern.label}</h2>
-                {pattern.is_strength ? <span className="text-xs text-chess-win font-bold">{t("sac.strength")}</span> : <span className="text-xs text-chess-loss font-bold">{t("sac.weakness")}</span>}
-                <span className="text-[10px] px-2 py-0.5 rounded-full border border-blue-700/30 bg-blue-700/8 text-blue-700 font-semibold">🔬 Stockfish</span>
+                {pattern.is_strength ? (
+                  <span className="text-xs text-chess-win font-bold">{t("sac.strength")}</span>
+                ) : (
+                  <span className="text-xs text-chess-loss font-bold inline-flex items-center gap-0.5">
+                    <PixelCaretDownGlyph size={12} className="text-chess-loss" />
+                    {t("sac.weakness")}
+                  </span>
+                )}
+                <span className="text-[15px] px-2 py-0.5 rounded-full border border-blue-700/30 bg-blue-700/8 text-blue-700 font-semibold inline-flex items-center gap-1">
+                  <PixelMicroscopeGlyph size={11} className="shrink-0" />
+                  Stockfish
+                </span>
                 <div className="relative group">
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-chess-muted/40 text-[10px] font-bold text-chess-muted cursor-help">!</span>
-                  <div className="pointer-events-none absolute left-0 top-6 z-20 hidden w-72 rounded-xl border border-chess-border bg-chess-surface/95 p-3 text-[10px] text-chess-muted shadow-xl group-hover:block">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-chess-muted/40 text-[15px] font-bold text-chess-muted cursor-help">!</span>
+                  <div className="pointer-events-none absolute left-0 top-6 z-20 hidden w-72 rounded-xl border border-chess-border bg-chess-surface/95 p-3 text-[15px] text-chess-muted shadow-xl group-hover:block">
                     <p className="font-semibold text-chess-primary mb-2">{t("sac.tierExplanation")}</p>
                     {([1, 2, 3, 4, 5] as const).map((tier) => (
                       <div key={tier} className="flex items-start gap-2 py-1">
-                        <span className={`mt-0.5 inline-block h-2 w-2 rounded-full ${SAC_TIER_META[tier].dot}`} />
+                        <span className={`mt-0.5 inline-block h-2 w-2 rounded-full ${SAC_TIER_STYLE[tier].dot}`} />
                         <div>
-                          <p className={`font-semibold ${SAC_TIER_META[tier].text}`}>{SAC_TIER_META[tier].label}</p>
-                          <p>{SAC_TIER_META[tier].desc}</p>
+                          <p className={`font-semibold ${SAC_TIER_STYLE[tier].text}`}>{t(SAC_TIER_LABEL_KEY[tier])}</p>
+                          <p>{t(SAC_TIER_DESC_KEY[tier])}</p>
                         </div>
                       </div>
                     ))}
@@ -516,7 +540,7 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
               <p className="text-xs text-chess-muted mt-0.5">{t("sac.validityText")}</p>
             </div>
           </div>
-          <button onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary text-xl leading-none p-1">✕</button>
+          <button type="button" onClick={onClose} className="shrink-0 text-chess-muted hover:text-chess-primary p-1" aria-label={t("ga.close")}><PixelXGlyph size={20} /></button>
         </div>
 
         {/* 바디 2-컬럼 */}
@@ -532,18 +556,20 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-[11px] text-chess-muted truncate">{pattern.detail}</span>
-                    <span className={`text-sm font-bold shrink-0 ${scoreColor}`}>{pattern.score}점</span>
+                    <span className={`text-sm font-bold shrink-0 ${scoreColor}`}>
+                      {t("sac.scorePts").replace("{n}", String(pattern.score))}
+                    </span>
                   </div>
                   <div className="w-full bg-chess-border/60 rounded-full h-1.5 overflow-hidden">
                     <div className={`h-full rounded-full ${scoreBg}`} style={{ width: `${pattern.score}%` }} />
                   </div>
-                  <p className="text-[10px] text-chess-muted">{t("sac.gamesAnalyzed").replace("{n}", String(pattern.games_analyzed))}</p>
+                  <p className="text-[15px] text-chess-muted">{t("sac.gamesAnalyzed").replace("{n}", String(pattern.games_analyzed))}</p>
                   {sacChart && (
-                    <p className="text-[10px] text-chess-muted">
+                    <p className="text-[15px] text-chess-muted">
                       {t("sac.declined").replace("{n}", String(sacChart.declined ?? 0)).replace("{unn}", String(sacChart.unnecessary ?? 0))}
                     </p>
                   )}
-                  {pattern.insight && <p className="text-[10px] text-chess-muted border-l-2 border-chess-muted/30 pl-2 line-clamp-2">{pattern.insight}</p>}
+                  {pattern.insight && <p className="text-[15px] text-chess-muted border-l-2 border-chess-muted/30 pl-2 line-clamp-2">{pattern.insight}</p>}
                 </div>
               </div>
             </div>
@@ -556,12 +582,14 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
                     <div className={`sticky top-0 z-10 flex items-center justify-between rounded-lg border px-2.5 py-1.5 backdrop-blur-sm ${meta.border} ${meta.bg}`}>
                       <div className="flex items-center gap-2">
                         <span className={`inline-block h-2 w-2 rounded-full ${meta.dot}`} />
-                        <span className={`text-[11px] font-bold ${meta.text}`}>{meta.label}</span>
+                        <span className={`text-[11px] font-bold ${meta.text}`}>{t(SAC_TIER_LABEL_KEY[tier])}</span>
                       </div>
-                      <span className="text-[10px] text-chess-muted">{games.length}개</span>
+                      <span className="text-[15px] text-chess-muted">
+                        {t("sac.nGamesShort").replace("{n}", String(games.length))}
+                      </span>
                     </div>
                     {games.length === 0 ? (
-                      <p className="px-2 py-2 text-[10px] text-chess-muted">{t("sac.noRepGame")}</p>
+                      <p className="px-2 py-2 text-[15px] text-chess-muted">{t("sac.noRepGame")}</p>
                     ) : (
                       games.map((g, i) => (
                         <SacGameRow key={`${tier}-${g.url}-${i}`} game={g} rank={i + 1}
@@ -579,8 +607,8 @@ export default function SacrificePatternModal({ pattern, onClose }: Props) {
 
             {/* 푸터 */}
             <div className="px-4 py-2.5 border-t border-chess-border bg-chess-bg/50 shrink-0 flex items-center justify-between">
-              <p className="text-[10px] text-chess-muted">{t("sac.selectGameHint")}</p>
-              <button onClick={onClose} className="text-[10px] text-chess-muted hover:text-chess-primary px-2.5 py-1 rounded-lg border border-chess-border transition-colors">{t("sac.close")}</button>
+              <p className="text-[15px] text-chess-muted">{t("sac.selectGameHint")}</p>
+              <button onClick={onClose} className="text-[15px] text-chess-muted hover:text-chess-primary px-2.5 py-1 rounded-lg border border-chess-border transition-colors">{t("sac.close")}</button>
             </div>
           </div>
 

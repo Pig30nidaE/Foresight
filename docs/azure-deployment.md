@@ -70,6 +70,16 @@ FORESIGHT_API_URL=http://localhost:8000/api/v1
 # FORESIGHT_API_URL=https://<your-api-fqdn>/api/v1
 ```
 
+**게시판(Forum) + OAuth** 를 쓰려면 Vercel에 아래도 추가합니다 (Google/Discord 개발자 콘솔에서 리디렉트 URI 등록: `https://<프로젝트>/api/auth/callback/google` 등).
+
+| 이름 | 설명 |
+|------|------|
+| `AUTH_SECRET` | `openssl rand -base64 32` — **백엔드 `JWT_SECRET` 과 동일 문자열** |
+| `AUTH_URL` | 프로덕션 사이트 베이스 URL (예: `https://your-app.vercel.app`) |
+| `AUTH_TRUST_HOST` | `true` (Vercel 등 프록시 환경) |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth |
+| `AUTH_DISCORD_ID` / `AUTH_DISCORD_SECRET` | Discord OAuth |
+
 ## 2. Azure (백엔드만) — CORS
 
 백엔드는 환경 변수 **`FORESIGHT_CORS_ORIGINS`** 로 허용 origin을 지정합니다 (콤마 구분, 공백 없음).
@@ -91,6 +101,30 @@ FORESIGHT_CORS_ORIGINS=https://foresight.vercel.app,http://localhost:3000
   (설정: [`backend/app/core/config.py`](../backend/app/core/config.py))
 
 Preview 배포(`*.vercel.app`)까지 허용하려면 해당 origin도 콤마로 추가합니다.
+
+### 2.1 게시판(Forum) — PostgreSQL · Blob · JWT
+
+게시판 API는 `/api/v1/forum/*` 입니다. **Azure Database for PostgreSQL (Flexible Server)** 와 **Azure Storage Blob** 은 포털 또는 CLI로 별도 생성한 뒤, Container App 환경 변수(민감 값은 **시크릿** 권장)로 넣습니다.
+
+| 변수 | 용도 |
+|------|------|
+| `DATABASE_URL` | `postgresql+asyncpg://USER:PASS@HOST:5432/DB?ssl=require` 형식 (async SQLAlchemy) |
+| `JWT_SECRET` | **Vercel `AUTH_SECRET` 과 동일** — HS256 API 토큰 검증 |
+| `AZURE_STORAGE_CONNECTION_STRING` | 이미지 업로드 (`POST /api/v1/forum/upload`) |
+| `AZURE_STORAGE_CONTAINER` | Blob 컨테이너 이름 (기본 `forum-uploads`) |
+| `AZURE_STORAGE_PUBLIC_BASE_URL` | 선택. 공개 읽기 URL 베이스(예: `https://ACCOUNT.blob.core.windows.net/CONTAINER`) — 비우면 SDK가 준 Blob URL 사용 |
+
+**마이그레이션** (로컬 또는 CI에서 DB에 연결 가능할 때):
+
+```bash
+cd backend
+# 프로젝트 루트 .env 에 DATABASE_URL 설정 후
+python -m alembic -c alembic.ini upgrade head
+```
+
+`DATABASE_URL_SYNC` 를 비우면 Alembic이 `+asyncpg` 를 `postgresql://` 로 바꿔 동기 드라이버(`psycopg2`)로 마이그레이션합니다.
+
+Blob 컨테이너는 **익명 읽기**로 두거나, CDN/SAS 정책을 별도로 구성하세요. 업로드는 MIME 검증(`python-magic`) 후 UUID 파일명으로 저장합니다.
 
 ## 3. Azure 사전 준비
 
@@ -184,6 +218,7 @@ az containerapp show -g "$AZ_RG" -n "$AZ_API_APP" \
 2. Vercel `NEXT_PUBLIC_API_URL` 이 위와 일치하는지  
 3. Azure `FORESIGHT_CORS_ORIGINS` 에 Vercel origin 이 포함되는지  
 4. 브라우저 개발자 도구에서 API 요청이 CORS 에러 없이 나가는지  
+5. 게시판 사용 시: `DATABASE_URL` / `JWT_SECRET`(`AUTH_SECRET` 과 일치) / Blob 변수 설정 및 `alembic upgrade head` 완료 여부, Vercel OAuth 변수·리디렉트 URI 확인  
 
 게임 분석은 **SSE**를 사용합니다. 연결이 중간에 끊기면 Container Apps / 프록시 **타임아웃**을 확인하세요.
 
@@ -231,6 +266,7 @@ API를 Azure로만 쓰면 Railway 백엔드 연결을 끊어도 됩니다.
 
 ## 11. 관련 문서
 
+- [forum-setup-checklist.md](./forum-setup-checklist.md) — 게시판·OAuth·PostgreSQL·Blob **직접 해야 할 설정 전체**
 - [analysis-scheduling-and-logic.md](./analysis-scheduling-and-logic.md) — SSE·Semaphore·캐시
 - [`.env.example`](../.env.example) — 변수 이름 참고
 

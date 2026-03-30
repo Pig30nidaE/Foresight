@@ -53,9 +53,14 @@ def _validate_color(color: str) -> None:
 @router.get("/global")
 async def get_global_opening_tiers(
     request: Request,
-    rating: int = Query(..., description="Lichess 레이팅 구간 (400/800/1200/1600/2000/2400)"),
+    rating: int = Query(..., description="Lichess 레이팅 bucket (1000/1200/1400/1600/1800/2000/2200/2500)"),
     speed: str = Query("blitz", description="타임클래스 (bullet/blitz/rapid/classical)"),
     color: str = Query("white", description="기준 색상 (white/black)"),
+    q: str | None = Query(None, min_length=1, max_length=80, description="오프닝 검색어 (ECO/이름)"),
+    allow_cold_fetch: bool = Query(
+        False,
+        description="true면 캐시 미존재 시 즉시 계산(무거움). 기본값 false면 warming 상태를 반환.",
+    ),
 ):
     """레이팅 구간별 오프닝 티어 랭킹 반환.
 
@@ -68,12 +73,31 @@ async def get_global_opening_tiers(
     _service = _get_service(request)
     try:
         openings, data_period, collected_at = await _service.get_opening_tiers(
-            rating, speed, color
+            rating, speed, color, allow_fetch_if_missing=allow_cold_fetch
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        if str(exc) == "warming":
+            return {
+                "state": "warming",
+                "rating": rating,
+                "speed": speed,
+                "color": color,
+                "retry_after_seconds": 8,
+                "detail": "opening tier cache warming in progress",
+                "data_period": "",
+                "collected_at": "",
+                "openings": [],
+                "total_openings": 0,
+            }
+        raise HTTPException(status_code=503, detail=str(exc))
+    openings = _service.filter_openings(openings, q)
+    # 기본 티어표에서는 1% 미만 마이너 variation 을 숨기고,
+    # 검색(query) 상황에서는 탐색 가능하도록 노출합니다.
+    if not (q or "").strip():
+        openings = [row for row in openings if not bool(row.get("is_minor", False))]
 
     return {
+        "state": "ready",
         "rating": rating,
         "speed": speed,
         "color": color,
@@ -141,7 +165,9 @@ async def export_opening_tiers(
         )
 
     try:
-        openings, _, _ = await _service.get_opening_tiers(rating, speed, color)
+        openings, _, _ = await _service.get_opening_tiers(
+            rating, speed, color, allow_fetch_if_missing=True
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
