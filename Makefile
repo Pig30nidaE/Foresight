@@ -4,7 +4,7 @@ DB_USER := foresight
 DB_NAME := foresight
 DB_URL_SYNC_HOST := postgresql://foresight:foresight@localhost:5432/foresight
 
-.PHONY: help up down restart logs logs-backend logs-frontend logs-db build rebuild ps clean db-wait db-migrate db-migrate-host db-psql db-reset-dev nuke-stale
+.PHONY: help up down restart logs logs-backend logs-frontend logs-db build rebuild ps clean db-wait db-migrate db-migrate-host db-psql db-reset-dev nuke-stale azure-api-redeploy azure-api-redeploy-preview
 
 help:
 	@echo "Foresight Docker commands"
@@ -25,6 +25,8 @@ help:
 	@echo "  make db-psql         - Open psql shell in db container"
 	@echo "  make db-reset-dev    - Reset DB (dev only, requires APP_ENV=development CONFIRM_RESET=YES)"
 	@echo "  make nuke-stale      - Remove legacy named containers"
+	@echo "  make azure-api-redeploy         - Build API image, push (tag=git sha), update Container App"
+	@echo "  make azure-api-redeploy-preview - Preview only: tag preview, app foresight-api, Azure label environment=preview"
 
 up:
 	$(COMPOSE) up -d --build
@@ -84,3 +86,9 @@ db-reset-dev:
 
 nuke-stale:
 	-docker rm -f foresight-db foresight-backend foresight-frontend
+
+azure-api-redeploy:
+	./scripts/azure-rebuild-api.sh
+
+azure-api-redeploy-preview:
+	AZ_DEPLOY_TARGET=preview ./scripts/azure-rebuild-api.sh
