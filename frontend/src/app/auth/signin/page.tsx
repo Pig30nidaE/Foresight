@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -52,6 +52,20 @@ function getProviderIcon(providerId: string): React.ReactNode {
 }
 
 export default function SignInPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-chess-background to-chess-surface/50 px-4">
+          <p className="text-sm text-chess-muted">Loading...</p>
+        </div>
+      }
+    >
+      <SignInContent />
+    </Suspense>
+  );
+}
+
+function SignInContent() {
   const searchParams = useSearchParams();
   const { t } = useTranslation();
   const [providers, setProviders] = useState<Record<string, Provider>>({});

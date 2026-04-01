@@ -174,6 +174,21 @@ export const ko = {
   "auth.error.signInAgain": "다시 로그인",
   "auth.error.backHome": "홈으로",
   "auth.error.openSignIn": "로그인 페이지 열기",
+  "auth.subtitle": "체스 게임 분석 및 오프닝 이론",
+  "auth.error.callback": "인증 콜백 처리 중 오류가 발생했습니다.",
+  "auth.error.oauthSignin": "OAuth 로그인 중 오류가 발생했습니다.",
+  "auth.error.oauthCallback": "OAuth 콜백 처리 중 오류가 발생했습니다.",
+  "auth.error.emailCreateAccount": "이메일 계정을 생성하지 못했습니다.",
+  "auth.error.default": "알 수 없는 오류가 발생했습니다.",
+
+  "signin.title": "로그인",
+  "signin.desc": "선호하는 OAuth 제공자로 로그인하세요",
+  "signin.signInWith": "다음으로 로그인",
+  "signin.signingIn": "로그인 중...",
+  "signin.noAccount": "Foresight가 처음이신가요?",
+  "signin.signUpPrompt": "OAuth 로그인 시 계정이 자동으로 생성됩니다",
+  "signin.error.fetchProviders": "로그인 제공자 목록을 불러오지 못했습니다.",
+  "signin.error.noProviders": "사용 가능한 인증 제공자가 없습니다.",
 
   // Dashboard Page
   "dh.searchPlaceholder": "전적 검색",
@@ -872,6 +887,21 @@ export const en: typeof ko = {
   "auth.error.signInAgain": "Sign in again",
   "auth.error.backHome": "Back to home",
   "auth.error.openSignIn": "Open sign-in page",
+  "auth.subtitle": "Chess Game Analysis & Opening Theory",
+  "auth.error.callback": "Authentication callback error",
+  "auth.error.oauthSignin": "OAuth sign-in error",
+  "auth.error.oauthCallback": "OAuth callback error",
+  "auth.error.emailCreateAccount": "Could not create email account",
+  "auth.error.default": "Unknown error",
+
+  "signin.title": "Sign In",
+  "signin.desc": "Log in with your preferred OAuth provider",
+  "signin.signInWith": "Sign in with",
+  "signin.signingIn": "Signing in...",
+  "signin.noAccount": "New to Foresight?",
+  "signin.signUpPrompt": "Your account will be created during OAuth",
+  "signin.error.fetchProviders": "Failed to load login providers",
+  "signin.error.noProviders": "No authentication providers available",
 
   // Dashboard Page
   "dh.searchPlaceholder": "Search match history",
