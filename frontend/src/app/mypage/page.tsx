@@ -213,7 +213,7 @@ export default function MyPage() {
       if (!token) throw new Error(t("forum.error.noLoginToken"));
       const fd = new FormData();
       fd.append("file", f);
-      const { data: up } = await api.post<{ url: string }>("/forum/upload", fd, {
+      const { data: up } = await api.post<{ url: string }>("/upload", fd, {
         headers: { Authorization: `Bearer ${token}` },
       });
       await patchProfileFields({ avatar_url: up.url });

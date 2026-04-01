@@ -366,10 +366,16 @@ async def update_my_profile(
         if raw is None or (isinstance(raw, str) and not str(raw).strip()):
             me.avatar_sync_oauth = False
             me.avatar_url = None
+            changed = True
         else:
-            me.avatar_url = _validate_avatar_url_value(str(raw))
-            me.avatar_sync_oauth = False
-        changed = True
+            try:
+                validated_url = _validate_avatar_url_value(str(raw))
+                # Explicitly set avatar_url first, then set avatar_sync_oauth
+                me.avatar_url = validated_url
+                me.avatar_sync_oauth = False
+                changed = True
+            except HTTPException:
+                raise  # Re-raise validation errors immediately
 
     if _is_protected_account(me):
         if me.display_name != _PROTECTED_ADMIN_DISPLAY_NAME:
@@ -414,20 +420,23 @@ async def get_my_posts(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
 ):
+    # Optimize: Use window function COUNT(*)OVER() to get total in single query instead of 2 queries
     where_posts = (Post.author_id == me.id, Post.deleted_at.is_(None))
-    total = (
-        await db.execute(select(func.count()).select_from(Post).where(*where_posts))
-    ).scalar_one()
     offset = (page - 1) * page_size
-    rows = (
-        await db.execute(
-            select(Post)
-            .where(*where_posts)
-            .order_by(Post.created_at.desc())
-            .offset(offset)
-            .limit(page_size)
+    stmt = (
+        select(
+            Post,
+            func.count(Post.id).over().label('_total')
         )
-    ).scalars().all()
+        .where(*where_posts)
+        .order_by(Post.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    rows_with_total = result.all()
+    total = rows_with_total[0][1] if rows_with_total else 0
+    rows = [r[0] for r in rows_with_total]
     return MyPostListResponse(
         total=int(total),
         items=[
@@ -452,30 +461,29 @@ async def get_my_comments(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
 ):
+    # Optimize: Use window function COUNT(*)OVER() to get total in single query instead of 2 queries
     where_comments = (
         Comment.author_id == me.id,
         Comment.deleted_at.is_(None),
         Post.deleted_at.is_(None),
     )
-    total = (
-        await db.execute(
-            select(func.count())
-            .select_from(Comment)
-            .join(Post, Post.id == Comment.post_id)
-            .where(*where_comments)
-        )
-    ).scalar_one()
     offset = (page - 1) * page_size
-    rows = (
-        await db.execute(
-            select(Comment, Post)
-            .join(Post, Post.id == Comment.post_id)
-            .where(*where_comments)
-            .order_by(Comment.created_at.desc())
-            .offset(offset)
-            .limit(page_size)
+    stmt = (
+        select(
+            Comment,
+            Post,
+            func.count(Comment.id).over().label('_total')
         )
-    ).all()
+        .join(Post, Post.id == Comment.post_id)
+        .where(*where_comments)
+        .order_by(Comment.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    rows_with_total = result.all()
+    total = rows_with_total[0][2] if rows_with_total else 0
+    rows = [(r[0], r[1]) for r in rows_with_total]
     return MyCommentListResponse(
         total=int(total),
         items=[
@@ -1401,5 +1409,10 @@ async def upload_forum_image(
             detail="Unsupported file type",
         )
     name = file.filename or "upload"
-    url = await upload_image_bytes(data, content_type=mime, original_filename=name)
+    url = await upload_image_bytes(
+        data,
+        content_type=mime,
+        original_filename=name,
+        public_base_url=str(request.base_url),
+    )
     return UploadResponse(url=url, content_type=mime)

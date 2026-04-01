@@ -12,7 +12,7 @@
 | `GET /api/v1/forum/posts` → **503** | DB 미연결 | 루트 `.env`에 `DATABASE_URL` 설정, 마이그레이션 실행 |
 | `GET /api/backend-jwt` → **401** | 미로그인 | OAuth 로그인 완료 후 다시 시도 |
 | `GET /api/v1/forum/...` → **401** (Bearer 필요한 API) | 토큰 없음/만료 | 로그인 상태 유지, `AUTH_SECRET`/`JWT_SECRET` 일치 확인 |
-| 이미지 업로드 → **503** | Blob 미설정 | `AZURE_STORAGE_CONNECTION_STRING` 등 설정 |
+| 이미지 업로드 URL이 `/uploads/...` 로 저장됨 | Supabase/Azure 미설정으로 로컬 폴백 동작 | 운영에서는 Supabase Storage 또는 Azure Blob 설정 |
 
 글 목록이 비어 있는 것은 **200 + 빈 배열**이지 503이 아닙니다.
 
@@ -100,7 +100,11 @@ alembic -c alembic.ini upgrade head
 | `DATABASE_URL` | 게시판 필수 | `postgresql+asyncpg://...` |
 | `JWT_SECRET` | 게시판 API 인증 필수 | **`AUTH_SECRET`과 동일** |
 | `FORESIGHT_CORS_ORIGINS` | 배포 시 권장 | 예: `https://xxx.vercel.app,http://localhost:3000` |
-| `AZURE_STORAGE_CONNECTION_STRING` | 이미지 업로드만 | 없으면 업로드 API 503 |
+| `SUPABASE_URL` | 선택 | Supabase Storage 사용 시 필수 |
+| `SUPABASE_SERVICE_ROLE_KEY` | 선택 | Supabase Storage 업로드 권한 키 |
+| `SUPABASE_STORAGE_BUCKET` | 선택 | 기본 `avatars` |
+| `SUPABASE_STORAGE_PUBLIC_BASE_URL` | 선택 | 공개 URL 베이스 |
+| `AZURE_STORAGE_CONNECTION_STRING` | 선택 | Azure Blob 업로드 사용 시 |
 | `AZURE_STORAGE_CONTAINER` | 선택 | 기본 `forum-uploads` |
 | `AZURE_STORAGE_PUBLIC_BASE_URL` | 선택 | 공개 URL 베이스 |
 | `AUTH_SECRET` | 프론트(Auth.js) | Docker로 프론트 띄울 때 루트 `.env`에 두면 주입됨 |
