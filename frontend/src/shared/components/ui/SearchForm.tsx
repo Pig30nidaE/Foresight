@@ -37,14 +37,14 @@ export default function SearchForm() {
         )}
 
         <div className="flex w-full flex-col gap-3">
-          <div className="flex w-full gap-2">
-            <div className="flex shrink-0 overflow-hidden border-2 border-chess-border">
+          <div className="flex w-full flex-col gap-2 sm:flex-row">
+            <div className="flex w-full shrink-0 overflow-hidden border-2 border-chess-border sm:w-auto">
               {(["chess.com", "lichess"] as const).map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => setPlatform(p)}
-                  className={`font-pixel px-3 py-2 text-xs sm:text-sm font-bold sm:px-4 ${
+                  className={`font-pixel flex-1 px-3 py-2 text-xs sm:flex-initial sm:text-sm font-bold sm:px-4 ${
                     platform === p
                       ? "bg-chess-accent text-white border-chess-accent"
                       : "bg-chess-surface text-chess-muted hover:text-chess-primary"

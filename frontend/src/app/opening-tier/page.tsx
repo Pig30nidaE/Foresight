@@ -39,8 +39,8 @@ export default function OpeningTierPage() {
     if (brackets.length === 0) return;
     const isCurrentValid = rating !== null && brackets.some((b) => b.lichess_rating === rating);
     if (isCurrentValid) return;
-    // Lichess 실제 bucket 표기 기준에서 기본값은 중간 구간 1600.
-    const defaultBracket = brackets.find((b) => b.lichess_rating === 1600) ?? brackets[0];
+    // 축소된 버킷에서 기본값은 1400(1400,1600 통합 구간).
+    const defaultBracket = brackets.find((b) => b.lichess_rating === 1400) ?? brackets[0];
     if (defaultBracket) setRating(defaultBracket.lichess_rating);
   }, [brackets, rating]);
 

@@ -2,13 +2,20 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 import pytest
 
+from app.api.deps import get_current_user
 from app.api.routes.opening_tier import router as opening_router
 from app.features.opening_tier.services.opening_tier_service import OpeningTierService
+
+
+class DummyUser:
+    id = "u1"
+    email = "u@example.com"
 
 
 @pytest.fixture()
 def app():
     app = FastAPI()
+    app.dependency_overrides[get_current_user] = lambda: DummyUser()
     app.include_router(opening_router, prefix="/api/v1/opening-tier")
     return app
 
@@ -34,27 +41,25 @@ async def test_global_endpoint_success(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         resp = await client.get(
             "/api/v1/opening-tier/global",
-            params={"rating": 1600, "speed": "blitz", "color": "white"},
+            params={"rating": 1400, "speed": "blitz", "color": "white"},
             headers={"x-foresight-client": "web-ui"},
         )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["rating"] == 1600
+    assert data["rating"] == 1400
     assert data["total_openings"] == 1
 
 
 @pytest.mark.anyio
-async def test_global_endpoint_public_no_extra_headers(app):
-    """로그인·클라이언트 헤더 없이도 티어 데이터 조회 가능해야 함."""
+async def test_global_endpoint_requires_login_without_override():
+    app = FastAPI()
+    app.include_router(opening_router, prefix="/api/v1/opening-tier")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         resp = await client.get(
             "/api/v1/opening-tier/global",
-            params={"rating": 1600, "speed": "blitz", "color": "white"},
+            params={"rating": 1400, "speed": "blitz", "color": "white"},
         )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["rating"] == 1600
-    assert data["total_openings"] == 1
+    assert resp.status_code == 401
 
 
 @pytest.mark.anyio
@@ -67,7 +72,7 @@ async def test_global_endpoint_service_error(app, monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         resp = await client.get(
             "/api/v1/opening-tier/global",
-            params={"rating": 1600, "speed": "blitz", "color": "white"},
+            params={"rating": 1400, "speed": "blitz", "color": "white"},
             headers={"x-foresight-client": "web-ui"},
         )
     assert resp.status_code == 503
@@ -141,7 +146,7 @@ async def test_global_hides_minor_without_query(app, monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         resp = await client.get(
             "/api/v1/opening-tier/global",
-            params={"rating": 1600, "speed": "blitz", "color": "black"},
+            params={"rating": 1400, "speed": "blitz", "color": "black"},
             headers={"x-foresight-client": "web-ui"},
         )
     assert resp.status_code == 200
@@ -178,7 +183,7 @@ async def test_global_shows_minor_on_query(app, monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         resp = await client.get(
             "/api/v1/opening-tier/global",
-            params={"rating": 1600, "speed": "blitz", "color": "black", "q": "queen"},
+            params={"rating": 1400, "speed": "blitz", "color": "black", "q": "queen"},
             headers={"x-foresight-client": "web-ui"},
         )
     assert resp.status_code == 200

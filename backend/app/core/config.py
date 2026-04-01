@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     # Optional CDN / account URL prefix for public blobs, e.g. https://acct.blob.core.windows.net/container
     AZURE_STORAGE_PUBLIC_BASE_URL: str = ""
 
+    # Supabase Storage (preferred when using Supabase deployment)
+    SUPABASE_URL: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_STORAGE_BUCKET: str = "avatars"
+    # Optional explicit public base URL. If empty, SUPABASE_URL 기반 기본 public URL을 사용.
+    SUPABASE_STORAGE_PUBLIC_BASE_URL: str = ""
+
     # Signup email verification (SMTP). If SMTP_HOST is empty, code request returns 503.
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
@@ -85,6 +92,9 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
     SMTP_USE_TLS: bool = True
+
+    # 미완료 가입자 자동 정리: signup_completed=False이고 이 시간 이상 경과한 유저 삭제 (시간 단위, 기본 24시간)
+    INCOMPLETE_SIGNUP_CLEANUP_HOURS: int = 24
 
     class Config:
         env_file = str(_ROOT_ENV)
