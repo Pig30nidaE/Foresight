@@ -35,7 +35,7 @@ async def test_assign_tiers_no_cache(monkeypatch):
 
     monkeypatch.setattr(svc, "_fetch_position", fake_fetch)
 
-    tiers, period, collected_at = await svc.get_opening_tiers(1600, "blitz", "white", allow_fetch_if_missing=True)
+    tiers, period, collected_at = await svc.get_opening_tiers(1400, "blitz", "white", allow_fetch_if_missing=True)
     assert tiers, "service should return at least one entry"
     assert tiers[0]["eco"] == "A00"
     assert tiers[0]["tier"] in ("S", "A", "B", "C", "D")
@@ -50,12 +50,12 @@ async def test_assign_tiers_no_cache(monkeypatch):
         return await fake_fetch(fen, rating, speed, since, until)
 
     monkeypatch.setattr(svc, "_fetch_position", counting_fetch)
-    tiers2, _, _ = await svc.get_opening_tiers(1600, "blitz", "white", allow_fetch_if_missing=True)
+    tiers2, _, _ = await svc.get_opening_tiers(1400, "blitz", "white", allow_fetch_if_missing=True)
     assert tiers2 == tiers
     assert called["count"] == 0, "cache hit should prevent additional fetching"
     # second call again: still cached
     called["count"] = 0
-    tiers3, _, _ = await svc.get_opening_tiers(1600, "blitz", "white", allow_fetch_if_missing=True)
+    tiers3, _, _ = await svc.get_opening_tiers(1400, "blitz", "white", allow_fetch_if_missing=True)
     assert tiers3 == tiers
     assert called["count"] == 0
 
@@ -69,7 +69,7 @@ async def test_fetch_failure_propagates(monkeypatch):
     monkeypatch.setattr(svc, "_fetch_position", none_fetch)
 
     with pytest.raises(RuntimeError):
-        await svc.get_opening_tiers(1600, "blitz", "white", allow_fetch_if_missing=True)
+        await svc.get_opening_tiers(1400, "blitz", "white", allow_fetch_if_missing=True)
 
 
 
@@ -77,8 +77,8 @@ async def test_fetch_failure_propagates(monkeypatch):
 def test_bracket_labels():
     svc = OpeningTierService()
     labels = svc.get_bracket_labels("blitz")
-    assert [l.lichess_rating for l in labels] == [1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500]
-    assert [l.label_chesscom for l in labels] == ["1000", "1200", "1400", "1600", "1800", "2000", "2200", "2500"]
+    assert [l.lichess_rating for l in labels] == [1000, 1400, 1800, 2200, 2500]
+    assert [l.label_chesscom for l in labels] == ["1000,1200", "1400,1600", "1800,2000", "2200", "2500"]
     assert all(l.label_lichess for l in labels)
     assert all(l.label_chesscom for l in labels)
 
@@ -134,12 +134,9 @@ def test_minor_variation_flag_without_level2_aggregation():
 
 
 def test_redesigned_rating_mapping_and_window():
-    assert _LICHESS_RATINGS_PARAMS[1000] == [1000]
-    assert _LICHESS_RATINGS_PARAMS[1200] == [1200]
-    assert _LICHESS_RATINGS_PARAMS[1400] == [1400]
-    assert _LICHESS_RATINGS_PARAMS[1600] == [1600]
-    assert _LICHESS_RATINGS_PARAMS[1800] == [1800]
-    assert _LICHESS_RATINGS_PARAMS[2000] == [2000]
+    assert _LICHESS_RATINGS_PARAMS[1000] == [1000, 1200]
+    assert _LICHESS_RATINGS_PARAMS[1400] == [1400, 1600]
+    assert _LICHESS_RATINGS_PARAMS[1800] == [1800, 2000]
     assert _LICHESS_RATINGS_PARAMS[2200] == [2200]
     assert _LICHESS_RATINGS_PARAMS[2500] == [2500]
     since, until = _compute_date_range()
@@ -178,7 +175,7 @@ async def test_catalog_uses_eco_range_for_opening_side(monkeypatch):
         }
 
     monkeypatch.setattr(svc, "_fetch_position", fake_fetch)
-    result = await svc._catalog_explore(1600, "blitz", "2026-02-01", "2026-02-28", min_games=100)
+    result = await svc._catalog_explore(1400, "blitz", "2026-02-01", "2026-02-28", min_games=100)
     assert "A46" in result
     # 이름에 Defense가 있어도 A46은 white 대역 규칙을 우선 적용
     assert result["A46"].opening_side == "white"
@@ -195,7 +192,104 @@ async def test_fetch_position_uses_redesigned_rating_bucket_mapping(monkeypatch)
 
     monkeypatch.setattr(svc, "_fetch_single", fake_fetch_single)
     fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    for rating in [1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500]:
+    for rating in [1000, 1400, 1800, 2200, 2500]:
         await svc._fetch_position(fen, rating, "blitz", "2026-02-01", "2026-02-28")
 
-    assert captured == ["1000", "1200", "1400", "1600", "1800", "2000", "2200", "2500"]
+    assert captured == ["1000,1200", "1400,1600", "1800,2000", "2200", "2500"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_single_falls_back_to_previous_month_when_current_month_empty(monkeypatch):
+    svc = OpeningTierService()
+
+    class DummyResp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class DummyClient:
+        calls = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, _url, params=None, headers=None):
+            DummyClient.calls.append(list(params or []))
+            q = dict(params or [])
+            # 첫 달(요청 월)은 0건, 이전 달은 데이터 존재
+            if q.get("since") == "2026-03":
+                return DummyResp({"white": 0, "draws": 0, "black": 0, "moves": []})
+            if q.get("since") == "2026-02":
+                return DummyResp({"white": 10, "draws": 5, "black": 5, "moves": []})
+            return DummyResp({"white": 0, "draws": 0, "black": 0, "moves": []})
+
+    monkeypatch.setattr(opening_tier_service.httpx, "AsyncClient", lambda timeout=10.0: DummyClient())
+
+    data = await svc._fetch_single(
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "1400,1600",
+        "blitz",
+        "2026-03-01",
+        "2026-03-31",
+    )
+
+    assert data is not None
+    assert data.get("white") == 10
+    months = [dict(c).get("since") for c in DummyClient.calls if dict(c).get("since")]
+    assert "2026-03" in months
+    assert "2026-02" in months
+
+
+@pytest.mark.asyncio
+async def test_fetch_single_uses_all_time_after_month_backoff_exhausted(monkeypatch):
+    svc = OpeningTierService()
+
+    class DummyResp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class DummyClient:
+        calls = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, _url, params=None, headers=None):
+            DummyClient.calls.append(list(params or []))
+            q = dict(params or [])
+            # 월 단위 조회는 항상 0건, all-time(날짜 파라미터 없음)에서만 데이터 제공
+            if "since" in q:
+                return DummyResp({"white": 0, "draws": 0, "black": 0, "moves": []})
+            return DummyResp({"white": 3, "draws": 1, "black": 2, "moves": []})
+
+    monkeypatch.setattr(opening_tier_service.httpx, "AsyncClient", lambda timeout=10.0: DummyClient())
+
+    data = await svc._fetch_single(
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "1400,1600",
+        "blitz",
+        "2026-03-01",
+        "2026-03-31",
+    )
+
+    assert data is not None
+    assert data.get("white") == 3
+    assert any("since" in dict(c) for c in DummyClient.calls)
+    assert any("since" not in dict(c) for c in DummyClient.calls)

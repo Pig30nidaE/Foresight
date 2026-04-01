@@ -102,17 +102,26 @@ FORESIGHT_CORS_ORIGINS=https://foresight.vercel.app,http://localhost:3000
 
 Preview 배포(`*.vercel.app`)까지 허용하려면 해당 origin도 콤마로 추가합니다.
 
-### 2.1 게시판(Forum) — PostgreSQL · Blob · JWT
+### 2.1 게시판(Forum) — PostgreSQL · Storage · JWT
 
-게시판 API는 `/api/v1/forum/*` 입니다. **Azure Database for PostgreSQL (Flexible Server)** 와 **Azure Storage Blob** 은 포털 또는 CLI로 별도 생성한 뒤, Container App 환경 변수(민감 값은 **시크릿** 권장)로 넣습니다.
+게시판 API는 `/api/v1/forum/*` 입니다. 프로필 업로드는 `/api/v1/upload`(마이페이지) 또는 `/api/v1/forum/upload`(호환) 경로를 사용합니다. 스토리지는 **Supabase Storage** 또는 **Azure Blob** 중 하나를 설정하세요.
 
 | 변수 | 용도 |
 |------|------|
 | `DATABASE_URL` | `postgresql+asyncpg://USER:PASS@HOST:5432/DB?ssl=require` 형식 (async SQLAlchemy) |
 | `JWT_SECRET` | **Vercel `AUTH_SECRET` 과 동일** — HS256 API 토큰 검증 |
+| `SUPABASE_URL` | Supabase 프로젝트 URL (예: `https://<project-ref>.supabase.co`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Storage 업로드 권한 키 (백엔드 전용) |
+| `SUPABASE_STORAGE_BUCKET` | Supabase 버킷 이름 (기본 `avatars`) |
+| `SUPABASE_STORAGE_PUBLIC_BASE_URL` | 선택. 공개 URL 베이스(예: CDN 도메인) |
 | `AZURE_STORAGE_CONNECTION_STRING` | 이미지 업로드 (`POST /api/v1/forum/upload`) |
 | `AZURE_STORAGE_CONTAINER` | Blob 컨테이너 이름 (기본 `forum-uploads`) |
 | `AZURE_STORAGE_PUBLIC_BASE_URL` | 선택. 공개 읽기 URL 베이스(예: `https://ACCOUNT.blob.core.windows.net/CONTAINER`) — 비우면 SDK가 준 Blob URL 사용 |
+
+스토리지 우선순위:
+1. Supabase (`SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` 설정 시)
+2. Azure Blob (`AZURE_STORAGE_CONNECTION_STRING` 설정 시)
+3. 둘 다 없으면 로컬 `/uploads/*` 폴백 (컨테이너 재시작 시 유실 가능, 운영 비권장)
 
 **마이그레이션** (로컬 또는 CI에서 DB에 연결 가능할 때):
 

@@ -39,22 +39,63 @@ def test_determine_tier_only_best_win_loss_small_cp_loss_can_be_large_is_t2():
 
 
 def test_promote_best_t2_to_t1():
-    def mv(hm, cp_loss, win_loss, rank, only_best, tier):
+    def mv(hm, cp_loss, win_loss, rank, only_best, tier, **extra):
         return AnalyzedMove(
             halfmove=hm, move_number=hm // 2 + 1, color="white", san="e4", uci="e2e4",
             cp_loss=cp_loss, win_pct_loss=win_loss,
             user_move_rank=rank, is_only_best=only_best, tier=tier,
+            **extra,
         )
 
     w = [
-        mv(0, 5, 0.5, 1, True, MoveTier.T2),
+        mv(0, 5, 0.5, 1, True, MoveTier.T2, best_gap_cp=90, is_decisive=True),
         mv(2, 8, 1.0, 1, False, MoveTier.T2),
     ]
     b = [mv(1, 3, 0.2, 1, True, MoveTier.T2)]
     _promote_best_t2_to_t1(w, b)
     t1s = [m for m in w + b if m.tier == MoveTier.T1]
     assert len(t1s) == 1
-    assert t1s[0].halfmove == 1  # cp_loss 3, win 0.2, only_best = best
+    assert t1s[0].halfmove == 0
+
+
+def test_promote_best_t2_to_t1_skips_when_no_rare_signal():
+    move = AnalyzedMove(
+        halfmove=0,
+        move_number=1,
+        color="white",
+        san="e4",
+        uci="e2e4",
+        cp_loss=2,
+        win_pct_loss=0.2,
+        user_move_rank=1,
+        is_only_best=True,
+        tier=MoveTier.T2,
+    )
+
+    promoted = _promote_best_t2_to_t1([move], [])
+    assert promoted is None
+    assert move.tier == MoveTier.T2
+
+
+def test_promote_best_t2_to_t1_accepts_sacrifice_signal():
+    move = AnalyzedMove(
+        halfmove=5,
+        move_number=3,
+        color="black",
+        san="Bxh2+",
+        uci="c7h2",
+        cp_loss=3,
+        win_pct_loss=0.4,
+        user_move_rank=1,
+        is_only_best=True,
+        tier=MoveTier.T2,
+        is_sacrifice=True,
+        sacrifice_value=3,
+    )
+
+    promoted = _promote_best_t2_to_t1([], [move])
+    assert promoted is move
+    assert move.tier == MoveTier.T1
 
 
 def test_accuracy_is_stabilized_in_mate_like_decisive_sequence():
@@ -86,3 +127,36 @@ def test_accuracy_is_stabilized_in_mate_like_decisive_sequence():
     acc = _compute_accuracy(moves)
     # 완화 로직이 없으면 한 자리 수 정확도로 급락할 수 있음.
     assert acc >= 90.0
+
+
+def test_accuracy_reflects_engine_alignment_and_cp_loss():
+    good = [
+        AnalyzedMove(
+            halfmove=1,
+            move_number=1,
+            color="white",
+            san="Nf3",
+            uci="g1f3",
+            cp_loss=4,
+            win_pct_loss=0.8,
+            user_move_rank=1,
+            top_moves=[{"uci": "g1f3", "rank": 1}],
+            tier=MoveTier.T2,
+        )
+    ]
+    bad = [
+        AnalyzedMove(
+            halfmove=1,
+            move_number=1,
+            color="white",
+            san="a3",
+            uci="a2a3",
+            cp_loss=60,
+            win_pct_loss=0.8,
+            user_move_rank=0,
+            top_moves=[{"uci": "g1f3", "rank": 1}],
+            tier=MoveTier.T5,
+        )
+    ]
+
+    assert _compute_accuracy(good) > _compute_accuracy(bad)

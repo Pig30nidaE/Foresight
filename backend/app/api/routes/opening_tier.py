@@ -6,10 +6,16 @@ GET  /api/v1/opening-tier/brackets  → 레이팅 구간 목록 (Lichess + Chess
 GET  /api/v1/opening-tier/detail    → 오프닝 핵심 포인트 + YouTube 링크
 GET  /api/v1/opening-tier/export    → CSV 또는 JSON 파일 다운로드
 """
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from app.features.opening_tier.services.opening_tier_service import OpeningTierService, RATING_BRACKETS
+from app.api.deps import get_current_user
+from app.db.models.forum import User
+from app.features.opening_tier.services.opening_tier_service import (
+    MAX_OPENINGS_DISPLAY,
+    OpeningTierService,
+    RATING_BRACKETS,
+)
 from app.features.opening_tier.services.opening_detail_service import get_opening_detail
 
 router = APIRouter()
@@ -53,7 +59,8 @@ def _validate_color(color: str) -> None:
 @router.get("/global")
 async def get_global_opening_tiers(
     request: Request,
-    rating: int = Query(..., description="Lichess 레이팅 bucket (1000/1200/1400/1600/1800/2000/2200/2500)"),
+    me: User = Depends(get_current_user),
+    rating: int = Query(..., description="Lichess 레이팅 bucket (1000/1400/1800/2200/2500)"),
     speed: str = Query("blitz", description="타임클래스 (bullet/blitz/rapid/classical)"),
     color: str = Query("white", description="기준 색상 (white/black)"),
     q: str | None = Query(None, min_length=1, max_length=80, description="오프닝 검색어 (ECO/이름)"),
@@ -66,6 +73,7 @@ async def get_global_opening_tiers(
 
     Lichess Explorer API 병렬 탐색으로 30–60초 소요될 수 있습니다.
     """
+    _ = me
     _validate_rating(rating)
     _validate_speed(speed)
     _validate_color(color)
@@ -95,6 +103,7 @@ async def get_global_opening_tiers(
     # 검색(query) 상황에서는 탐색 가능하도록 노출합니다.
     if not (q or "").strip():
         openings = [row for row in openings if not bool(row.get("is_minor", False))]
+    openings = openings[:MAX_OPENINGS_DISPLAY]
 
     return {
         "state": "ready",
@@ -111,9 +120,11 @@ async def get_global_opening_tiers(
 @router.get("/brackets")
 async def get_rating_brackets(
     request: Request,
+    me: User = Depends(get_current_user),
     speed: str = Query("blitz", description="타임클래스 (bullet/blitz/rapid/classical)"),
 ):
     """레이팅 구간 목록 반환 (Lichess 9개 구간 + Chess.com 변환 라벨)."""
+    _ = me
     _service = _get_service(request)
     _validate_speed(speed)
     brackets = _service.get_bracket_labels(speed)
@@ -125,6 +136,7 @@ async def get_rating_brackets(
 
 @router.get("/detail")
 async def get_opening_detail_route(
+    me: User = Depends(get_current_user),
     eco: str = Query(..., description="ECO 코드 (예: B20)"),
     name: str = Query(..., description="오프닝 이름 (예: Sicilian Defense)"),
     color: str = Query("white", description="기준 색상 (white/black)"),
@@ -134,6 +146,7 @@ async def get_opening_detail_route(
     color=white이면 백 입장에서의 핵심 아이디어,
     color=black이면 흑 입장에서의 핵심 아이디어를 반환합니다.
     """
+    _ = me
     _validate_color(color)
     try:
         result = await get_opening_detail(eco=eco, name=name, color=color)
@@ -145,6 +158,7 @@ async def get_opening_detail_route(
 @router.get("/export")
 async def export_opening_tiers(
     request: Request,
+    me: User = Depends(get_current_user),
     rating: int = Query(..., description="Lichess 레이팅 구간"),
     speed: str = Query("blitz", description="타임클래스"),
     color: str = Query("white", description="기준 색상 (white/black)"),
@@ -154,6 +168,7 @@ async def export_opening_tiers(
 
     캐시된 데이터가 있으면 즉시 반환, 없으면 탐색 후 반환합니다.
     """
+    _ = me
     _validate_rating(rating)
     _validate_speed(speed)
     _validate_color(color)
