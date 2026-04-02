@@ -3,6 +3,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import type { TimeClass } from "@/shared/types";
 import type { Color, OpeningTierEntry, Tier } from "@/features/opening-tier/types";
 import { getOpeningTiers, getRatingBrackets } from "@/features/opening-tier/api";
@@ -16,6 +18,8 @@ import PixelHudPanelChrome from "@/shared/components/ui/PixelHudPanelChrome";
 const TIER_ORDER: Tier[] = ["S", "A", "B", "C", "D"];
 
 export default function OpeningTierPage() {
+  const router = useRouter();
+  const { status } = useSession();
   const { t, language } = useTranslation();
   const [speed, setSpeed] = useState<TimeClass>("blitz");
   const [rating, setRating] = useState<number | null>(null);
@@ -31,6 +35,7 @@ export default function OpeningTierPage() {
   } = useQuery({
     queryKey: ["opening-tier-brackets", speed],
     queryFn: () => getRatingBrackets(speed),
+    enabled: status === "authenticated",
   });
 
   const brackets = bracketsData?.brackets ?? [];
@@ -52,7 +57,7 @@ export default function OpeningTierPage() {
   } = useQuery({
     queryKey: ["opening-tiers", rating, speed, color, searchQuery],
     queryFn: () => getOpeningTiers(rating as number, speed, color, searchQuery),
-    enabled: rating !== null,
+    enabled: status === "authenticated" && rating !== null,
     staleTime: 86_400_000 * 30,
     retry: 1,
     refetchInterval: (query) => {
@@ -87,6 +92,23 @@ export default function OpeningTierPage() {
     }
     return t("tier.error");
   }, [error, t]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/api/auth/signin?callbackUrl=%2Fopening-tier");
+    }
+  }, [status, router]);
+
+  if (status !== "authenticated") {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <div className="pixel-frame pixel-hud-fill px-5 py-10 text-center">
+          <p className="font-pixel text-sm text-chess-primary">로그인 확인 중...</p>
+          <p className="mt-2 text-xs text-chess-muted">잠시 후 로그인 화면으로 이동합니다.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (bracketsLoading) {
     return (

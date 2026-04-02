@@ -167,17 +167,32 @@ def _is_protected_account(user: User) -> bool:
     return (user.email or "").strip().lower() == _PROTECTED_ADMIN_EMAIL
 
 
-async def _assert_not_protected_content(db: AsyncSession, *, post: Post | None = None, comment: Comment | None = None) -> None:
+async def _assert_not_protected_content(
+    db: AsyncSession,
+    *,
+    actor: User | None = None,
+    post: Post | None = None,
+    comment: Comment | None = None,
+) -> None:
+    can_manage_own_protected_content = actor is not None and _is_admin_user(actor)
     if post is not None:
         author = await db.get(User, post.author_id)
-        if author is not None and _is_protected_account(author):
+        if (
+            author is not None
+            and _is_protected_account(author)
+            and not (can_manage_own_protected_content and post.author_id == actor.id)
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="보호 계정의 콘텐츠는 삭제/숨김할 수 없습니다.",
             )
     if comment is not None:
         author = await db.get(User, comment.author_id)
-        if author is not None and _is_protected_account(author):
+        if (
+            author is not None
+            and _is_protected_account(author)
+            and not (can_manage_own_protected_content and comment.author_id == actor.id)
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="보호 계정의 콘텐츠는 삭제/숨김할 수 없습니다.",
@@ -989,7 +1004,7 @@ async def delete_post(
     post = await db.get(Post, pid)
     if post is None or post.deleted_at is not None or post.is_hidden:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-    await _assert_not_protected_content(db, post=post)
+    await _assert_not_protected_content(db, actor=me, post=post)
     if not _can_edit_post(me, post):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     post.deleted_at = datetime.now(timezone.utc)
@@ -1099,7 +1114,7 @@ async def delete_comment(
     c = await db.get(Comment, cid)
     if c is None or c.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
-    await _assert_not_protected_content(db, comment=c)
+    await _assert_not_protected_content(db, actor=me, comment=c)
     if c.author_id != me.id and not _can_moderate_all_content(me):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     c.deleted_at = datetime.now(timezone.utc)
@@ -1289,7 +1304,7 @@ async def admin_hide_post(
     post = await db.get(Post, pid)
     if post is None or post.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-    await _assert_not_protected_content(db, post=post)
+    await _assert_not_protected_content(db, actor=me, post=post)
     post.is_hidden = True
     post.hidden_reason = payload.reason.strip()
     post.hidden_by_id = me.id
@@ -1348,7 +1363,7 @@ async def admin_hide_comment(
     comment = await db.get(Comment, cid)
     if comment is None or comment.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
-    await _assert_not_protected_content(db, comment=comment)
+    await _assert_not_protected_content(db, actor=me, comment=comment)
     comment.is_hidden = True
     comment.hidden_reason = payload.reason.strip()
     comment.hidden_by_id = me.id
