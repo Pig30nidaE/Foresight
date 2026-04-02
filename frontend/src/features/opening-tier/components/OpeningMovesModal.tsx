@@ -126,7 +126,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
           ) : (
             <div className="flex flex-col gap-6 p-5 sm:p-6">
               <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:items-start lg:gap-8">
-                <div className="mx-auto flex w-full max-w-[min(100%,24rem)] shrink-0 flex-col items-center lg:mx-0 lg:w-[min(26rem,42vw)] lg:max-w-[26rem]">
+                <div className="mx-auto flex w-full max-w-[min(100%,18.5rem)] shrink-0 flex-col items-center sm:max-w-[min(100%,22rem)] lg:mx-0 lg:w-[min(26rem,42vw)] lg:max-w-[26rem]">
                   <Chessboard
                     options={{
                       position: currentFen,
@@ -137,12 +137,12 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                       boardStyle: { width: "100%", aspectRatio: "1" },
                     }}
                   />
-                  <div className="mt-4 flex flex-wrap items-center justify-center gap-1">
+                  <div className="mt-3 grid w-full grid-cols-5 gap-1 sm:mt-4">
                     <button
                       type="button"
                       onClick={() => setCurrentIndex(0)}
                       disabled={currentIndex === 0}
-                      className="font-pixel pixel-btn min-h-10 min-w-10 px-3 py-2 text-xs text-chess-primary disabled:opacity-25"
+                      className="font-pixel pixel-btn min-h-10 w-full px-1.5 py-2 text-xs text-chess-primary disabled:opacity-25"
                     >
                       |&lt;
                     </button>
@@ -150,18 +150,18 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                       type="button"
                       onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
                       disabled={currentIndex === 0}
-                      className="font-pixel pixel-btn min-h-10 min-w-10 px-3 py-2 text-xs text-chess-primary disabled:opacity-25"
+                      className="font-pixel pixel-btn min-h-10 w-full px-1.5 py-2 text-xs text-chess-primary disabled:opacity-25"
                     >
                       &lt;
                     </button>
-                    <span className="w-20 text-center font-pixel text-xs tabular-nums text-chess-muted">
+                    <span className="flex min-h-10 items-center justify-center text-center font-pixel text-xs tabular-nums text-chess-muted">
                       {currentIndex}/{maxIndex}
                     </span>
                     <button
                       type="button"
                       onClick={() => setCurrentIndex((i) => Math.min(i + 1, maxIndex))}
                       disabled={currentIndex === maxIndex}
-                      className="font-pixel pixel-btn min-h-10 min-w-10 px-3 py-2 text-xs text-chess-primary disabled:opacity-25"
+                      className="font-pixel pixel-btn min-h-10 w-full px-1.5 py-2 text-xs text-chess-primary disabled:opacity-25"
                     >
                       &gt;
                     </button>
@@ -169,7 +169,7 @@ export default function OpeningMovesModal({ entry, onClose, color = "white" }: P
                       type="button"
                       onClick={() => setCurrentIndex(maxIndex)}
                       disabled={currentIndex === maxIndex}
-                      className="font-pixel pixel-btn min-h-10 min-w-10 px-3 py-2 text-xs text-chess-primary disabled:opacity-25"
+                      className="font-pixel pixel-btn min-h-10 w-full px-1.5 py-2 text-xs text-chess-primary disabled:opacity-25"
                     >
                       &gt;|
                     </button>

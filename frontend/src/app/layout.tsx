@@ -88,6 +88,9 @@ export default function RootLayout({
 
   return (
     <html lang="ko">
+      <head>
+        <meta name="google-adsense-account" content="ca-pub-5762865853978682" />
+      </head>
       <body
         className={`${jersey25.variable} ${vt323Legacy.variable} min-h-screen bg-[var(--background)] text-[var(--foreground)]`}
       >

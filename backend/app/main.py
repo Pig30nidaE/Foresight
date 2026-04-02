@@ -2,10 +2,12 @@ import asyncio
 import errno
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import OperationalError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -13,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.shared.services.lichess import LichessRateLimitedError
+from app.shared.services.incomplete_signup_cleanup import start_incomplete_signup_cleanup_task, stop_incomplete_signup_cleanup_task
 from app.api.routes import player, games, analysis, stats, engine, opening_tier, forum, game_analysis, profile
 from app.shared.services import opening_db
 
@@ -26,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """서버 시작 시 Lichess ECO 오프닝 데이터베이스를 로드합니다."""
+    """서버 시작 시 필요한 초기화 및 백그라운드 태스크를 시작합니다."""
     count = await opening_db.load_opening_db()
     logger.info(f"[Startup] Opening DB 준비 완료 — {count}개 ECO 코드")
 
@@ -41,7 +44,12 @@ async def lifespan(_app: FastAPI):
             opening_tier_svc.refresh_cache_for_all()
         )
     opening_tier_svc.start_midnight_cache_refresher()
+    
+    # 미완료 가입자 자동 정리 스케줄러 시작
+    _app.state.incomplete_signup_cleanup_task = await start_incomplete_signup_cleanup_task()
+    
     yield
+    
     # shutdown: 스케줄러 task 정리
     try:
         opening_tier_svc.stop_midnight_cache_refresher()
@@ -50,6 +58,11 @@ async def lifespan(_app: FastAPI):
     task = getattr(_app.state, "opening_tier_refresh_task", None)
     if task is not None:
         task.cancel()
+    
+    # 미완료 가입자 정리 태스크 중지
+    cleanup_task = getattr(_app.state, "incomplete_signup_cleanup_task", None)
+    if cleanup_task is not None:
+        stop_incomplete_signup_cleanup_task(cleanup_task)
 
 
 
@@ -64,6 +77,10 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+_LOCAL_UPLOADS_DIR = Path(__file__).resolve().parent.parent / "data" / "forum_uploads"
+_LOCAL_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_LOCAL_UPLOADS_DIR)), name="uploads")
 
 
 @app.middleware("http")

@@ -80,6 +80,13 @@ T6_MAX_WIN_PCT_LOSS = 22.0
 DECISIVE_CP_THRESHOLD = 700
 MATE_LIKE_CP_THRESHOLD = 9500
 
+T1_MIN_BRILLIANCY_SCORE = 60.0
+T1_ONLY_BEST_GAP_CP = 80
+T1_DECISIVE_PRE_CP_MAX = 350
+T1_DECISIVE_SWING_CP = 220
+T1_MAX_CP_LOSS = 8
+T1_MAX_WIN_PCT_LOSS = 1.2
+
 
 def _stabilize_win_pct_loss_for_accuracy(move: "AnalyzedMove") -> float:
     """메이트/결정적 우세 구간에서 정확도 과민 반응을 완화합니다.
@@ -116,16 +123,76 @@ def _stabilize_win_pct_loss_for_accuracy(move: "AnalyzedMove") -> float:
     return min(base_loss, softened)
 
 
+def _engine_alignment_score_for_accuracy(move: "AnalyzedMove") -> float:
+    """엔진 추천 순위 기반 정합도 점수(0~100)."""
+    top_moves = getattr(move, "top_moves", None) or []
+    if not top_moves:
+        # 엔진 랭킹 정보가 없으면 과도한 패널티를 주지 않는다.
+        return 100.0
+
+    rank = int(getattr(move, "user_move_rank", 0) or 0)
+    if rank == 1:
+        return 100.0
+    if rank == 2:
+        return 88.0
+    if rank == 3:
+        return 76.0
+    return 58.0
+
+
+def _cp_alignment_score_for_accuracy(move: "AnalyzedMove") -> float:
+    """센티폰 손실 기반 정합도 점수(0~100)."""
+    cp_loss = max(0.0, float(getattr(move, "cp_loss", 0.0) or 0.0))
+    penalty = min(45.0, math.sqrt(cp_loss) * 4.5)
+    return max(0.0, 100.0 - penalty)
+
+
+def _move_accuracy_score(move: "AnalyzedMove") -> float:
+    """승률 손실 + 엔진 정합도 + cp 손실을 합성한 per-move 정확도.
+    
+    T5(약 14% 이상 손실) 이상은 크리티컬하게 페널티를 준다:
+    - T5/T6는 "아쉬운 수/실수" 범주로 20~45점 범위에서만 점수 부여
+    - tier 기반 상한선을 적용해 T5/T6가 과도하게 높은 정확도를 받지 않도록
+    """
+    eff_wpl = _stabilize_win_pct_loss_for_accuracy(move)
+    wpl_accuracy = 103.1668 * math.exp(-0.04354 * eff_wpl) - 3.1669
+    wpl_accuracy = max(0.0, min(100.0, wpl_accuracy))
+
+    engine_alignment = _engine_alignment_score_for_accuracy(move)
+    cp_alignment = _cp_alignment_score_for_accuracy(move)
+
+    blended = (
+        (wpl_accuracy * 0.65)
+        + (engine_alignment * 0.20)
+        + (cp_alignment * 0.15)
+    )
+
+    if getattr(move, "is_only_best", False):
+        blended += 1.5
+
+    # 등급별 상한선: 실수(T5/T6)는 정확도 상한을 낮춘다
+    tier = getattr(move, "tier", None)
+    if tier is not None:
+        tier_str = tier.value if hasattr(tier, "value") else str(tier)
+        if tier_str == "T6":  # 실수: 상한 40
+            return max(0.0, min(40.0, blended))
+        elif tier_str == "T5":  # 보통: 상한 50
+            return max(0.0, min(50.0, blended))
+        # T1~T4, TH, TF는 일반 범위
+
+    return max(0.0, min(100.0, blended))
+
+
 def _compute_accuracy(analyzed_moves: list) -> float:
     """
-    per-move accuracy의 조화평균으로 게임 정확도 계산 (Lichess 방식)
+    per-move 정확도의 조화평균으로 게임 정확도 계산
 
-    - 각 수마다: acc_i = 103.1668 * exp(-0.04354 * wpl_i) - 3.1669
+    - 각 수마다: 승률손실 기반 정확도 + 엔진 추천 일치도 + cp 손실을 합성
     - 조화평균: n / sum(1 / acc_i) → 블런더에 더 민감하게 반응
     - TH(이론수) 제외: wpl≈0 이므로 acc≈100, 포함 시 인위적으로 정확도 상승
 
-    avg_wpl을 공식에 직접 대입하면 Jensen 부등식(볼록 함수)으로 인해
-    실제 값보다 항상 높게 계산되는 오류가 있으므로 이 방식으로 대체.
+    승률손실 단일 지표만으로는 엔진 추천수와의 정합도가 누락되므로,
+    게임 체감 품질(정확한 수 선택 여부)을 더 세밀하게 반영합니다.
     """
     # TH(이론수), TF(강제수)는 정확도 계산에서 제외
     non_th = [
@@ -137,9 +204,7 @@ def _compute_accuracy(analyzed_moves: list) -> float:
         return 0.0
     accs = []
     for m in non_th:
-        eff_wpl = _stabilize_win_pct_loss_for_accuracy(m)
-        acc = 103.1668 * math.exp(-0.04354 * eff_wpl) - 3.1669
-        accs.append(max(0.0, min(100.0, acc)))
+        accs.append(_move_accuracy_score(m))
     n = len(accs)
     # 조화평균: acc=0인 경우 0.01로 clamp해 ZeroDivision 방지
     harmonic = n / sum(1.0 / (a if a > 0.0 else 0.01) for a in accs)
@@ -197,6 +262,11 @@ class AnalyzedMove:
     top_moves: List[dict] = field(default_factory=list)  # 엔진 추천 상위 수들
     user_move_rank: int = 0  # 사용자 수의 엔진 랭킹 (1부터 시작, 0=순위권外)
     is_only_best: bool = False  # 유일한 최선수 여부
+    best_gap_cp: int = 0  # 1순위-2순위 평가 차이(cp)
+    cp_swing: int = 0  # 수 전후 평가 변화량(cp_after - cp_before)
+    is_decisive: bool = False  # 결정적 우세를 만든 수인지
+    is_sacrifice: bool = False  # 희생 성격(최선 응수로 즉시 재획득 허용)
+    sacrifice_value: int = 0  # 희생된 말 가치(폰=1, 나이트/비숍=3, 룩=5, 퀸=9)
 
 
 @dataclass
@@ -463,29 +533,138 @@ def _material_score(board: chess.Board, color: chess.Color) -> int:
     )
 
 
+def _is_decisive_t1_signal(cp_before: Optional[int], cp_after: Optional[int]) -> bool:
+    """T1 후보를 위한 결정타 신호 판정."""
+    if cp_before is None or cp_after is None:
+        return False
+    if cp_after <= 0:
+        return False
+
+    swing = cp_after - cp_before
+
+    if cp_after >= MATE_LIKE_CP_THRESHOLD and swing >= 120:
+        return True
+
+    if (
+        abs(cp_before) <= T1_DECISIVE_PRE_CP_MAX
+        and cp_after >= DECISIVE_CP_THRESHOLD
+        and swing >= T1_DECISIVE_SWING_CP
+    ):
+        return True
+
+    if cp_after >= 900 and swing >= 320:
+        return True
+
+    return False
+
+
+def _detect_sacrifice_on_best_reply(
+    board_after_move: chess.Board,
+    played_move: chess.Move,
+    moving_color: chess.Color,
+    after_pv: List[chess.engine.InfoDict],
+) -> Tuple[bool, int]:
+    """엔진 최선 응수 첫 수가 방금 둔 말을 즉시 잡는지 검사한다."""
+    if not after_pv:
+        return (False, 0)
+
+    try:
+        pv = after_pv[0].get("pv") or []
+        if not pv:
+            return (False, 0)
+
+        best_reply = pv[0]
+        if best_reply.to_square != played_move.to_square:
+            return (False, 0)
+        if not board_after_move.is_capture(best_reply):
+            return (False, 0)
+
+        moved_piece = board_after_move.piece_at(played_move.to_square)
+        if moved_piece is None or moved_piece.color != moving_color:
+            return (False, 0)
+
+        values = {
+            chess.PAWN: 1,
+            chess.KNIGHT: 3,
+            chess.BISHOP: 3,
+            chess.ROOK: 5,
+            chess.QUEEN: 9,
+        }
+        return (True, values.get(moved_piece.piece_type, 0))
+    except Exception:
+        return (False, 0)
+
+
+def _t1_candidate_score(move: AnalyzedMove) -> float:
+    """T1 후보 점수: 희생/결정타/유일최선 희소 신호를 합산."""
+    if move.tier != MoveTier.T2:
+        return 0.0
+    if move.user_move_rank != 1:
+        return 0.0
+    if move.cp_loss > T1_MAX_CP_LOSS or move.win_pct_loss > T1_MAX_WIN_PCT_LOSS:
+        return 0.0
+
+    score = 24.0
+    score += max(0.0, 14.0 - (move.cp_loss * 1.6))
+    score += max(0.0, 12.0 - (move.win_pct_loss * 8.0))
+
+    if move.is_only_best:
+        score += 10.0
+
+    if move.best_gap_cp >= T1_ONLY_BEST_GAP_CP:
+        score += min(20.0, 8.0 + ((move.best_gap_cp - T1_ONLY_BEST_GAP_CP) * 0.2))
+
+    if move.is_sacrifice:
+        if move.sacrifice_value >= 3:
+            score += 26.0
+        elif move.sacrifice_value >= 1:
+            score += 16.0
+
+    if move.is_decisive:
+        score += 24.0
+
+    # 전술 신호 없이 단순 정확수는 T1로 올리지 않음.
+    if not (move.is_sacrifice or move.is_decisive or move.best_gap_cp >= T1_ONLY_BEST_GAP_CP):
+        score -= 12.0
+
+    return score
+
+
 def _promote_best_t2_to_t1(
     white_moves: List[AnalyzedMove],
     black_moves: List[AnalyzedMove],
 ) -> Optional[AnalyzedMove]:
     """
-    T2 수 중 게임에서 가장 잘 둔 수 1개만 T1으로 승격.
-    정렬: cp_loss ↓, win_pct_loss ↓, is_only_best ↑, user_rank ↑
+    T2 수 중 희소 신호를 충족하는 수만 T1 후보로 보고,
+    점수가 가장 높은 1개만 T1으로 승격.
+
+    희소 신호 미충족 시 T1은 부여하지 않는다.
     승격된 수를 반환 (스트리밍 클라이언트에 tier 갱신 전송용).
     """
     pool = white_moves + black_moves
     t2_only = [m for m in pool if m.tier == MoveTier.T2]
     if not t2_only:
         return None
-    t2_only.sort(
-        key=lambda m: (
-            m.cp_loss,
-            m.win_pct_loss,
-            0 if m.is_only_best else 1,
-            0 if m.user_move_rank == 1 else 1,
-            m.halfmove,
+
+    scored_candidates: List[Tuple[float, AnalyzedMove]] = []
+    for move in t2_only:
+        score = _t1_candidate_score(move)
+        if score >= T1_MIN_BRILLIANCY_SCORE:
+            scored_candidates.append((score, move))
+
+    if not scored_candidates:
+        return None
+
+    scored_candidates.sort(
+        key=lambda item: (
+            -item[0],
+            item[1].cp_loss,
+            item[1].win_pct_loss,
+            item[1].halfmove,
         )
     )
-    promoted = t2_only[0]
+
+    promoted = scored_candidates[0][1]
     promoted.tier = MoveTier.T1
     return promoted
 
@@ -597,6 +776,7 @@ def analyze_single_game_sync(
                     user_rank = 0
                     is_only_best = False
                     best_cp = None
+                    best_gap_cp = 0
                     
                     if top_moves_raw:
                         best_cp = top_moves_raw[0][2]  # 1순위 수의 평가
@@ -611,10 +791,14 @@ def analyze_single_game_sync(
                         # 2순위와의 평가 차이가 충분히 클 때만 유일 최선으로 간주한다.
                         if len(top_moves_raw) >= 2:
                             second_cp = top_moves_raw[1][2]
+                            best_gap_cp = best_cp - second_cp
                             if best_cp - second_cp >= ONLY_BEST_MARGIN_CP and user_rank == 1:
                                 is_only_best = True
                         elif len(top_moves_raw) == 1 and user_rank == 1:
                             is_only_best = True
+
+                    cp_swing = (cp_after or 0) - (cp_before or 0)
+                    is_decisive = _is_decisive_t1_signal(cp_before, cp_after)
                     
                     # 등급 결정
                     tier = _determine_tier(
@@ -646,6 +830,9 @@ def analyze_single_game_sync(
                         top_moves=top_moves_info,
                         user_move_rank=user_rank,
                         is_only_best=is_only_best,
+                        best_gap_cp=best_gap_cp,
+                        cp_swing=cp_swing,
+                        is_decisive=is_decisive,
                     ))
                 else:
                     board.push(move)
@@ -685,7 +872,6 @@ def _analyze_single_move_with_fen(
     color_str = "white" if moving_color == chess.WHITE else "black"
 
     fen_before = board.fen()
-    material_before = _material_score(board, moving_color)
 
     # 1. TF 판정 (강제수)
     is_forced = False
@@ -747,7 +933,6 @@ def _analyze_single_move_with_fen(
     # ② After 포지션 세팅
     board.push(move)
     fen_after = board.fen()
-    material_after = _material_score(board, moving_color)
     epd_after = " ".join(fen_after.split()[:4])
 
     # TH 조기 종료
@@ -785,6 +970,13 @@ def _analyze_single_move_with_fen(
             # 기존 방식 (얕은 깊이)
             after_pv = engine.analyse(board, limit, multipv=3)
 
+    is_sacrifice, sacrifice_value = _detect_sacrifice_on_best_reply(
+        board,
+        move,
+        moving_color,
+        after_pv if isinstance(after_pv, list) else [],
+    )
+
     cp_after: Optional[int] = None
     try:
         cp_after = after_pv[0]["score"].pov(moving_color).score(mate_score=MATE_SCORE)
@@ -812,6 +1004,7 @@ def _analyze_single_move_with_fen(
 
     user_rank = 0
     is_only_best = False
+    best_gap_cp = 0
 
     if top_moves_raw:
         best_cp = top_moves_raw[0][2]
@@ -821,10 +1014,14 @@ def _analyze_single_move_with_fen(
                 break
         if len(top_moves_raw) >= 2:
             second_cp = top_moves_raw[1][2]
+            best_gap_cp = best_cp - second_cp
             if best_cp - second_cp >= ONLY_BEST_MARGIN_CP and user_rank == 1:
                 is_only_best = True
         elif len(top_moves_raw) == 1 and user_rank == 1:
             is_only_best = True
+
+    cp_swing = (cp_after or 0) - (cp_before or 0)
+    is_decisive = _is_decisive_t1_signal(cp_before, cp_after)
 
     # 등급 결정 (T1은 게임 종료 후 T2 중 최고의 수 1개로 확정)
     tier = _determine_tier(cp_loss, win_pct_loss, user_rank, is_only_best)
@@ -858,6 +1055,11 @@ def _analyze_single_move_with_fen(
         top_moves=top_moves_info,
         user_move_rank=user_rank,
         is_only_best=is_only_best,
+        best_gap_cp=best_gap_cp,
+        cp_swing=cp_swing,
+        is_decisive=is_decisive,
+        is_sacrifice=is_sacrifice,
+        sacrifice_value=sacrifice_value,
     )
     return analyzed_move, after_pv
 
@@ -1014,4 +1216,9 @@ def _analyzed_move_to_dict(m: AnalyzedMove) -> dict:
         "top_moves": m.top_moves,
         "user_move_rank": m.user_move_rank,
         "is_only_best": m.is_only_best,
+        "best_gap_cp": m.best_gap_cp,
+        "cp_swing": m.cp_swing,
+        "is_decisive": m.is_decisive,
+        "is_sacrifice": m.is_sacrifice,
+        "sacrifice_value": m.sacrifice_value,
     }
