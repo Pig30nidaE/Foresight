@@ -227,12 +227,19 @@ export function PixelMagnifyGlyph({ className = "", size = 14 }: GProps) {
   return (
     <svg {...base(size)} className={`shrink-0 inline-block align-[-0.1em] ${className}`}>
       <g fill="currentColor">
-        <rect x="3" y="2" width="6" height="1" />
-        <rect x="2" y="3" width="1" height="6" />
-        <rect x="9" y="3" width="1" height="6" />
-        <rect x="3" y="8" width="6" height="1" />
+        {/* 원형 부분 */}
+        <rect x="2" y="2" width="2" height="2" />
+        <rect x="4" y="1" width="4" height="2" />
+        <rect x="8" y="2" width="2" height="2" />
+        <rect x="1" y="4" width="2" height="4" />
+        <rect x="9" y="4" width="2" height="4" />
+        <rect x="2" y="8" width="2" height="2" />
+        <rect x="4" y="9" width="4" height="2" />
+        <rect x="8" y="8" width="2" height="2" />
+        {/* 손잡이 */}
+        <rect x="9" y="9" width="2" height="2" />
+        <rect x="11" y="11" width="2" height="2" />
         <rect x="10" y="10" width="2" height="2" />
-        <rect x="12" y="12" width="2" height="2" />
       </g>
     </svg>
   );

@@ -167,17 +167,32 @@ def _is_protected_account(user: User) -> bool:
     return (user.email or "").strip().lower() == _PROTECTED_ADMIN_EMAIL
 
 
-async def _assert_not_protected_content(db: AsyncSession, *, post: Post | None = None, comment: Comment | None = None) -> None:
+async def _assert_not_protected_content(
+    db: AsyncSession,
+    *,
+    actor: User | None = None,
+    post: Post | None = None,
+    comment: Comment | None = None,
+) -> None:
+    can_manage_own_protected_content = actor is not None and _is_admin_user(actor)
     if post is not None:
         author = await db.get(User, post.author_id)
-        if author is not None and _is_protected_account(author):
+        if (
+            author is not None
+            and _is_protected_account(author)
+            and not (can_manage_own_protected_content and post.author_id == actor.id)
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="보호 계정의 콘텐츠는 삭제/숨김할 수 없습니다.",
             )
     if comment is not None:
         author = await db.get(User, comment.author_id)
-        if author is not None and _is_protected_account(author):
+        if (
+            author is not None
+            and _is_protected_account(author)
+            and not (can_manage_own_protected_content and comment.author_id == actor.id)
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="보호 계정의 콘텐츠는 삭제/숨김할 수 없습니다.",
@@ -366,10 +381,16 @@ async def update_my_profile(
         if raw is None or (isinstance(raw, str) and not str(raw).strip()):
             me.avatar_sync_oauth = False
             me.avatar_url = None
+            changed = True
         else:
-            me.avatar_url = _validate_avatar_url_value(str(raw))
-            me.avatar_sync_oauth = False
-        changed = True
+            try:
+                validated_url = _validate_avatar_url_value(str(raw))
+                # Explicitly set avatar_url first, then set avatar_sync_oauth
+                me.avatar_url = validated_url
+                me.avatar_sync_oauth = False
+                changed = True
+            except HTTPException:
+                raise  # Re-raise validation errors immediately
 
     if _is_protected_account(me):
         if me.display_name != _PROTECTED_ADMIN_DISPLAY_NAME:
@@ -414,20 +435,23 @@ async def get_my_posts(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
 ):
+    # Optimize: Use window function COUNT(*)OVER() to get total in single query instead of 2 queries
     where_posts = (Post.author_id == me.id, Post.deleted_at.is_(None))
-    total = (
-        await db.execute(select(func.count()).select_from(Post).where(*where_posts))
-    ).scalar_one()
     offset = (page - 1) * page_size
-    rows = (
-        await db.execute(
-            select(Post)
-            .where(*where_posts)
-            .order_by(Post.created_at.desc())
-            .offset(offset)
-            .limit(page_size)
+    stmt = (
+        select(
+            Post,
+            func.count(Post.id).over().label('_total')
         )
-    ).scalars().all()
+        .where(*where_posts)
+        .order_by(Post.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    rows_with_total = result.all()
+    total = rows_with_total[0][1] if rows_with_total else 0
+    rows = [r[0] for r in rows_with_total]
     return MyPostListResponse(
         total=int(total),
         items=[
@@ -452,30 +476,29 @@ async def get_my_comments(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
 ):
+    # Optimize: Use window function COUNT(*)OVER() to get total in single query instead of 2 queries
     where_comments = (
         Comment.author_id == me.id,
         Comment.deleted_at.is_(None),
         Post.deleted_at.is_(None),
     )
-    total = (
-        await db.execute(
-            select(func.count())
-            .select_from(Comment)
-            .join(Post, Post.id == Comment.post_id)
-            .where(*where_comments)
-        )
-    ).scalar_one()
     offset = (page - 1) * page_size
-    rows = (
-        await db.execute(
-            select(Comment, Post)
-            .join(Post, Post.id == Comment.post_id)
-            .where(*where_comments)
-            .order_by(Comment.created_at.desc())
-            .offset(offset)
-            .limit(page_size)
+    stmt = (
+        select(
+            Comment,
+            Post,
+            func.count(Comment.id).over().label('_total')
         )
-    ).all()
+        .join(Post, Post.id == Comment.post_id)
+        .where(*where_comments)
+        .order_by(Comment.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    rows_with_total = result.all()
+    total = rows_with_total[0][2] if rows_with_total else 0
+    rows = [(r[0], r[1]) for r in rows_with_total]
     return MyCommentListResponse(
         total=int(total),
         items=[
@@ -981,7 +1004,7 @@ async def delete_post(
     post = await db.get(Post, pid)
     if post is None or post.deleted_at is not None or post.is_hidden:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-    await _assert_not_protected_content(db, post=post)
+    await _assert_not_protected_content(db, actor=me, post=post)
     if not _can_edit_post(me, post):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     post.deleted_at = datetime.now(timezone.utc)
@@ -1091,7 +1114,7 @@ async def delete_comment(
     c = await db.get(Comment, cid)
     if c is None or c.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
-    await _assert_not_protected_content(db, comment=c)
+    await _assert_not_protected_content(db, actor=me, comment=c)
     if c.author_id != me.id and not _can_moderate_all_content(me):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     c.deleted_at = datetime.now(timezone.utc)
@@ -1281,7 +1304,7 @@ async def admin_hide_post(
     post = await db.get(Post, pid)
     if post is None or post.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-    await _assert_not_protected_content(db, post=post)
+    await _assert_not_protected_content(db, actor=me, post=post)
     post.is_hidden = True
     post.hidden_reason = payload.reason.strip()
     post.hidden_by_id = me.id
@@ -1340,7 +1363,7 @@ async def admin_hide_comment(
     comment = await db.get(Comment, cid)
     if comment is None or comment.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
-    await _assert_not_protected_content(db, comment=comment)
+    await _assert_not_protected_content(db, actor=me, comment=comment)
     comment.is_hidden = True
     comment.hidden_reason = payload.reason.strip()
     comment.hidden_by_id = me.id
@@ -1401,5 +1424,10 @@ async def upload_forum_image(
             detail="Unsupported file type",
         )
     name = file.filename or "upload"
-    url = await upload_image_bytes(data, content_type=mime, original_filename=name)
+    url = await upload_image_bytes(
+        data,
+        content_type=mime,
+        original_filename=name,
+        public_base_url=str(request.base_url),
+    )
     return UploadResponse(url=url, content_type=mime)

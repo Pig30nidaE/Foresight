@@ -2,6 +2,7 @@
 
 import { useState, useReducer, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { signIn, useSession } from "next-auth/react";
 
 import { getRecentGamesList } from "../api";
 import { streamGameAnalysis } from "@/shared/lib/api";
@@ -124,6 +125,25 @@ function ResultBadge({
       <span className="w-1.5 h-1.5 rounded-full bg-current" />
       <span className="ml-1 leading-none opacity-100">{t(labelKey as I18nKey)}</span>
     </div>
+  );
+}
+
+function PlayerColorBadge({ color, className = "w-4 h-4" }: { color: "white" | "black"; className?: string }) {
+  if (color === "white") {
+    return (
+      <div 
+        className={`${className} rounded-full shrink-0 shadow-sm border-2 bg-white border-gray-800 dark:border-gray-700`}
+        title="White"
+        aria-label="White"
+      />
+    );
+  }
+  return (
+    <div 
+      className={`${className} rounded-full shrink-0 shadow-sm border-[2px] bg-gray-800 dark:bg-gray-900 border-white dark:border-gray-400`}
+      title="Black"
+      aria-label="Black"
+    />
   );
 }
 
@@ -322,6 +342,7 @@ function useAnalysisStream(
 // ─────────────────────────────────────────────
 function GameCard({ game, username }: { game: GameSummaryItem; username: string }) {
   const { t, language } = useTranslation();
+  const { status } = useSession();
   const { stockfishDepth } = useSettings();
   const [open, setOpen] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
@@ -353,9 +374,10 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
   }, [analysisData, selectedMove]);
 
   const isWhite = game.white.toLowerCase() === username.toLowerCase();
-  const myColor  = isWhite ? t("gh.card.white") : t("gh.card.black");
-  const MyKingGlyph   = isWhite ? PixelKingWhiteGlyph : PixelKingBlackGlyph;
-  const OppKingGlyph  = isWhite ? PixelKingBlackGlyph : PixelKingWhiteGlyph;
+  const isSignedIn = status === "authenticated";
+  const myColorLabel  = isWhite ? t("gh.card.white") : t("gh.card.black");
+  const myColor = isWhite ? "white" : "black";
+  const oppColor = isWhite ? "black" : "white";
   const opponent = isWhite ? game.black : game.white;
 
   const myRating  = isWhite ? game.rating_white  : game.rating_black;
@@ -454,13 +476,13 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
               </p>
               <div className="flex items-center gap-2 sm:gap-3 text-sm sm:text-sm text-chess-muted flex-wrap">
                 <span className="flex items-center gap-1 min-w-0">
-                  <MyKingGlyph size={16} className={`shrink-0 ${isWhite ? "text-chess-primary" : "text-chess-muted"}`} />
+                  <PlayerColorBadge color={myColor} />
                   <span className="font-medium text-chess-primary truncate max-w-[min(100%,7.5rem)] sm:max-w-none">{username}</span>
                   {myRating != null && <span className="text-chess-muted hidden sm:inline shrink-0">({myRating})</span>}
                 </span>
                 <span className="text-chess-muted/55 shrink-0">vs</span>
                 <span className="flex items-center gap-1 min-w-0">
-                  <OppKingGlyph size={16} className={`shrink-0 ${!isWhite ? "text-chess-primary" : "text-chess-muted"}`} />
+                  <PlayerColorBadge color={oppColor} />
                   <span className="font-medium text-chess-primary truncate max-w-[min(100%,7.5rem)] sm:max-w-none">{opponent}</span>
                   {oppRating != null && <span className="text-chess-muted hidden sm:inline shrink-0">({oppRating})</span>}
                 </span>
@@ -488,10 +510,10 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
             <div className="flex items-center justify-between gap-2">
               {/* 나 */}
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                <MyKingGlyph size={22} className={`shrink-0 ${isWhite ? "text-chess-primary" : "text-chess-muted"}`} />
+                <PlayerColorBadge color={myColor} className="w-5 h-5 sm:w-6 sm:h-6" />
                 <div className="min-w-0">
                   <p className="text-sm sm:text-base font-bold text-chess-accent truncate">{username}</p>
-                  <p className="text-xs sm:text-sm text-chess-muted">{myColor}{myRating != null ? ` · ${myRating}` : ""}</p>
+                  <p className="text-xs sm:text-sm text-chess-muted">{myColorLabel}{myRating != null ? ` · ${myRating}` : ""}</p>
                 </div>
               </div>
 
@@ -519,7 +541,7 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                   <p className="text-sm sm:text-base font-bold text-chess-primary truncate">{opponent}</p>
                   <p className="text-xs sm:text-sm text-chess-muted">{isWhite ? t("gh.card.black") : t("gh.card.white")}{oppRating != null ? ` · ${oppRating}` : ""}</p>
                 </div>
-                <OppKingGlyph size={22} className={`shrink-0 ${!isWhite ? "text-chess-primary" : "text-chess-muted"}`} />
+                <PlayerColorBadge color={oppColor} className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
             </div>
           </div>
@@ -586,6 +608,10 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
             <div className="px-3 sm:px-6 pb-4 flex flex-col gap-2">
               <button
                 onClick={() => {
+                  if (!isSignedIn) {
+                    signIn();
+                    return;
+                  }
                   if (isAnalyzedAtCurrentDepth) {
                     setShowAnalysis((v) => !v);
                     return;
@@ -600,6 +626,11 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                   <>
                     <PixelHourglassGlyph className="animate-pulse text-chess-accent" size={18} />
                     <span>{t("gh.btn.analyzing")}</span>
+                  </>
+                ) : !isSignedIn ? (
+                  <>
+                    <PixelTargetGlyph className="text-chess-accent" size={16} />
+                    <span>{t("gh.btn.signInToAnalyze")}</span>
                   </>
                 ) : isAnalyzedAtCurrentDepth && showAnalysis ? (
                   <>
@@ -618,6 +649,9 @@ function GameCard({ game, username }: { game: GameSummaryItem; username: string 
                   </>
                 )}
               </button>
+              {!isSignedIn && (
+                <p className="text-xs text-chess-muted">{t("gh.analyze.loginRequired")}</p>
+              )}
             </div>
           )}
 
@@ -726,6 +760,8 @@ const MOVE_TIER_DESC_KEY: Record<MoveTier, I18nKey> = {
   T6: "tier.t6.desc",
 };
 
+const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 /** API `win_pct_*`는 방금 수를 둔 색 관점 → 포지션 기준 백 승률(0~100)으로 통일 */
 function whiteWinPercentAfterMove(m: AnalyzedMove): number {
   const w = m.color === "white" ? m.win_pct_after : 100 - m.win_pct_after;
@@ -826,6 +862,9 @@ function GameAnalysisPanel({
   const fullIdx = selectedMove
     ? combinedMoves.findIndex((m) => m.halfmove === selectedMove.halfmove)
     : -1;
+
+  // 보드는 선택한 수가 반영된 상태(fen_after)를 표시해 기보 선택과 동기화한다.
+  const boardFen = selectedMove?.fen_after || INITIAL_FEN;
 
   const goToPrev = () => {
     if (combinedMoves.length === 0) return;
@@ -943,7 +982,7 @@ function GameAnalysisPanel({
             {/* 보드 */}
             <div className="w-full max-w-[400px] xl:mx-0">
               <ChessBoard
-                fen={selectedMove?.fen_after || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}
+                fen={boardFen}
                 size={400}
                 lastMove={selectedMove ? {
                   from: selectedMove.uci.substring(0, 2),
@@ -959,7 +998,9 @@ function GameAnalysisPanel({
                   if (!best?.uci || best.uci.length < 4) return [];
                   const from = best.uci.substring(0, 2);
                   const to = best.uci.substring(2, 4);
-                  return [{ startSquare: from, endSquare: to, color: "rgba(59,130,246,0.7)" }];
+                  // 화살표 색상: 백색 수(짝수 halfmove)는 검은색, 흑색 수(홀수 halfmove)는 노란색
+                  const arrowColor = selectedMove.color === "white" ? "rgba(255, 255, 255, 0.7)" : "rgba(0, 0, 0, 0.6)";
+                  return [{ startSquare: from, endSquare: to, color: arrowColor }];
                 })()}
               />
             </div>
@@ -1167,16 +1208,11 @@ function GameAnalysisPanel({
                         isSelected ? "bg-chess-accent/10 border-l-4 border-l-chess-accent" : "hover:bg-chess-surface/60 border-l-4 border-l-transparent"
                       }`}
                     >
-                      {/* 색 인디케이터 */}
-                      <div
-                        className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[15px] sm:text-[15px] shrink-0 font-bold border shadow-sm ${
-                          move.color === "white"
-                            ? "bg-white text-gray-800 border-gray-200"
-                            : "bg-gray-800 text-white border-gray-900"
-                        }`}
-                      >
-                        {move.color === "white" ? "W" : "B"}
-                      </div>
+                      {/* 색 인디케이터 — 흰색/검은색 원형 배지 */}
+                      <PlayerColorBadge
+                        color={move.color}
+                        className="w-5 h-5 sm:w-6 sm:h-6"
+                      />
                       {/* 티어 뱃지 */}
                       <span
                         className="w-7 sm:w-8 text-center shrink-0 rounded text-[15px] sm:text-[15px] font-black py-0.5 text-white shadow-sm"

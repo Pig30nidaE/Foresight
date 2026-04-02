@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import queue as thread_queue
+import re
 import threading
 import time
 from collections import OrderedDict
@@ -23,10 +24,11 @@ from contextlib import asynccontextmanager
 from functools import partial
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Depends, Request
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
+from app.api.deps import get_current_user
 from app.core.config import settings
 from app.ml.game_analyzer import (
     analyze_game_streaming,
@@ -37,12 +39,47 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_RE_PGN_ECO = re.compile(r'\[ECO\s+"([^"]+)"\]')
+_RE_PGN_OPENING = re.compile(r'\[Opening\s+"([^"]+)"\]')
+_RE_PGN_VARIATION = re.compile(r'\[Variation\s+"([^"]+)"\]')
+
+
+def _fallback_opening_from_pgn(pgn: str) -> Dict[str, Any]:
+    """PGN 헤더만으로 최소 오프닝 정보를 복구합니다.
+
+    opening DB가 비어 있거나 과거 캐시에 opening={} 이 저장된 경우에도
+    UI에서 오프닝명이 비지 않도록 ECO/Opening/Variation 헤더를 사용합니다.
+    """
+    if not pgn:
+        return {}
+    eco_m = _RE_PGN_ECO.search(pgn)
+    opening_m = _RE_PGN_OPENING.search(pgn)
+    variation_m = _RE_PGN_VARIATION.search(pgn)
+
+    eco = eco_m.group(1).strip() if eco_m else None
+    name = opening_m.group(1).strip() if opening_m else None
+    if name and variation_m:
+        var = variation_m.group(1).strip()
+        if var:
+            name = f"{name}: {var}"
+
+    payload: Dict[str, Any] = {}
+    if eco:
+        payload["eco"] = eco
+    if name:
+        payload["name"] = name
+    return payload
+
 # STOCKFISH_CONCURRENT > 0 이면 레플리카 내에서만 상한. 0이면 유저 간 앱 레벨 대기열 없음.
 _analysis_sem: Optional[asyncio.Semaphore] = (
     asyncio.Semaphore(settings.STOCKFISH_CONCURRENT)
     if settings.STOCKFISH_CONCURRENT > 0
     else None
 )
+
+_user_slot_map_lock = asyncio.Lock()
+_user_analysis_locks: Dict[str, asyncio.Lock] = {}
+_user_analysis_refcounts: Dict[str, int] = {}
 
 
 @asynccontextmanager
@@ -52,6 +89,60 @@ async def _analysis_concurrency_slot() -> AsyncIterator[None]:
     else:
         async with _analysis_sem:
             yield
+
+
+@asynccontextmanager
+async def _user_serial_slot(user_key: str) -> AsyncIterator[None]:
+    """동일 사용자 요청은 순차 실행되도록 직렬 슬롯을 제공합니다."""
+    async with _user_slot_map_lock:
+        lock = _user_analysis_locks.get(user_key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _user_analysis_locks[user_key] = lock
+        _user_analysis_refcounts[user_key] = _user_analysis_refcounts.get(user_key, 0) + 1
+
+    try:
+        async with lock:
+            yield
+    finally:
+        async with _user_slot_map_lock:
+            refs = _user_analysis_refcounts.get(user_key, 0) - 1
+            if refs <= 0:
+                _user_analysis_refcounts.pop(user_key, None)
+                cur = _user_analysis_locks.get(user_key)
+                if cur is not None and not cur.locked():
+                    _user_analysis_locks.pop(user_key, None)
+            else:
+                _user_analysis_refcounts[user_key] = refs
+
+
+@asynccontextmanager
+async def _analysis_execution_slot(user_key: str) -> AsyncIterator[None]:
+    """동일 사용자 직렬화 + 전역 동시성 제어를 결합한 실행 슬롯."""
+    async with _user_serial_slot(user_key):
+        async with _analysis_concurrency_slot():
+            yield
+
+
+def _resolve_requester_key(http_request: Request, current_user: Any) -> str:
+    user_id = getattr(current_user, "id", None)
+    if user_id is not None:
+        return f"user:{hashlib.sha1(str(user_id).encode()).hexdigest()[:16]}"
+
+    public_id = getattr(current_user, "public_id", None)
+    if public_id:
+        return f"user:{hashlib.sha1(str(public_id).encode()).hexdigest()[:16]}"
+
+    email = (getattr(current_user, "email", "") or "").strip().lower()
+    if email:
+        return f"user:{hashlib.sha1(email.encode()).hexdigest()[:16]}"
+
+    # 마지막 fallback (비인증/예외 상황)
+    if http_request.client and http_request.client.host:
+        ip = http_request.client.host
+    else:
+        ip = "unknown"
+    return f"anon:{hashlib.sha1(ip.encode()).hexdigest()[:16]}"
 
 # ── SSE 완료 결과 캐시 (동일 게임·동일 depth 재요청 시 재사용) ─────────────
 _CACHE_MAXSIZE = 50
@@ -156,12 +247,16 @@ def _run_analysis(
             q.put({"type": "error", "message": "PGN 파싱 실패 또는 Stockfish를 찾을 수 없습니다."})
             return
 
+        opening_payload: Dict[str, Any] = result.opening or {}
+        if not opening_payload:
+            opening_payload = _fallback_opening_from_pgn(pgn)
+
         complete_evt = {
             "type": "complete",
             "game_id": result.game_id,
             "white": _summary_from_result(result.white_analysis),
             "black": _summary_from_result(result.black_analysis),
-            "opening": result.opening or {},
+            "opening": opening_payload,
         }
         q.put(complete_evt)
 
@@ -185,6 +280,7 @@ def _run_analysis(
 async def analyze_game_stream(
     http_request: Request,
     game_req: GameAnalysisRequest = Body(...),
+    current_user=Depends(get_current_user),
 ):
     """
     **SSE 스트리밍 게임 분석**
@@ -206,23 +302,36 @@ async def analyze_game_stream(
             yield f"data: {json.dumps({'type': 'error', 'message': 'PGN이 필요합니다.'}, ensure_ascii=False)}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
 
+    requester_key = _resolve_requester_key(http_request, current_user)
+
     ck = _cache_key(game_req.game_id, game_req.pgn, game_req.stockfish_depth)
     cached = _cache_get(ck)
     if cached is not None:
         logger.info(f"[Game Analysis SSE Cache HIT] key={ck[0]} depth={ck[1]}")
 
+        cached_init_event = dict(cached.init_event)
+        cached_complete_event = dict(cached.complete_event)
+        opening_payload = cached_complete_event.get("opening")
+        if not isinstance(opening_payload, dict) or not opening_payload:
+            fallback_opening = _fallback_opening_from_pgn(game_req.pgn)
+            if fallback_opening:
+                cached_complete_event["opening"] = fallback_opening
+                cached.complete_event = dict(cached_complete_event)
+                cached_init_event["opening"] = fallback_opening
+                cached.init_event = dict(cached_init_event)
+
         async def replay_cached():
             yield f"data: {json.dumps({'type': 'queued'})}\n\n"
             if await http_request.is_disconnected():
                 return
-            yield f"data: {json.dumps(cached.init_event, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(cached_init_event, ensure_ascii=False)}\n\n"
             for mv in cached.move_events:
                 if await http_request.is_disconnected():
                     return
                 yield f"data: {json.dumps(mv, ensure_ascii=False)}\n\n"
             if await http_request.is_disconnected():
                 return
-            yield f"data: {json.dumps(cached.complete_event, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(cached_complete_event, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(
             replay_cached(),
@@ -237,14 +346,14 @@ async def analyze_game_stream(
     async def event_generator():
         yield f"data: {json.dumps({'type': 'queued'})}\n\n"
 
-        async with _analysis_concurrency_slot():
+        async with _analysis_execution_slot(requester_key):
             cancel_event = threading.Event()
             q: thread_queue.Queue = thread_queue.Queue()
             loop = asyncio.get_event_loop()
 
             logger.info(
-                f"[Game Analysis SSE Start] game_id={game_req.game_id!r} "
-                f"depth={game_req.stockfish_depth}"
+                f"[Game Analysis SSE Start] requester={requester_key} "
+                f"game_id={game_req.game_id!r} depth={game_req.stockfish_depth}"
             )
 
             future = loop.run_in_executor(
