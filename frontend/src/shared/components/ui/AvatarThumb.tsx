@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { resolveAvatarUrl } from "@/shared/lib/avatarUrl";
 
 type Props = {
@@ -18,6 +20,13 @@ export default function AvatarThumb({
   className = "",
   variant = "plain",
 }: Props) {
+  const resolvedSrc = resolveAvatarUrl(src);
+  const [imgSrc, setImgSrc] = useState(resolvedSrc);
+
+  useEffect(() => {
+    setImgSrc(resolvedSrc);
+  }, [resolvedSrc]);
+
   const frame =
     variant === "hud"
       ? "border-2 border-chess-border bg-chess-surface shadow-[2px_2px_0_color-mix(in_srgb,var(--color-chess-primary)_14%,transparent)] dark:shadow-[2px_2px_0_rgba(0,0,0,0.5)]"
@@ -26,13 +35,18 @@ export default function AvatarThumb({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={resolveAvatarUrl(src)}
+      src={imgSrc}
       alt={alt}
       width={size}
       height={size}
       className={`shrink-0 object-cover rounded-[var(--pixel-radius)] ${frame} ${className}`}
       style={{ width: size, height: size, imageRendering: "pixelated" }}
       referrerPolicy="no-referrer"
+      onError={() => {
+        // If uploaded avatar URL becomes invalid, fall back to default avatar.
+        const fallback = resolveAvatarUrl(null);
+        if (imgSrc !== fallback) setImgSrc(fallback);
+      }}
     />
   );
 }
