@@ -19,7 +19,7 @@ import {
   PixelMagnifyGlyph,
   PixelPawnGlyph,
 } from "@/shared/components/ui/PixelGlyphs";
-import { resolveAvatarUrl } from "@/shared/lib/avatarUrl";
+import { DEFAULT_AVATAR_PATH, resolveAvatarUrl } from "@/shared/lib/avatarUrl";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
 
@@ -398,6 +398,9 @@ function DashboardContent() {
                 className="w-12 h-12 sm:w-16 sm:h-16 rounded-[var(--pixel-radius)] border-2 border-chess-border shrink-0 object-cover"
                 style={{ imageRendering: "pixelated" }}
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.src = DEFAULT_AVATAR_PATH;
+                }}
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">

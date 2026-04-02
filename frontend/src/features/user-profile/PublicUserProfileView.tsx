@@ -7,7 +7,7 @@ import { ChevronRight, FileText, MessageCircle } from "lucide-react";
 
 import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
-import { resolveAvatarUrl } from "@/shared/lib/avatarUrl";
+import { DEFAULT_AVATAR_PATH, resolveAvatarUrl } from "@/shared/lib/avatarUrl";
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDateTime } from "@/shared/lib/formatLocaleDate";
 import { forumPostHref } from "@/shared/lib/forumPostHref";
@@ -176,6 +176,9 @@ export default function PublicUserProfileView() {
                         alt=""
                         className="h-24 w-24 object-cover pixel-frame sm:h-28 sm:w-28"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.src = DEFAULT_AVATAR_PATH;
+                        }}
                       />
                     )}
                   </div>
