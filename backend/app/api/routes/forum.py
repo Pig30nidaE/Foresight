@@ -1429,5 +1429,6 @@ async def upload_forum_image(
         content_type=mime,
         original_filename=name,
         public_base_url=str(request.base_url),
+        object_prefix="profile",
     )
     return UploadResponse(url=url, content_type=mime)

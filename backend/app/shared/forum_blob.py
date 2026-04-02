@@ -1,6 +1,7 @@
 import os
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from azure.storage.blob.aio import BlobServiceClient
@@ -9,12 +10,24 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 
 
+def _is_local_host_base_url(base_url: str | None) -> bool:
+    raw = (base_url or "").strip()
+    if not raw:
+        return False
+    try:
+        host = (urlparse(raw).hostname or "").strip().lower()
+    except Exception:
+        return False
+    return host in {"localhost", "127.0.0.1", "::1"} or host.endswith(".local")
+
+
 async def upload_image_bytes(
     data: bytes,
     *,
     content_type: str,
     original_filename: str,
     public_base_url: str | None = None,
+    object_prefix: str = "profile",
 ) -> str:
     ext = os.path.splitext(original_filename)[1].lower()
     if ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
@@ -26,11 +39,13 @@ async def upload_image_bytes(
         }.get(content_type.lower(), ".bin")
     object_name = f"{uuid.uuid4().hex}{ext}"
 
+    safe_prefix = (object_prefix or "").strip().strip("/") or "profile"
+
     supabase_url = (settings.SUPABASE_URL or "").strip().rstrip("/")
     supabase_service_key = (settings.SUPABASE_SERVICE_ROLE_KEY or "").strip()
     if supabase_url and supabase_service_key:
         bucket = (settings.SUPABASE_STORAGE_BUCKET or "avatars").strip()
-        object_key = f"forum/{object_name}"
+        object_key = f"{safe_prefix}/{object_name}"
         upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{object_key}"
         headers = {
             "Authorization": f"Bearer {supabase_service_key}",
@@ -56,6 +71,16 @@ async def upload_image_bytes(
 
     # Local fallback for environments without Azure Blob configuration.
     if not conn:
+        # In deployed environments, local disk uploads are ephemeral and cause broken avatar URLs.
+        if not _is_local_host_base_url(public_base_url):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Image storage is not configured for deployment. "
+                    "Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY "
+                    "or AZURE_STORAGE_CONNECTION_STRING."
+                ),
+            )
         backend_root = Path(__file__).resolve().parent.parent.parent
         local_dir = backend_root / "data" / "forum_uploads"
         local_dir.mkdir(parents=True, exist_ok=True)
