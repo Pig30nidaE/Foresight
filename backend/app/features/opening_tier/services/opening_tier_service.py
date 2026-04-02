@@ -110,6 +110,7 @@ CACHE_DIR = (
 _LATEST_CACHE_PATH = CACHE_DIR / "opening_tier_latest.json"
 _CACHE_STAMP_FORMAT = "%Y-%m-%d"
 _MONTH_FALLBACK_STEPS = 12
+_SUPABASE_CACHE_OBJECT_KEY = "system/opening_tier_latest.json"
 
 
 def _date_str(d: date) -> str:
@@ -261,6 +262,56 @@ class OpeningTierService:
         if self._refresh_lock is None:
             self._refresh_lock = asyncio.Lock()
 
+    @staticmethod
+    def _supabase_cache_config() -> Optional[Tuple[str, str, str]]:
+        supabase_url = (settings.SUPABASE_URL or "").strip().rstrip("/")
+        service_key = (settings.SUPABASE_SERVICE_ROLE_KEY or "").strip()
+        bucket = (settings.SUPABASE_STORAGE_BUCKET or "avatars").strip()
+        if not supabase_url or not service_key or not bucket:
+            return None
+        return supabase_url, service_key, bucket
+
+    async def _load_cache_payload_from_supabase(self) -> Optional[Dict[str, Any]]:
+        cfg = self._supabase_cache_config()
+        if cfg is None:
+            return None
+        supabase_url, service_key, bucket = cfg
+        object_url = f"{supabase_url}/storage/v1/object/{bucket}/{_SUPABASE_CACHE_OBJECT_KEY}"
+        headers = {
+            "Authorization": f"Bearer {service_key}",
+            "apikey": service_key,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(object_url, headers=headers)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return json.loads(resp.text)
+        except Exception as exc:
+            logger.warning("Opening tier cache load from Supabase failed: %s", exc)
+            return None
+
+    def _persist_cache_payload_to_supabase(self, payload: Dict[str, Any]) -> None:
+        cfg = self._supabase_cache_config()
+        if cfg is None:
+            return
+        supabase_url, service_key, bucket = cfg
+        object_url = f"{supabase_url}/storage/v1/object/{bucket}/{_SUPABASE_CACHE_OBJECT_KEY}"
+        headers = {
+            "Authorization": f"Bearer {service_key}",
+            "apikey": service_key,
+            "Content-Type": "application/json",
+            "x-upsert": "true",
+        }
+        try:
+            body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(object_url, content=body, headers=headers)
+            resp.raise_for_status()
+        except Exception as exc:
+            logger.warning("Opening tier cache persist to Supabase skipped: %s", exc)
+
     async def load_cache_from_disk_if_valid(self) -> bool:
         """디스크 캐시를 로드합니다.
 
@@ -272,11 +323,27 @@ class OpeningTierService:
         await self._ensure_async_primitives()
         assert self._cache_ready is not None
 
-        if not _LATEST_CACHE_PATH.exists():
-            return False
+        raw: Optional[Dict[str, Any]] = None
+        if _LATEST_CACHE_PATH.exists():
+            try:
+                raw = json.loads(_LATEST_CACHE_PATH.read_text(encoding="utf-8"))
+            except Exception as exc:
+                logger.warning("Opening tier local cache read failed: %s", exc)
+
+        if raw is None:
+            raw = await self._load_cache_payload_from_supabase()
+            if raw is None:
+                return False
+            try:
+                _LATEST_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                _LATEST_CACHE_PATH.write_text(
+                    json.dumps(raw, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except Exception as exc:
+                logger.warning("Opening tier cache local mirror skipped: %s", exc)
 
         try:
-            raw = json.loads(_LATEST_CACHE_PATH.read_text(encoding="utf-8"))
             if raw.get("logic_version") != CACHE_LOGIC_VERSION:
                 return False
             items: Dict[str, List[Dict[str, Any]]] = raw.get("items", {})
@@ -295,6 +362,8 @@ class OpeningTierService:
             self._rolling_window_start = since
             self._rolling_window_end = until
             self._cache_ready.set()
+            # Keep a shared snapshot so new replicas can load cache without cold re-fetch.
+            self._persist_cache_payload_to_supabase(raw)
             logger.info("Opening tier cache loaded from disk (stamp=%s)", stamp)
             return True
         except Exception as exc:
@@ -323,6 +392,7 @@ class OpeningTierService:
         tmp_path = _LATEST_CACHE_PATH.with_suffix(".tmp")
         tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp_path.replace(_LATEST_CACHE_PATH)
+        self._persist_cache_payload_to_supabase(payload)
 
     def start_midnight_cache_refresher(self) -> None:
         """매월 1일 UTC 00:00에 전달 데이터로 캐시를 일괄 재계산합니다."""
@@ -614,6 +684,7 @@ class OpeningTierService:
             tmp_path = _LATEST_CACHE_PATH.with_suffix(".tmp")
             tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             tmp_path.replace(_LATEST_CACHE_PATH)
+            self._persist_cache_payload_to_supabase(payload)
 
             self._tier_cache = new_items
             self._cache_since = self._rolling_window_start or since
