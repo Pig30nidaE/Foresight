@@ -2,7 +2,9 @@
 # workflow_dispatch — 수동 실행
 #
 # Secrets:
-#   AZURE_CREDENTIALS, AZURE_RESOURCE_GROUP, AZURE_ACR_NAME, AZURE_API_APP_NAME
+#   AZURE_RESOURCE_GROUP, AZURE_ACR_NAME, AZURE_API_APP_NAME
+#   (권장 OIDC) AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   (폴백) AZURE_CREDENTIALS
 #
 # docs/azure-deployment.md 참고
 
@@ -26,7 +28,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Azure Login (OIDC)
+        if: ${{ secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != '' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Azure Login (Service Principal JSON Fallback)
+        if: ${{ !(secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != '') }}
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
