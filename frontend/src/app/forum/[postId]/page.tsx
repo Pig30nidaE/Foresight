@@ -6,11 +6,12 @@ import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { notFound, useParams, usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-import ForumBoardEditOverlay from "@/app/forum/ForumBoardEditOverlay";
-import ForumBoardPeekCard from "@/app/forum/ForumBoardPeekCard";
-import ForumRecordedMoveChips from "@/app/forum/ForumRecordedMoveChips";
-import ForumPgnReplay from "@/app/forum/ForumPgnReplay";
-import ForumPostThumbnail from "@/app/forum/ForumPostThumbnail";
+import ForumBoardEditOverlay from "@/features/forum/components/ForumBoardEditOverlay";
+import ForumBoardPeekCard from "@/features/forum/components/ForumBoardPeekCard";
+import ForumRecordedMoveChips from "@/features/forum/components/ForumRecordedMoveChips";
+import ForumPgnReplay from "@/features/forum/components/ForumPgnReplay";
+import ForumPostThumbnail from "@/features/forum/components/ForumPostThumbnail";
+import { type CommentItem, type PostDetail } from "@/features/forum";
 import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
 import {
@@ -49,38 +50,11 @@ function isForumAdminAuthor(role?: string | null) {
   return (role ?? "").toLowerCase().trim() === "admin";
 }
 
-type CommentItem = {
-  id: string;
-  body: string;
-  created_at: string;
-  parent_comment_id?: string | null;
-  can_edit?: boolean;
-  author: { id: string; public_id: string; display_name: string; role?: string; avatar_url?: string | null };
-};
-
 type EditChessSnapshot = {
   pgnText: string | null;
   fenInitial: string | null;
   finalFenNorm: string | null;
   annotations: BoardAnnotations;
-};
-
-type PostDetail = {
-  id: string;
-  public_id: string;
-  title: string;
-  body: string;
-  pgn_text: string | null;
-  fen_initial: string | null;
-  board_annotations?: unknown;
-  board_category?: string | null;
-  author: { id: string; public_id: string; display_name: string; role?: string; avatar_url?: string | null };
-  created_at: string;
-  like_count: number;
-  comment_count: number;
-  liked_by_me: boolean;
-  can_edit: boolean;
-  comments: CommentItem[];
 };
 
 const inputClass =

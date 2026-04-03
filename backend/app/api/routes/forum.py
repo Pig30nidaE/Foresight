@@ -1,5 +1,3 @@
-import base64
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated
@@ -53,204 +51,35 @@ from app.shared.signup_helpers import (
     mask_email_for_display,
     normalize_email,
 )
-from app.shared.display_name import normalize_display_name
 from app.shared.forum_blob import upload_image_bytes
 from app.shared.forum_board_annotations import validate_board_annotations_payload
 from app.shared.forum_chess import thumbnail_fen_for_post, validate_fen_optional, validate_pgn_optional
-from app.shared.forum_public_id import new_post_public_id, try_parse_uuid
+from app.shared.forum_public_id import try_parse_uuid
+from app.features.community.services.forum_service import (
+    next_unique_public_id as _next_unique_public_id,
+    load_visible_post_by_route_key as _load_visible_post_by_route_key,
+    encode_cursor as _encode_cursor,
+    decode_cursor as _decode_cursor,
+    author_out as _author_out,
+    comment_visible_for_detail as _comment_visible_for_detail,
+    ordered_threaded_comments as _ordered_threaded_comments,
+    is_admin_user as _is_admin_user,
+    can_moderate_all_content as _can_moderate_all_content,
+    can_edit_post as _can_edit_post,
+    is_protected_account as _is_protected_account,
+    assert_not_protected_content as _assert_not_protected_content,
+    normalize_display_name_value as _normalize_display_name,
+    is_display_name_taken as _is_display_name_taken,
+    validate_avatar_url_value as _validate_avatar_url_value,
+    build_me_response as _me_response,
+)
 
 router = APIRouter()
 
 _PREVIEW_LEN = 280
 _MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 _ALLOWED_MIME = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
-_PROTECTED_ADMIN_EMAIL = "pig30nidae@gmail.com"
 _PROTECTED_ADMIN_DISPLAY_NAME = "관리자"
-
-
-async def _next_unique_public_id(db: AsyncSession) -> str:
-    for _ in range(64):
-        nid = new_post_public_id()
-        taken = await db.scalar(
-            select(func.count()).select_from(Post).where(Post.public_id == nid)
-        )
-        if not taken:
-            return nid
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Could not allocate post id",
-    )
-
-
-async def _load_visible_post_by_route_key(db: AsyncSession, post_id: str) -> Post | None:
-    pid_uuid = try_parse_uuid(post_id)
-    stmt = (
-        select(Post)
-        .options(selectinload(Post.author), selectinload(Post.comments).selectinload(Comment.author))
-        .where(Post.deleted_at.is_(None), Post.is_hidden.is_(False))
-    )
-    if pid_uuid is not None:
-        stmt = stmt.where(Post.id == pid_uuid)
-    else:
-        stmt = stmt.where(Post.public_id == post_id)
-    return (await db.execute(stmt)).scalar_one_or_none()
-
-
-def _encode_cursor(created_at: datetime, post_id: uuid.UUID) -> str:
-    payload = json.dumps({"t": created_at.isoformat(), "i": str(post_id)})
-    return base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
-
-
-def _decode_cursor(raw: str) -> tuple[datetime, uuid.UUID]:
-    try:
-        pad = "=" * (-len(raw) % 4)
-        data = json.loads(base64.urlsafe_b64decode(raw + pad).decode())
-        return datetime.fromisoformat(data["t"]), uuid.UUID(data["i"])
-    except (ValueError, KeyError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid cursor",
-        ) from exc
-
-
-def _author_out(user: User) -> AuthorOut:
-    return AuthorOut(
-        id=user.id,
-        public_id=user.public_id,
-        display_name=user.display_name,
-        avatar_url=user.avatar_url,
-        role=user.role,
-    )
-
-
-def _comment_visible_for_detail(c: Comment) -> bool:
-    return c.deleted_at is None and not c.is_hidden
-
-
-def _ordered_threaded_comments(comments: list[Comment]) -> list[Comment]:
-    """Roots first (by created_at), then direct replies under each root; orphans last."""
-    vis = [c for c in comments if _comment_visible_for_detail(c)]
-    roots = [c for c in vis if c.parent_comment_id is None]
-    roots.sort(key=lambda x: x.created_at)
-    ordered: list[Comment] = []
-    seen: set[uuid.UUID] = set()
-    for r in roots:
-        ordered.append(r)
-        seen.add(r.id)
-        children = [c for c in vis if c.parent_comment_id == r.id]
-        children.sort(key=lambda x: x.created_at)
-        for ch in children:
-            ordered.append(ch)
-            seen.add(ch.id)
-    for c in vis:
-        if c.id not in seen:
-            ordered.append(c)
-    return ordered
-
-
-def _is_admin_user(user: User) -> bool:
-    return (user.role or "").strip().lower() == "admin"
-
-
-def _can_moderate_all_content(user: User) -> bool:
-    r = (user.role or "").strip().lower()
-    return r in ("admin", "moderator")
-
-
-def _can_edit_post(me: User, post: Post) -> bool:
-    if post.board_category in ("notice", "patch"):
-        return _is_admin_user(me)
-    return post.author_id == me.id or _can_moderate_all_content(me)
-
-
-def _is_protected_account(user: User) -> bool:
-    return (user.email or "").strip().lower() == _PROTECTED_ADMIN_EMAIL
-
-
-async def _assert_not_protected_content(
-    db: AsyncSession,
-    *,
-    actor: User | None = None,
-    post: Post | None = None,
-    comment: Comment | None = None,
-) -> None:
-    can_manage_own_protected_content = actor is not None and _is_admin_user(actor)
-    if post is not None:
-        author = await db.get(User, post.author_id)
-        if (
-            author is not None
-            and _is_protected_account(author)
-            and not (can_manage_own_protected_content and post.author_id == actor.id)
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="보호 계정의 콘텐츠는 삭제/숨김할 수 없습니다.",
-            )
-    if comment is not None:
-        author = await db.get(User, comment.author_id)
-        if (
-            author is not None
-            and _is_protected_account(author)
-            and not (can_manage_own_protected_content and comment.author_id == actor.id)
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="보호 계정의 콘텐츠는 삭제/숨김할 수 없습니다.",
-            )
-
-
-def _normalize_display_name(value: str) -> str:
-    return normalize_display_name(value)
-
-
-async def _is_display_name_taken(db: AsyncSession, *, my_user_id: uuid.UUID, display_name: str) -> bool:
-    name_key = display_name.strip().lower()
-    taken = await db.scalar(
-        select(func.count())
-        .select_from(User)
-        .where(
-            User.id != my_user_id,
-            func.lower(func.trim(User.display_name)) == name_key,
-        )
-    )
-    return bool(taken)
-
-
-def _validate_avatar_url_value(url: str) -> str:
-    u = url.strip()
-    if len(u) > 2048:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Avatar URL too long")
-    if not u.startswith(("https://", "http://")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Avatar URL must start with http:// or https://",
-        )
-    return u
-
-
-async def _me_response(db: AsyncSession, me: User) -> MeResponse:
-    norm = normalize_email(me.email)
-    other = await find_user_with_same_email(db, my_user_id=me.id, email_normalized=norm)
-    email_conflict = other is not None and not me.signup_completed
-    masked_conflict = mask_email_for_display(norm) if (email_conflict and norm) else None
-    needs_email_verification = (
-        False
-    )
-    email_verified = True
-    return MeResponse(
-        id=me.id,
-        public_id=me.public_id,
-        email=me.email,
-        display_name=me.display_name,
-        avatar_url=me.avatar_url,
-        role=me.role,
-        signup_completed=me.signup_completed,
-        profile_public=me.profile_public,
-        email_conflict=email_conflict,
-        masked_conflict_email=masked_conflict,
-        needs_email_verification=needs_email_verification,
-        email_verified=email_verified,
-    )
 
 
 @router.get("/me", response_model=MeResponse)

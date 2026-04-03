@@ -6,11 +6,12 @@ import { ChevronDown, ChevronUp, Loader2, PenLine } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-import ForumBoardEditOverlay from "@/app/forum/ForumBoardEditOverlay";
-import ForumBoardPeekCard from "@/app/forum/ForumBoardPeekCard";
-import ForumRecordedMoveChips from "@/app/forum/ForumRecordedMoveChips";
-import ForumPgnReplay from "@/app/forum/ForumPgnReplay";
-import ForumPostThumbnail from "@/app/forum/ForumPostThumbnail";
+import ForumBoardEditOverlay from "@/features/forum/components/ForumBoardEditOverlay";
+import ForumBoardPeekCard from "@/features/forum/components/ForumBoardPeekCard";
+import ForumRecordedMoveChips from "@/features/forum/components/ForumRecordedMoveChips";
+import ForumPgnReplay from "@/features/forum/components/ForumPgnReplay";
+import ForumPostThumbnail from "@/features/forum/components/ForumPostThumbnail";
+import { fetchForumPosts, fetchMyWritePermission, type PostItem, type PostListResponse } from "@/features/forum";
 import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
 import {
@@ -33,35 +34,6 @@ import { PixelChatGlyph, PixelHeartGlyph } from "@/shared/components/ui/PixelGly
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDate } from "@/shared/lib/formatLocaleDate";
 import { forumPostHref } from "@/shared/lib/forumPostHref";
-
-type PostItem = {
-  id: string;
-  public_id: string;
-  title: string;
-  body_preview: string;
-  author: {
-    id: string;
-    public_id: string;
-    display_name: string;
-    role?: string;
-    avatar_url?: string | null;
-  };
-  created_at: string;
-  like_count: number;
-  comment_count: number;
-  thumbnail_fen?: string | null;
-  has_pgn?: boolean;
-  has_fen?: boolean;
-  /** 목록에서 수순 재생 (API `PostListItem.pgn_text`) */
-  pgn_text?: string | null;
-  board_category?: string | null;
-};
-
-type PostListResponse = {
-  items: PostItem[];
-  next_cursor: string | null;
-  next_page?: number | null;
-};
 
 function resetComposeState(setters: {
   setCreateTitle: (v: string) => void;
@@ -128,19 +100,13 @@ export default function ForumPage() {
     setPostsError(null);
     try {
       const isRankSort = sort === "likes" || sort === "comments";
-      const params: Record<string, string | number> = {
+      const data = await fetchForumPosts({
         sort,
         limit: pageSize,
-      };
-      const normalized = searchQuery.trim();
-      if (normalized) {
-        params.q = normalized;
-      }
-      if (append) {
-        if (isRankSort && nextPage) params.page = nextPage;
-        if (!isRankSort && nextCursor) params.cursor = nextCursor;
-      }
-      const { data } = await api.get<PostListResponse>("/forum/posts", { params });
+        q: searchQuery.trim() || undefined,
+        cursor: append && !isRankSort ? nextCursor : undefined,
+        page: append && isRankSort ? nextPage : undefined,
+      });
       const items = data.items ?? [];
       setPosts((prev) => (append ? [...prev, ...items] : items));
       setNextCursor(data.next_cursor ?? null);
@@ -174,10 +140,8 @@ export default function ForumPage() {
         setMeError(t("forum.error.backendJwt"));
         return;
       }
-      const meRes = await api.get("/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setCanWrite(Boolean(meRes.data?.signup_completed));
+      const canWrite = await fetchMyWritePermission(token);
+      setCanWrite(canWrite);
     } catch (e: unknown) {
       setCanWrite(false);
       const err = e as { response?: { data?: { detail?: string } } };

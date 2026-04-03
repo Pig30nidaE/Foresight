@@ -14,7 +14,7 @@ import { noticeListBadgeClass, patchListBadgeClass } from "@/shared/components/f
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDate } from "@/shared/lib/formatLocaleDate";
 import { forumPostHref } from "@/shared/lib/forumPostHref";
-import ForumPostThumbnail from "@/app/forum/ForumPostThumbnail";
+import ForumPostThumbnail from "@/features/forum/components/ForumPostThumbnail";
 
 type BoardKind = "notice" | "patch" | "free";
 

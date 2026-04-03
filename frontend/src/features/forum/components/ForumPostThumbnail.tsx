@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Chessboard } from "react-chessboard";
 
-import ForumBoardAnnotationLayer from "@/app/forum/ForumBoardAnnotationLayer";
+import ForumBoardAnnotationLayer from "@/features/forum/components/ForumBoardAnnotationLayer";
 import { normalizeFenForDisplay, positionsFromPgnText } from "@/shared/lib/forumChess";
 import {
   highlightsToSquareStyles,
