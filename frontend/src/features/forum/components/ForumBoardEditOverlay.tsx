@@ -4,8 +4,8 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 
-import ForumPositionEditor, { type ForumAnnotationTool } from "@/app/forum/ForumPositionEditor";
-import ForumRecordedMoveChips from "@/app/forum/ForumRecordedMoveChips";
+import ForumPositionEditor, { type ForumAnnotationTool } from "@/features/forum/components/ForumPositionEditor";
+import ForumRecordedMoveChips from "@/features/forum/components/ForumRecordedMoveChips";
 import {
   applyFenStringToBoard,
   DEFAULT_START_FEN,

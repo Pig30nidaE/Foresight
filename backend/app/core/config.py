@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 60
     JWT_ISSUER: str = "foresight.local"
 
+    # Forum: protected admin email - cannot be deleted/hidden by others
+    PROTECTED_ADMIN_EMAIL: str = "pig30nidae@gmail.com"
+
     # Azure Blob (forum image upload)
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER: str = "forum-uploads"

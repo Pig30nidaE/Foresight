@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Chessboard } from "react-chessboard";
 
-import ForumBoardAnnotationLayer from "@/app/forum/ForumBoardAnnotationLayer";
+import ForumBoardAnnotationLayer from "@/features/forum/components/ForumBoardAnnotationLayer";
 import { positionsFromPgnText } from "@/shared/lib/forumChess";
 import {
   highlightsToSquareStyles,

@@ -4,7 +4,7 @@ import { useId, useMemo, useState, type CSSProperties } from "react";
 import { Chessboard, ChessboardProvider, SparePiece } from "react-chessboard";
 import { fenStringToPositionObject } from "react-chessboard";
 
-import ForumBoardAnnotationLayer from "@/app/forum/ForumBoardAnnotationLayer";
+import ForumBoardAnnotationLayer from "@/features/forum/components/ForumBoardAnnotationLayer";
 import {
   applyPieceDropToFen,
   DEFAULT_START_FEN,
