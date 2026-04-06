@@ -4,12 +4,12 @@ import { useMemo } from "react";
 import { Chessboard } from "react-chessboard";
 
 import ForumBoardAnnotationLayer from "@/app/forum/ForumBoardAnnotationLayer";
-import { normalizeFenForDisplay, positionsFromPgnText } from "@/shared/lib/forumChess";
+import { normalizeFenForDisplay, positionsFromPgnText } from "@/features/forum/lib/forumChess";
 import {
   highlightsToSquareStyles,
   mergeAnnotationsForReplayIndex,
   normalizeBoardAnnotationsFromApi,
-} from "@/shared/lib/forumBoardAnnotations";
+} from "@/features/forum/lib/forumBoardAnnotations";
 
 const PLACEHOLDER_SRC = "/forum/thumbnail.svg";
 

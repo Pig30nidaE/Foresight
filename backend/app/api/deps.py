@@ -9,13 +9,7 @@ from app.core.security import decode_access_token
 from app.db.models.forum import User
 from app.db.session import get_async_session
 from app.shared.forum_public_id import next_unique_user_public_id
-
-_PROTECTED_ADMIN_EMAIL = "pig30nidae@gmail.com"
-_PROTECTED_ADMIN_DISPLAY_NAME = "관리자"
-
-
-def _is_protected_admin_email(email: str | None) -> bool:
-    return (email or "").strip().lower() == _PROTECTED_ADMIN_EMAIL
+from app.shared.protected_admin import is_protected_admin_email, protected_admin_display_name
 
 
 def _bearer_token(authorization: str | None) -> str | None:
@@ -125,9 +119,9 @@ async def upsert_user_from_claims(db: AsyncSession, claims: dict) -> User:
         )
         db.add(user)
 
-    if _is_protected_admin_email(user.email):
+    if is_protected_admin_email(user.email):
         user.role = "admin"
-        user.display_name = _PROTECTED_ADMIN_DISPLAY_NAME
+        user.display_name = protected_admin_display_name()
 
     try:
         await db.commit()

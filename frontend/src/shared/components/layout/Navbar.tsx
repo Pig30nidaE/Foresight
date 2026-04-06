@@ -198,12 +198,12 @@ export default function Navbar() {
                 </button>
               </div>
             ) : (
-              <a
+              <Link
                 href="/api/auth/signin?callbackUrl=%2Fpost-login"
                 className="text-sm font-medium text-chess-accent hover:underline px-2 py-1"
               >
                 {t("nav.signIn")}
-              </a>
+              </Link>
             )}
 
             <form onSubmit={handleSearch} className="flex items-center gap-1.5">
@@ -279,13 +279,13 @@ export default function Navbar() {
                   </button>
                 </div>
               ) : (
-                <a
+                <Link
                   href="/api/auth/signin?callbackUrl=%2Fpost-login"
                   className="w-full text-center py-3 pixel-btn bg-chess-accent text-white text-sm font-semibold border-chess-accent"
                   onClick={() => closeMenu()}
                 >
                   {t("nav.signIn")}
-                </a>
+                </Link>
               )}
             </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
-import type { BoardAnnotations } from "@/shared/lib/forumBoardAnnotations";
-import { FORUM_ANNOTATION_SYMBOL_COLORS } from "@/shared/lib/forumBoardAnnotations";
+import type { BoardAnnotations } from "@/features/forum/lib/forumBoardAnnotations";
+import { FORUM_ANNOTATION_SYMBOL_COLORS } from "@/features/forum/lib/forumBoardAnnotations";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 const RANKS_DESC = [8, 7, 6, 5, 4, 3, 2, 1] as const;

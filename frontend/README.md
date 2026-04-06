@@ -1,36 +1,29 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frontend Module Notes
 
-## Getting Started
+Foresight 프론트엔드(Next.js App Router) 하위 모듈 문서입니다.
 
-First, run the development server:
+## 실행
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+기본 접속 주소: <http://localhost:3000>
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 레이어 가이드
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `src/app`: 라우트 엔트리(페이지/레이아웃), thin wrapper 우선
+- `src/features`: 도메인 기능 모듈
+- `src/shared`: 공통 UI/유틸/타입
 
-## Learn More
+## 리팩토링 경계 규칙
 
-To learn more about Next.js, take a look at the following resources:
+- `features`/`shared`에서 `@/app/*` 직접 import 금지
+- forum 도메인 유틸은 `@/features/forum/lib/*` 경유 사용
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+위 규칙은 ESLint 설정([frontend/eslint.config.mjs](eslint.config.mjs))으로 관리합니다.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 참고
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+저장소 전체 실행/구성/보안/테스트 가이드는 루트 문서 [README.md](../README.md)를 기준으로 합니다.

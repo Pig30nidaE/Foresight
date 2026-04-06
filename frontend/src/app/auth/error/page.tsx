@@ -32,12 +32,12 @@ function AuthErrorContent() {
           <p className="text-sm leading-relaxed text-chess-muted">{message}</p>
           <p className="font-mono text-[11px] text-chess-muted/90">code: {error}</p>
           <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-            <a
+            <Link
               href="/api/auth/signin?callbackUrl=%2Fpost-login"
               className="font-pixel pixel-btn bg-chess-accent px-4 py-2 text-xs font-semibold text-white border-chess-accent hover:brightness-105"
             >
               {t("auth.error.signInAgain")}
-            </a>
+            </Link>
             <button
               type="button"
               onClick={() => {
@@ -59,12 +59,12 @@ function AuthErrorContent() {
       </div>
       <p className="mt-3 text-center text-xs text-chess-muted">{t("auth.error.retryHint")}</p>
       <div className="mt-2 flex justify-center">
-        <a
+        <Link
           href="/api/auth/signin?callbackUrl=%2Fpost-login"
           className="font-pixel text-[11px] text-chess-accent underline decoration-2 underline-offset-2 hover:brightness-110"
         >
           {t("auth.error.openSignIn")}
-        </a>
+        </Link>
       </div>
     </section>
   );

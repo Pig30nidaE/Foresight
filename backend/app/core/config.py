@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
 
+    # Forum protected account policy (security-sensitive; configure via env in production)
+    FORUM_PROTECTED_ADMIN_EMAIL: str = "admin@foresight.app"
+    FORUM_PROTECTED_ADMIN_DISPLAY_NAME: str = "관리자"
+
     # HTTPS 역프록시 뒤 프로덕션에서만 HSTS 권장. 0이면 헤더 미전송(로컬·HTTP와 동일 동작).
     SECURITY_HSTS_MAX_AGE: int = 0
 

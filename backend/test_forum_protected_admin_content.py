@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.api.routes.forum import _assert_not_protected_content
+from app.features.community.services.forum_service import _assert_not_protected_content
 
 
 class FakeDB:

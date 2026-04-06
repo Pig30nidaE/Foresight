@@ -12,7 +12,7 @@ import {
   EMPTY_BOARD_FEN,
   fenAfterUcis,
   sanListFromStartAndUcis,
-} from "@/shared/lib/forumChess";
+} from "@/features/forum/lib/forumChess";
 import {
   emptyBoardAnnotations,
   FORUM_ANNOTATION_COLORS,
@@ -21,7 +21,7 @@ import {
   mergeAnnotationsForRecordCurrentPly,
   pruneAnnotationsBeyondPly,
   type BoardAnnotations,
-} from "@/shared/lib/forumBoardAnnotations";
+} from "@/features/forum/lib/forumBoardAnnotations";
 import { useTranslation } from "@/shared/lib/i18n";
 
 type ForumBoardEditOverlayProps = {

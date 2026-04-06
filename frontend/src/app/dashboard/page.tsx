@@ -382,7 +382,7 @@ function DashboardContent() {
           <PixelPawnGlyph className="opacity-40 text-red-500/50" size={56} />
           <div className="text-center space-y-2">
             <p className="font-bold text-chess-primary">{t("dh.userNotFound")}</p>
-            <p className="text-xs text-chess-muted">"{submitted}" {t("dh.userNotFoundDesc")}</p>
+            <p className="text-xs text-chess-muted">&quot;{submitted}&quot; {t("dh.userNotFoundDesc")}</p>
           </div>
         </div>
       )}
