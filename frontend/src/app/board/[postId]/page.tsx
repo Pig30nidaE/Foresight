@@ -1,7 +1,7 @@
 "use client";
 
-import ForumPostDetailPage from "@/app/forum/[postId]/page";
+import PostDetailPage from "@/features/community/pages/PostDetailPage";
 
 export default function BoardPostDetailPage() {
-	return <ForumPostDetailPage />;
+	return <PostDetailPage />;
 }
