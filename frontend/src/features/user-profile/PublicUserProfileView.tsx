@@ -5,17 +5,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ChevronRight, FileText, MessageCircle } from "lucide-react";
 
-import api from "@/shared/lib/api";
+import { getPublicUserProfile } from "@/features/user-profile/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
 import { DEFAULT_AVATAR_PATH, resolveAvatarUrl } from "@/shared/lib/avatarUrl";
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDateTime } from "@/shared/lib/formatLocaleDate";
 import { forumPostHref } from "@/shared/lib/forumPostHref";
-import type {
-  ProfileCommentItem as PublicComment,
-  ProfilePostItem as PublicPost,
-  UserPublicProfile,
-} from "@/features/user-profile/types";
+import type { UserPublicProfile } from "@/features/user-profile/types";
 
 export default function PublicUserProfileView() {
   const PAGE_SIZE = 5;
@@ -39,15 +35,16 @@ export default function PublicUserProfileView() {
         if (isFirstProfileFetch.current) setLoading(true);
         else setListRefreshing(true);
         const token = await getBackendJwt();
-        const { data } = await api.get<UserPublicProfile>(`/users/${userId}`, {
-          params: {
+        const data = await getPublicUserProfile(
+          userId,
+          {
             posts_page: postsPage,
             posts_page_size: PAGE_SIZE,
             comments_page: commentsPage,
             comments_page_size: PAGE_SIZE,
           },
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
+          token ?? undefined,
+        );
         setProfile(data);
         setError(null);
         isFirstProfileFetch.current = false;
