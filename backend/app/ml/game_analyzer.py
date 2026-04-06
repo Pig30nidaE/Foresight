@@ -18,6 +18,8 @@ import os
 import shutil
 import logging
 import threading
+import time
+from collections import OrderedDict
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Tuple, Dict
@@ -86,6 +88,59 @@ T1_DECISIVE_PRE_CP_MAX = 350
 T1_DECISIVE_SWING_CP = 220
 T1_MAX_CP_LOSS = 8
 T1_MAX_WIN_PCT_LOSS = 1.2
+
+# ── FEN 단위 공유 분석 캐시 (논문 Acher/Esnault 아이디어 적용) ─────────────────────
+# 동일한 FEN 포지션은 깊이·multipv가 같으면 결과를 재사용합니다.
+# 게임이 달라도 같은 오프닝/국면이면 엔진 호출을 건너뜁니다.
+# 키: (epd, depth, multipv_count)  — epd = FEN 앞 4필드(50수 카운터·수 번호 제외)
+# 값: (List[InfoDict], timestamp)
+#
+# 최대 크기: 500 포지션(~0.5~1 MB), TTL: 2시간
+_FEN_CACHE_MAXSIZE = 500
+_FEN_CACHE_TTL_SEC = 7200
+
+_fen_cache_lock = threading.Lock()
+_fen_analysis_cache: "OrderedDict[Tuple[str, int, int], Tuple[List, float]]" = OrderedDict()
+
+# 세션별 캐시 적중 카운터 (스레드-로컬, analyze_game_streaming 내부에서 초기화)
+_fen_cache_hits_local = threading.local()
+
+
+def _fen_cache_lookup(epd: str, depth: int, multipv: int) -> Optional[List]:
+    """FEN 캐시 조회. 적중 시 InfoDict 리스트를 반환, 미스·만료 시 None."""
+    key = (epd, depth, multipv)
+    with _fen_cache_lock:
+        entry = _fen_analysis_cache.get(key)
+        if entry is None:
+            return None
+        result, ts = entry
+        if time.monotonic() - ts > _FEN_CACHE_TTL_SEC:
+            del _fen_analysis_cache[key]
+            return None
+        _fen_analysis_cache.move_to_end(key)
+        return result
+
+
+def _fen_cache_store(epd: str, depth: int, multipv: int, result: List) -> None:
+    """FEN 캐시 저장 (LRU 초과 시 가장 오래된 항목 제거)."""
+    key = (epd, depth, multipv)
+    with _fen_cache_lock:
+        _fen_analysis_cache[key] = (result, time.monotonic())
+        _fen_analysis_cache.move_to_end(key)
+        while len(_fen_analysis_cache) > _FEN_CACHE_MAXSIZE:
+            _fen_analysis_cache.popitem(last=False)
+
+
+def get_fen_cache_stats() -> Dict[str, int]:
+    """현재 FEN 캐시 상태를 반환합니다 (모니터링용)."""
+    with _fen_cache_lock:
+        return {"size": len(_fen_analysis_cache), "maxsize": _FEN_CACHE_MAXSIZE}
+
+
+def _inc_fen_cache_hits() -> None:
+    """현재 스레드의 FEN 캐시 적중 카운터를 1 증가시킵니다."""
+    val = getattr(_fen_cache_hits_local, "count", 0)
+    _fen_cache_hits_local.count = val + 1
 
 
 def _stabilize_win_pct_loss_for_accuracy(move: "AnalyzedMove") -> float:
@@ -901,12 +956,22 @@ def _analyze_single_move_with_fen(
         is_forced = False
 
     # ① Before 포지션 정보 추출
+    epd_before = " ".join(fen_before.split()[:4])
     if prev_multipv:
         before_pv = prev_multipv
     else:
         # 최초 1수 째는 얕은 깊이로 빠르게 초기화 (어차피 오프닝 구간)
-        init_limit = chess.engine.Limit(depth=10, time=time_per_move)
-        before_pv = engine.analyse(board, init_limit, multipv=3)
+        # 🚀 FEN 캐시: 동일 포지션은 다른 게임에서도 재사용
+        _BEFORE_INIT_DEPTH = 10
+        cached_before = _fen_cache_lookup(epd_before, _BEFORE_INIT_DEPTH, 3)
+        if cached_before is not None:
+            before_pv = cached_before
+            _inc_fen_cache_hits()
+        else:
+            init_limit = chess.engine.Limit(depth=_BEFORE_INIT_DEPTH, time=time_per_move)
+            before_pv = engine.analyse(board, init_limit, multipv=3)
+            if stockfish_depth is not None:  # depth 기반 분석만 캐시 (time 기반은 비결정적)
+                _fen_cache_store(epd_before, _BEFORE_INIT_DEPTH, 3, before_pv)
 
     cp_before: Optional[int] = None
     try:
@@ -946,29 +1011,61 @@ def _analyze_single_move_with_fen(
         pass
 
     # 🚀 최적화 B & C: 메인 라인과 MultiPV의 완벽한 분리(Decoupling)
-# 🚀 최적화 B & C: 메인 라인과 MultiPV의 완벽한 분리(Decoupling)
     if is_th and not is_forced:
-        th_limit = chess.engine.Limit(depth=8, time=0.03)
-        after_pv = engine.analyse(board, th_limit, multipv=3)
+        # TH(오프닝 이론수): 얕은 분석 + FEN 캐시 (오프닝 포지션은 여러 게임 간 높은 재사용률)
+        _TH_DEPTH = 8
+        cached_th = _fen_cache_lookup(epd_after, _TH_DEPTH, 3)
+        if cached_th is not None:
+            after_pv = cached_th
+            _inc_fen_cache_hits()
+        else:
+            th_limit = chess.engine.Limit(depth=_TH_DEPTH, time=0.03)
+            after_pv = engine.analyse(board, th_limit, multipv=3)
+            _fen_cache_store(epd_after, _TH_DEPTH, 3, after_pv)
     else:
         # 지정된 Depth가 14 이상일 때만 분리 연산 발동
         if target_depth and target_depth >= 14:
-            # 1. 점수 계산용 메인 라인: 깊고 정확하게 딱 1개만 찾음
-            exact_info = engine.analyse(board, limit)
-            
-            # 2. UI 추천 수용 서브 라인: 깊이를 4 깎아서 얕고 넓게 찾음
+            # 1. 점수 계산용 메인 라인: 깊고 정확하게 딱 1개만 찾음 + FEN 캐시
+            cached_exact = _fen_cache_lookup(epd_after, target_depth, 1)
+            if cached_exact is not None:
+                exact_info = cached_exact[0]
+                _inc_fen_cache_hits()
+            else:
+                exact_info = engine.analyse(board, limit)
+                _fen_cache_store(epd_after, target_depth, 1, [exact_info])
+
+            # 2. UI 추천 수용 서브 라인: 깊이를 4 깎아서 얕고 넓게 찾음 + FEN 캐시
             # 🚨 에러 해결: time_per_move가 None일 때의 방어 로직 추가
+            _shallow_depth = target_depth - 4
             shallow_time = time_per_move * 0.7 if time_per_move is not None else None
-            shallow_limit = chess.engine.Limit(depth=target_depth - 4, time=shallow_time)
-            
-            after_pv = engine.analyse(board, shallow_limit, multipv=3)
+            cached_shallow = _fen_cache_lookup(epd_after, _shallow_depth, 3)
+            if cached_shallow is not None:
+                after_pv = list(cached_shallow)  # 복사: 아래 score 덮어쓰기가 캐시를 오염시키지 않도록
+                _inc_fen_cache_hits()
+            else:
+                shallow_limit = chess.engine.Limit(depth=_shallow_depth, time=shallow_time)
+                after_pv = engine.analyse(board, shallow_limit, multipv=3)
+                _fen_cache_store(epd_after, _shallow_depth, 3, after_pv)
+                after_pv = list(after_pv)  # 복사: 아래 score 덮어쓰기가 캐시를 오염시키지 않도록
 
             # 3. 마법의 트릭: 얕게 찾은 점수를 정확한 점수로 덮어쓰기
+            # ⚠️ 리스트는 복사됐으나 내부 dict는 공유됨 → dict도 복사하여 캐시 불변성 보장
             if after_pv and "score" in exact_info:
+                after_pv[0] = dict(after_pv[0])
                 after_pv[0]["score"] = exact_info["score"]
         else:
-            # 기존 방식 (얕은 깊이)
-            after_pv = engine.analyse(board, limit, multipv=3)
+            # 기존 방식 (얕은 깊이) + FEN 캐시
+            if target_depth is not None:
+                cached_normal = _fen_cache_lookup(epd_after, target_depth, 3)
+                if cached_normal is not None:
+                    after_pv = cached_normal
+                    _inc_fen_cache_hits()
+                else:
+                    after_pv = engine.analyse(board, limit, multipv=3)
+                    _fen_cache_store(epd_after, target_depth, 3, after_pv)
+            else:
+                # time-based analysis: 캐시하지 않음 (비결정적 깊이)
+                after_pv = engine.analyse(board, limit, multipv=3)
 
     is_sacrifice, sacrifice_value = _detect_sacrifice_on_best_reply(
         board,
@@ -1090,6 +1187,9 @@ def analyze_game_streaming(
     # depth 미지정(None)이면 시간 기반 분석
     time_per_move = 0.15 if not stockfish_depth else None
 
+    # FEN 캐시 적중 카운터 초기화 (스레드-로컬)
+    _fen_cache_hits_local.count = 0
+
     game = chess.pgn.read_game(io.StringIO(pgn_str))
     if game is None:
         logger.warning("Invalid PGN")
@@ -1167,6 +1267,14 @@ def analyze_game_streaming(
     except Exception as exc:
         logger.exception(f"Game analysis error: {exc}")
         raise
+
+    fen_hits = getattr(_fen_cache_hits_local, "count", 0)
+    total_engine_calls_avoided = fen_hits
+    logger.info(
+        f"[FEN Cache] game_id={game_id!r} depth={stockfish_depth} "
+        f"fen_cache_hits={fen_hits} total_halfmoves={halfmove} "
+        f"cache_size={get_fen_cache_stats()['size']}"
+    )
 
     promoted = _promote_best_t2_to_t1(white_moves, black_moves)
     if on_move and promoted is not None:

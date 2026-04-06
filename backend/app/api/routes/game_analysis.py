@@ -166,7 +166,12 @@ class _StreamCacheEntry:
 
 
 def _cache_key(game_id: str, pgn: str, depth: Optional[int]) -> Tuple[str, Optional[int]]:
-    uid = game_id.strip() or hashlib.sha1(pgn.encode()).hexdigest()[:16]
+    pgn_hash = hashlib.sha1(pgn.encode()).hexdigest()[:16]
+    if game_id.strip():
+        # game_id와 pgn 해시를 결합하여 동일 game_id 재사용 시 충돌 방지
+        uid = f"{game_id.strip()}:{pgn_hash}"
+    else:
+        uid = pgn_hash
     return (uid, depth)
 
 
