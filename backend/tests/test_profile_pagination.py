@@ -44,12 +44,28 @@ class _RowsPosts:
         return self._posts
 
 
+class _RowsPostsWithTotal:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
 class _RowsCommentsJoin:
     def __init__(self, pairs):
         self._pairs = pairs
 
     def all(self):
         return self._pairs
+
+
+class _RowsCommentsWithTotal:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
 
 
 def _post(i: int):
@@ -93,12 +109,16 @@ def app_me():
     async def fake_execute(stmt):
         exec_calls.append(stmt)
         n = len(exec_calls)
-        # get_my_posts: 1=count, 2=page rows (desc created_at → newest first; page 2 skips first 5)
+        # get_my_posts: single query with COUNT(*) OVER() + page rows
         if n == 1:
-            return _ScalarCount(12)
-        if n == 2:
             # desc by created_at: i=11 newest; page 2 → i=6..2
-            return _RowsPosts([posts[6], posts[5], posts[4], posts[3], posts[2]])
+            return _RowsPostsWithTotal([
+                (posts[6], 12),
+                (posts[5], 12),
+                (posts[4], 12),
+                (posts[3], 12),
+                (posts[2], 12),
+            ])
         raise AssertionError(f"unexpected execute call {n}")
 
     mock_session = MagicMock()
@@ -143,12 +163,11 @@ def app_me_comments():
     async def fake_execute(stmt):
         exec_calls.append(stmt)
         n = len(exec_calls)
+        # get_my_comments: single query with COUNT(*) OVER() + page rows
         if n == 1:
-            return _ScalarCount(10)
-        if n == 2:
             # desc: i=9..0; page 2 → i=4..0
-            pairs = [(comments[i], posts[i % 3]) for i in range(4, -1, -1)]
-            return _RowsCommentsJoin(pairs)
+            rows = [(comments[i], posts[i % 3], 10) for i in range(4, -1, -1)]
+            return _RowsCommentsWithTotal(rows)
         raise AssertionError(f"unexpected execute call {n}")
 
     mock_session = MagicMock()

@@ -6,11 +6,11 @@ import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { notFound, useParams, usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-import ForumBoardEditOverlay from "@/app/forum/ForumBoardEditOverlay";
-import ForumBoardPeekCard from "@/app/forum/ForumBoardPeekCard";
-import ForumRecordedMoveChips from "@/app/forum/ForumRecordedMoveChips";
-import ForumPgnReplay from "@/app/forum/ForumPgnReplay";
-import ForumPostThumbnail from "@/app/forum/ForumPostThumbnail";
+import ForumBoardEditOverlay from "@/features/forum/components/ForumBoardEditOverlay";
+import ForumBoardPeekCard from "@/features/forum/components/ForumBoardPeekCard";
+import ForumRecordedMoveChips from "@/features/forum/components/ForumRecordedMoveChips";
+import ForumPgnReplay from "@/features/forum/components/ForumPgnReplay";
+import ForumPostThumbnail from "@/features/forum/components/ForumPostThumbnail";
 import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
 import {
@@ -25,14 +25,14 @@ import {
   sanListFromStartAndUcis,
   startFenMatchingPgnUcis,
   ucisFromPgnText,
-} from "@/shared/lib/forumChess";
+} from "@/features/forum/lib/forumChess";
 import {
   boardAnnotationsToPayload,
   emptyBoardAnnotations,
   normalizeBoardAnnotationsFromApi,
   pruneAnnotationsBeyondPly,
   type BoardAnnotations,
-} from "@/shared/lib/forumBoardAnnotations";
+} from "@/features/forum/lib/forumBoardAnnotations";
 import { AuthorNameLink } from "@/shared/components/forum/AuthorName";
 import { PixelHeartGlyph } from "@/shared/components/ui/PixelGlyphs";
 import {

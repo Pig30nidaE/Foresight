@@ -12,35 +12,12 @@ import AvatarThumb from "@/shared/components/ui/AvatarThumb";
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDateTime } from "@/shared/lib/formatLocaleDate";
 import { forumPostHref } from "@/shared/lib/forumPostHref";
-
-type Me = {
-  id: string;
-  public_id: string;
-  email: string | null;
-  display_name: string;
-  signup_completed: boolean;
-  profile_public: boolean;
-  avatar_url?: string | null;
-};
-
-type MyPost = {
-  id: string;
-  public_id: string;
-  title: string;
-  body_preview: string;
-  created_at: string;
-  board_category?: string | null;
-};
-
-type MyComment = {
-  id: string;
-  body: string;
-  created_at: string;
-  post_id: string;
-  post_public_id: string;
-  post_title: string;
-  post_board_category?: string | null;
-};
+import { userProfileHref } from "@/shared/lib/userProfileHref";
+import type {
+  MeProfile as Me,
+  ProfileCommentItem as MyComment,
+  ProfilePostItem as MyPost,
+} from "@/features/user-profile/types";
 
 export default function MyPage() {
   const PAGE_SIZE = 5;
@@ -377,7 +354,7 @@ export default function MyPage() {
               <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">{t("mypage.profileSection")}</h2>
               {me.public_id && (
                 <Link
-                  href={`/user/${me.public_id}`}
+                  href={userProfileHref(me)}
                   className={`font-pixel text-sm font-medium underline decoration-2 underline-offset-2 hover:brightness-110 ${
                     me.profile_public ? "text-chess-accent" : "text-chess-muted"
                   }`}

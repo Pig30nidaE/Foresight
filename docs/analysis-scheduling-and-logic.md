@@ -2,7 +2,7 @@
 
 Foresight **개별 게임 분석**의 **요청 스케줄링**(동시성·캐시·SSE)과 **Stockfish 기반 분석 로직**을 코드 기준으로 정리한 문서입니다.
 
-> 고수준 시퀀스 다이어그램은 [chess-analysis-flow.md](./chess-analysis-flow.md)를 참고하되, 해당 파일의 엔드포인트/호출명은 구버전일 수 있습니다. 현재 분석 API는 **SSE `POST /api/v1/game-analysis/game/stream`** 입니다.
+> 현재 분석 API는 **SSE `POST /api/v1/game-analysis/game/stream`** 입니다.
 
 ---
 
@@ -182,4 +182,3 @@ Keepalive: 이벤트가 0.5초 동안 없으면 `: keepalive\n\n` 전송.
 ## 8. 관련 문서
 
 - [azure-deployment.md](./azure-deployment.md) — Vercel(프론트) + Azure for Students(API)
-- [chess-analysis-flow.md](./chess-analysis-flow.md) — 프론트→백엔드→Stockfish 개요 (엔드포인트명은 SSE 전환 전 기준일 수 있음)
