@@ -25,11 +25,18 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_ACR_NAME: ${{ secrets.AZURE_ACR_NAME }}
+      AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+      AZURE_API_APP_NAME: ${{ secrets.AZURE_API_APP_NAME }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Azure Login (OIDC)
-        if: ${{ secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != '' }}
+        if: ${{ env.AZURE_CLIENT_ID != '' && env.AZURE_TENANT_ID != '' && env.AZURE_SUBSCRIPTION_ID != '' }}
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -37,7 +44,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Azure Login (Service Principal JSON Fallback)
-        if: ${{ !(secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != '') }}
+        if: ${{ !(env.AZURE_CLIENT_ID != '' && env.AZURE_TENANT_ID != '' && env.AZURE_SUBSCRIPTION_ID != '') }}
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
@@ -45,7 +52,7 @@ jobs:
       - name: ACR build (API)
         run: |
           az acr build \
-            -r "${{ secrets.AZURE_ACR_NAME }}" \
+            -r "${{ env.AZURE_ACR_NAME }}" \
             -t "${{ env.IMAGE_API }}:${{ github.sha }}" \
             -t "${{ env.IMAGE_API }}:latest" \
             -f Dockerfile \
@@ -54,6 +61,6 @@ jobs:
       - name: Update Container App revision
         run: |
           az containerapp update \
-            -g "${{ secrets.AZURE_RESOURCE_GROUP }}" \
-            -n "${{ secrets.AZURE_API_APP_NAME }}" \
-            --image "${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_API }}:${{ github.sha }}"
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" \
+            -n "${{ env.AZURE_API_APP_NAME }}" \
+            --image "${{ env.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_API }}:${{ github.sha }}"
