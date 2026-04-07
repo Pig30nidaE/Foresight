@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://fsight.app"),
   title: "foresight-chess",
   description:
-    "체스 유저를 위한 분석 플랫폼. 오프닝 티어, 승률 분석, 게임 히스토리 등 경쟁력 있는 체스를 위한 데이터 인사이트를 제공합니다.",
+    "Chess.com / Lichess 전적 검색",
   keywords: [
     "chess",
     "체스",
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     siteName: "foresight-chess",
     title: "foresight-chess",
     description:
-      "체스 유저를 위한 분석 플랫폼. 오프닝 티어, 승률 분석, 게임 히스토리 등 경쟁력 있는 체스를 위한 데이터 인사이트를 제공합니다.",
+      "Chess.com / Lichess 전적 검색",
     images: [
       {
         url: "/images/foresight-chess-thumbnail.png",
@@ -58,7 +58,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "foresight-chess",
     description:
-      "체스 유저를 위한 분석 플랫폼. 오프닝 티어, 승률 분석, 게임 히스토리 등 경쟁력 있는 체스를 위한 데이터 인사이트를 제공합니다.",
+      "Chess.com / Lichess 전적 검색",
     images: ["/images/foresight-chess-thumbnail.png"],
   },
   icons: {
