@@ -21,13 +21,18 @@ function buildCsp(nonce: string): string {
     connectSrc.push(apiOrigin);
   }
 
+  const scriptSrc = ["'self'", "'unsafe-inline'", "https://vercel.live"];
+  const scriptSrcElem = ["'self'", "'unsafe-inline'", "https://vercel.live"];
+  const fontSrc = ["'self'", "data:", "https://cdn.jsdelivr.net"];
+
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'`,
+    `script-src ${scriptSrc.join(" ")}`,
+    `script-src-elem ${scriptSrcElem.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https: blob:",
     `connect-src ${connectSrc.join(" ")}`,
-    "font-src 'self' data:",
+    `font-src ${fontSrc.join(" ")}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
