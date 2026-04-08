@@ -277,6 +277,6 @@ API를 Azure로만 쓰면 Railway 백엔드 연결을 끊어도 됩니다.
 
 - [forum-setup-checklist.md](./forum-setup-checklist.md) — 게시판·OAuth·PostgreSQL·Blob **직접 해야 할 설정 전체**
 - [analysis-scheduling-and-logic.md](./analysis-scheduling-and-logic.md) — SSE·Semaphore·캐시
-- [`.env.example`](../.env.example) — 변수 이름 참고
+- 환경 변수 이름은 본 문서와 `docs/forum-setup-checklist.md` 표를 참고
 
 **참고:** 프론트를 Azure에 올리는 방법은 이 문서 범위가 아닙니다. Vercel만 사용할 때는 `frontend/Dockerfile` / `output: standalone` 은 로컬 Docker 테스트용으로만 쓰면 됩니다.

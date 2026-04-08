@@ -25,7 +25,7 @@ out/
 .npm
 *.tsbuildinfo
 
-# Environment — 예시 파일(.env.example)은 커밋 허용
+# Environment
 .env
 .env.local
 .env.*.local
@@ -69,6 +69,8 @@ htmlcov/
 # Cache / Generated
 backend/app/services/_eco_cache.json
 .cache/
+backend/data/forum_uploads/*
+!backend/data/forum_uploads/.gitkeep
 
 # Local dev convenience scripts
 start.sh
