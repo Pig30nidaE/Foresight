@@ -42,7 +42,6 @@ export default function AnalysisSection({
   untilMs,
 }: AnalysisSectionProps) {
   const [treeViewSide, setTreeViewSide] = useState<"white" | "black">("white");
-  const [openingTreeExpanded, setOpeningTreeExpanded] = useState(true);
   const [maxGames, setMaxGames] = useState<number>(100);
   const [pendingMaxGames, setPendingMaxGames] = useState<number>(100);
   const { t } = useTranslation();
@@ -188,7 +187,7 @@ export default function AnalysisSection({
             progressPercent={section2Progress}
             decorationSticker="LOL"
           />
-          {/* 백/흑 탭 + 트리 접기 */}
+          {/* 백/흑 탭 */}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex gap-1">
               {(["white", "black"] as const).map((s) => (
@@ -215,24 +214,15 @@ export default function AnalysisSection({
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => setOpeningTreeExpanded((v) => !v)}
-              className="font-pixel pixel-btn shrink-0 px-2.5 py-1 text-[11px] font-semibold text-chess-primary bg-chess-surface/80 hover:brightness-[1.03] dark:bg-chess-elevated/50"
-              aria-expanded={openingTreeExpanded}
-            >
-              {openingTreeExpanded ? t("as.openingTreeCollapse") : t("as.openingTreeExpand")}
-            </button>
           </div>
-          {openingTreeExpanded &&
-            (loadingTreeW || loadingTreeB ? (
-              <OpeningTreeSkeleton />
-            ) : (
-              <OpeningTreeTable
-                data={treeViewSide === "white" ? (openingTreeWhite ?? []) : (openingTreeBlack ?? [])}
-                side={treeViewSide}
-              />
-            ))}
+          {loadingTreeW || loadingTreeB ? (
+            <OpeningTreeSkeleton />
+          ) : (
+            <OpeningTreeTable
+              data={treeViewSide === "white" ? (openingTreeWhite ?? []) : (openingTreeBlack ?? [])}
+              side={treeViewSide}
+            />
+          )}
         </div>
         <div className="pixel-frame pixel-hud-fill p-4 sm:p-8 relative">
           {insufficientData && <div className="absolute inset-0 z-10 pixel-lock-overlay" aria-hidden />}

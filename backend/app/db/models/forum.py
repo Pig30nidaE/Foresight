@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,9 @@ class User(Base):
     provider_account_id: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    display_name_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     avatar_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     # When True, OAuth login refreshes avatar_url from IdP; when False, user chose custom or site default.
     avatar_sync_oauth: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -37,6 +40,12 @@ class User(Base):
     signup_email_verify_attempts: Mapped[int] = mapped_column(
         Integer(), nullable=False, default=0, server_default="0"
     )
+    analysis_tickets: Mapped[int] = mapped_column(
+        Integer(), nullable=False, default=5, server_default="5"
+    )
+    last_ticket_earned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -45,6 +54,9 @@ class User(Base):
     comments: Mapped[list["Comment"]] = relationship(
         back_populates="author", cascade="all, delete-orphan"
     )
+    saved_analyzed_games: Mapped[list["SavedAnalyzedGame"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class Post(Base):
@@ -52,8 +64,8 @@ class Post(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     public_id: Mapped[str] = mapped_column(String(21), nullable=False, unique=True, index=True)
-    author_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -71,8 +83,8 @@ class Post(Base):
     )
     is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     hidden_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    hidden_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    thumbnail_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     # None = 포럼 글; "notice" = 공지; "patch" = 패치노트; "free" = 자유글
     board_category: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
 
@@ -92,8 +104,8 @@ class Comment(Base):
     post_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    author_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     parent_comment_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -107,7 +119,6 @@ class Comment(Base):
     )
     is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     hidden_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    hidden_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     post: Mapped["Post"] = relationship(back_populates="comments")
@@ -161,3 +172,43 @@ class ModerationLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class AccountDeletionSurvey(Base):
+    __tablename__ = "account_deletion_surveys"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reason_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    additional_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SavedAnalyzedGame(Base):
+    __tablename__ = "saved_analyzed_games"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "game_id",
+            "depth",
+            name="uq_saved_analyzed_games_user_game_depth",
+        ),
+        Index("ix_saved_analyzed_games_user_analyzed_at", "user_id", "analyzed_at"),
+        Index("ix_saved_analyzed_games_expires_at", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    game_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(300), nullable=False)
+    depth: Mapped[int] = mapped_column(Integer(), nullable=False)
+    dashboard_href: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    analyzed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="saved_analyzed_games")

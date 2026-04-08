@@ -5,6 +5,7 @@ import { SessionProvider } from "next-auth/react";
 import { useState } from "react";
 import { SettingsProvider } from "../settings/SettingsContext";
 import { setApiRuntimeBaseUrl } from "@/shared/lib/api";
+import { AnalysisQueueProvider } from "@/features/dashboard/contexts/AnalysisQueueContext";
 
 export default function Providers({
   children,
@@ -34,7 +35,9 @@ export default function Providers({
   return (
     <SessionProvider>
       <QueryClientProvider client={queryClient}>
-        <SettingsProvider>{children}</SettingsProvider>
+        <SettingsProvider>
+          <AnalysisQueueProvider>{children}</AnalysisQueueProvider>
+        </SettingsProvider>
       </QueryClientProvider>
     </SessionProvider>
   );

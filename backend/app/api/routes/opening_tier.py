@@ -9,7 +9,7 @@ GET  /api/v1/opening-tier/export    → CSV 또는 JSON 파일 다운로드
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from app.api.deps import get_current_user
+from app.api.deps import get_optional_current_user
 from app.db.models.forum import User
 from app.features.opening_tier.services.opening_tier_service import (
     MAX_OPENINGS_DISPLAY,
@@ -59,7 +59,7 @@ def _validate_color(color: str) -> None:
 @router.get("/global")
 async def get_global_opening_tiers(
     request: Request,
-    me: User = Depends(get_current_user),
+    me: User | None = Depends(get_optional_current_user),
     rating: int = Query(..., description="Lichess 레이팅 bucket (1000/1400/1800/2200/2500)"),
     speed: str = Query("blitz", description="타임클래스 (bullet/blitz/rapid/classical)"),
     color: str = Query("white", description="기준 색상 (white/black)"),
@@ -99,10 +99,6 @@ async def get_global_opening_tiers(
             }
         raise HTTPException(status_code=503, detail=str(exc))
     openings = _service.filter_openings(openings, q)
-    # 기본 티어표에서는 1% 미만 마이너 variation 을 숨기고,
-    # 검색(query) 상황에서는 탐색 가능하도록 노출합니다.
-    if not (q or "").strip():
-        openings = [row for row in openings if not bool(row.get("is_minor", False))]
     openings = openings[:MAX_OPENINGS_DISPLAY]
 
     return {
@@ -120,7 +116,7 @@ async def get_global_opening_tiers(
 @router.get("/brackets")
 async def get_rating_brackets(
     request: Request,
-    me: User = Depends(get_current_user),
+    me: User | None = Depends(get_optional_current_user),
     speed: str = Query("blitz", description="타임클래스 (bullet/blitz/rapid/classical)"),
 ):
     """레이팅 구간 목록 반환 (Lichess 9개 구간 + Chess.com 변환 라벨)."""
@@ -136,7 +132,7 @@ async def get_rating_brackets(
 
 @router.get("/detail")
 async def get_opening_detail_route(
-    me: User = Depends(get_current_user),
+    me: User | None = Depends(get_optional_current_user),
     eco: str = Query(..., description="ECO 코드 (예: B20)"),
     name: str = Query(..., description="오프닝 이름 (예: Sicilian Defense)"),
     color: str = Query("white", description="기준 색상 (white/black)"),
@@ -158,7 +154,7 @@ async def get_opening_detail_route(
 @router.get("/export")
 async def export_opening_tiers(
     request: Request,
-    me: User = Depends(get_current_user),
+    me: User | None = Depends(get_optional_current_user),
     rating: int = Query(..., description="Lichess 레이팅 구간"),
     speed: str = Query("blitz", description="타임클래스"),
     color: str = Query("white", description="기준 색상 (white/black)"),

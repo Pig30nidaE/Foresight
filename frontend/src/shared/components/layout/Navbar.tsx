@@ -8,6 +8,10 @@ import { signOut, useSession } from "next-auth/react";
 import { useTranslation } from "../../lib/i18n";
 import api from "@/shared/lib/api";
 import { clearBackendJwtCache, getBackendJwt } from "@/shared/lib/backendJwt";
+import {
+  computeAnalysisQueueUserKey,
+  disposeAnalysisQueueForUserKey,
+} from "@/features/dashboard/contexts/AnalysisQueueContext";
 import AvatarThumb from "@/shared/components/ui/AvatarThumb";
 import { PixelPawnGlyph } from "@/shared/components/ui/PixelGlyphs";
 
@@ -25,6 +29,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [forumDisplayName, setForumDisplayName] = useState<string | null>(null);
   const [forumAvatarUrl, setForumAvatarUrl] = useState<string | null | undefined>(undefined);
+  const [analysisTickets, setAnalysisTickets] = useState<number | null>(null);
   const { t } = useTranslation();
   const { status: authStatus, data: session } = useSession();
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -32,6 +37,8 @@ export default function Navbar() {
   const mobileSearchRef = useRef<HTMLInputElement>(null);
 
   const handleSignOut = () => {
+    const queueKey = computeAnalysisQueueUserKey(session ?? null);
+    if (queueKey) disposeAnalysisQueueForUserKey(queueKey);
     clearBackendJwtCache();
     void signOut({ callbackUrl: "/" });
   };
@@ -77,6 +84,7 @@ export default function Navbar() {
       if (authStatus !== "authenticated") {
         setForumDisplayName(null);
         setForumAvatarUrl(undefined);
+        setAnalysisTickets(null);
         return;
       }
       try {
@@ -90,10 +98,12 @@ export default function Navbar() {
           display_name?: string;
           signup_completed?: boolean;
           avatar_url?: string | null;
+          analysis_tickets?: number;
         }>("/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
         setForumAvatarUrl(data?.avatar_url ?? null);
+        setAnalysisTickets(data?.analysis_tickets ?? null);
         if (data?.signup_completed) {
           setForumDisplayName(data.display_name ?? "닉네임");
         } else {
@@ -189,6 +199,15 @@ export default function Navbar() {
                   )}
                   <span className="truncate max-w-[10rem] leading-none pt-px">{forumDisplayName ?? "My"}</span>
                 </Link>
+                {analysisTickets !== null && (
+                  <span
+                    className="font-pixel inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold border-2 border-chess-border/40 bg-chess-surface/50 dark:bg-chess-elevated/20 text-chess-primary"
+                    title={t("ticket.balance")}
+                  >
+                    <span aria-hidden>🎟️</span>
+                    <span>{analysisTickets}</span>
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleSignOut}
@@ -266,6 +285,12 @@ export default function Navbar() {
                       />
                     )}
                     <span className="min-w-0 flex-1 truncate leading-snug">{forumDisplayName ?? "My"}</span>
+                    {analysisTickets !== null && (
+                      <span className="font-pixel inline-flex items-center gap-1 rounded-[var(--pixel-radius)] border-2 border-chess-border/45 bg-chess-bg/75 px-2 py-1 text-[11px] text-chess-primary">
+                        <span aria-hidden>🎫</span>
+                        <span>{analysisTickets}</span>
+                      </span>
+                    )}
                   </button>
                   <button
                     type="button"

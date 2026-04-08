@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class AuthorOut(BaseModel):
-    id: uuid.UUID
+    id: uuid.UUID | None = None
     public_id: str
     display_name: str
     avatar_url: str | None = None
@@ -30,6 +30,7 @@ class PostListItem(BaseModel):
     has_pgn: bool = False
     has_fen: bool = False
     thumbnail_fen: str | None = None
+    thumbnail_image_url: str | None = None
     pgn_text: str | None = Field(None, max_length=200_000)
 
 
@@ -59,6 +60,7 @@ class PostDetail(BaseModel):
     fen_initial: str | None = None
     board_annotations: dict[str, Any] | None = None
     board_category: str | None = None
+    thumbnail_image_url: str | None = None
     created_at: datetime
     updated_at: datetime
     author: AuthorOut
@@ -75,6 +77,7 @@ class PostCreate(BaseModel):
     pgn_text: str | None = Field(None, max_length=200_000)
     fen_initial: str | None = Field(None, max_length=120)
     board_annotations: dict[str, Any] | None = None
+    thumbnail_image_url: str | None = Field(None, max_length=2048)
 
 
 class BoardPostCreate(BaseModel):
@@ -89,6 +92,7 @@ class PostUpdate(BaseModel):
     pgn_text: str | None = Field(None, max_length=200_000)
     fen_initial: str | None = Field(None, max_length=120)
     board_annotations: dict[str, Any] | None = None
+    thumbnail_image_url: str | None = Field(None, max_length=2048)
 
 
 class CommentCreate(BaseModel):
@@ -119,6 +123,9 @@ class MeResponse(BaseModel):
     role: str
     signup_completed: bool
     profile_public: bool = True
+    display_name_changed_at: datetime | None = None
+    display_name_change_available_at: datetime | None = None
+    analysis_tickets: int = 5
     # Another account already uses this email (incomplete signup UX).
     email_conflict: bool = False
     masked_conflict_email: str | None = None
@@ -140,6 +147,39 @@ class ProfileUpdateRequest(BaseModel):
     use_site_default_avatar: bool | None = None
     # Restore avatar from OAuth claims in the current JWT.
     restore_oauth_avatar: bool | None = None
+
+
+class AccountWithdrawRequest(BaseModel):
+    reason_code: Literal[
+        "privacy_concern",
+        "low_usage",
+        "service_quality",
+        "bugs_or_performance",
+        "moving_to_other_service",
+        "other",
+    ]
+    additional_feedback: str | None = Field(None, max_length=2000)
+
+
+class SavedAnalyzedGameCreateRequest(BaseModel):
+    game_id: str = Field(..., min_length=1, max_length=120)
+    label: str = Field(..., min_length=1, max_length=300)
+    depth: int = Field(..., ge=1, le=99)
+    dashboard_href: str | None = Field(None, max_length=1024)
+
+
+class SavedAnalyzedGameItem(BaseModel):
+    id: uuid.UUID
+    game_id: str
+    label: str
+    depth: int
+    dashboard_href: str | None = None
+    analyzed_at: datetime
+
+
+class SavedAnalyzedGameListResponse(BaseModel):
+    items: list[SavedAnalyzedGameItem]
+    total: int = 0
 
 
 class MyPostListItem(BaseModel):

@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, timezone
+import math
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select, update
@@ -24,6 +25,7 @@ from app.shared.protected_admin import is_protected_admin_email
 
 _PREVIEW_LEN = 280
 _REPORTS_AUTO_THRESHOLD = 10
+_TICKET_REWARD_COOLDOWN = timedelta(minutes=5)
 
 
 def _is_admin_user(user: User) -> bool:
@@ -43,6 +45,57 @@ def _can_edit_post(me: User, post: Post) -> bool:
 
 def _is_protected_account(user: User) -> bool:
     return is_protected_admin_email(user.email)
+
+
+def _grant_tickets_with_cooldown(me: User | None, amount: int) -> int:
+    if me is None or amount <= 0 or not hasattr(me, "analysis_tickets"):
+        return 0
+
+    now = datetime.now(timezone.utc)
+    last = getattr(me, "last_ticket_earned_at", None)
+    if isinstance(last, datetime):
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if now < last + _TICKET_REWARD_COOLDOWN:
+            return 0
+
+    me.analysis_tickets = (me.analysis_tickets or 0) + amount
+    me.last_ticket_earned_at = now
+    return amount
+
+
+def _ticket_cooldown_remaining_seconds(me: User | None) -> int:
+    if me is None or not hasattr(me, "last_ticket_earned_at"):
+        return 0
+
+    last = getattr(me, "last_ticket_earned_at", None)
+    if not isinstance(last, datetime):
+        return 0
+
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+
+    now = datetime.now(timezone.utc)
+    remaining = (last + _TICKET_REWARD_COOLDOWN - now).total_seconds()
+    if remaining <= 0:
+        return 0
+    return int(math.ceil(remaining))
+
+
+async def _lock_ticket_reward_user(db: AsyncSession, me: User | None) -> User | None:
+    if me is None:
+        return None
+
+    uid = getattr(me, "id", None)
+    if uid is None:
+        return me
+
+    locked_user = (
+        await db.execute(
+            select(User).where(User.id == uid).with_for_update()
+        )
+    ).scalar_one_or_none()
+    return locked_user or me
 
 
 async def _assert_not_protected_content(
@@ -109,7 +162,7 @@ async def _add_moderation_log(
     )
 
 
-async def create_post(*, db: AsyncSession, me: User, body: PostCreate) -> dict:
+async def create_post(*, db: AsyncSession, me: User | None, body: PostCreate) -> dict:
     try:
         validate_pgn_optional(body.pgn_text)
         validate_fen_optional(body.fen_initial)
@@ -119,7 +172,7 @@ async def create_post(*, db: AsyncSession, me: User, body: PostCreate) -> dict:
 
     pub = await _next_unique_public_id(db)
     post = Post(
-        author_id=me.id,
+        author_id=me.id if me else None,
         public_id=pub,
         title=body.title.strip(),
         body=body.body,
@@ -127,16 +180,25 @@ async def create_post(*, db: AsyncSession, me: User, body: PostCreate) -> dict:
         fen_initial=body.fen_initial.strip() if body.fen_initial else None,
         board_annotations=ann,
         board_category=None,
+        thumbnail_image_url=body.thumbnail_image_url.strip() if body.thumbnail_image_url else None,
     )
     db.add(post)
+    ticket_user = await _lock_ticket_reward_user(db, me)
+    tickets_earned = _grant_tickets_with_cooldown(ticket_user, 2)
+    ticket_cooldown_seconds = _ticket_cooldown_remaining_seconds(ticket_user)
     await db.commit()
     await db.refresh(post)
-    return {"id": str(post.id), "public_id": post.public_id}
+    return {
+        "id": str(post.id),
+        "public_id": post.public_id,
+        "tickets_earned": tickets_earned,
+        "ticket_cooldown_seconds": ticket_cooldown_seconds,
+    }
 
 
-async def create_board_post(*, db: AsyncSession, me: User, body: BoardPostCreate) -> dict:
+async def create_board_post(*, db: AsyncSession, me: User | None, body: BoardPostCreate) -> dict:
     if body.kind in ("notice", "patch"):
-        if not _is_admin_user(me):
+        if me is None or not _is_admin_user(me):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="공지·패치노트는 관리자만 작성할 수 있습니다.",
@@ -147,18 +209,27 @@ async def create_board_post(*, db: AsyncSession, me: User, body: BoardPostCreate
     pub = await _next_unique_public_id(db)
     board_cat = {"notice": "notice", "patch": "patch", "free": "free"}[body.kind]
     post = Post(
-        author_id=me.id,
+        author_id=me.id if me else None,
         public_id=pub,
         title=body.title.strip(),
         body=body.body,
         board_category=board_cat,
         pgn_text=None,
         fen_initial=None,
+        thumbnail_image_url=None,
     )
     db.add(post)
+    ticket_user = await _lock_ticket_reward_user(db, me)
+    tickets_earned = _grant_tickets_with_cooldown(ticket_user, 2)
+    ticket_cooldown_seconds = _ticket_cooldown_remaining_seconds(ticket_user)
     await db.commit()
     await db.refresh(post)
-    return {"id": str(post.id), "public_id": post.public_id}
+    return {
+        "id": str(post.id),
+        "public_id": post.public_id,
+        "tickets_earned": tickets_earned,
+        "ticket_cooldown_seconds": ticket_cooldown_seconds,
+    }
 
 
 async def update_post(*, db: AsyncSession, me: User, post_id: str, body: PostUpdate) -> dict:
@@ -186,6 +257,8 @@ async def update_post(*, db: AsyncSession, me: User, post_id: str, body: PostUpd
                 post.board_annotations = validate_board_annotations_payload(body.board_annotations)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if "thumbnail_image_url" in patch:
+        post.thumbnail_image_url = body.thumbnail_image_url.strip() if body.thumbnail_image_url else None
 
     try:
         validate_pgn_optional(post.pgn_text)
@@ -235,7 +308,7 @@ async def unlike_post(*, db: AsyncSession, me: User, post_id: str) -> None:
         await db.commit()
 
 
-async def add_comment(*, db: AsyncSession, me: User, post_id: str, body: CommentCreate) -> dict:
+async def add_comment(*, db: AsyncSession, me: User | None, post_id: str, body: CommentCreate) -> dict:
     pid = parse_uuid(post_id, field="post_id")
     post = await db.get(Post, pid)
     if post is None or post.deleted_at is not None or post.is_hidden:
@@ -262,14 +335,21 @@ async def add_comment(*, db: AsyncSession, me: User, post_id: str, body: Comment
 
     c = Comment(
         post_id=pid,
-        author_id=me.id,
+        author_id=me.id if me else None,
         body=body.body.strip(),
         parent_comment_id=parent_id,
     )
     db.add(c)
+    ticket_user = await _lock_ticket_reward_user(db, me)
+    tickets_earned = _grant_tickets_with_cooldown(ticket_user, 1)
+    ticket_cooldown_seconds = _ticket_cooldown_remaining_seconds(ticket_user)
     await db.commit()
     await db.refresh(c)
-    return {"id": str(c.id)}
+    return {
+        "id": str(c.id),
+        "tickets_earned": tickets_earned,
+        "ticket_cooldown_seconds": ticket_cooldown_seconds,
+    }
 
 
 async def delete_comment(*, db: AsyncSession, me: User, comment_id: str) -> None:
@@ -423,7 +503,6 @@ async def admin_hide_post(*, db: AsyncSession, me: User, post_id: str, payload: 
     await _assert_not_protected_content(db, actor=me, post=post)
     post.is_hidden = True
     post.hidden_reason = payload.reason.strip()
-    post.hidden_by_id = me.id
     await _add_moderation_log(
         db,
         actor_user_id=me.id,
@@ -443,7 +522,6 @@ async def admin_restore_post(*, db: AsyncSession, me: User, post_id: str) -> dic
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
     post.is_hidden = False
     post.hidden_reason = None
-    post.hidden_by_id = None
     post.deleted_at = None
     await _add_moderation_log(
         db,
@@ -465,7 +543,6 @@ async def admin_hide_comment(*, db: AsyncSession, me: User, comment_id: str, pay
     await _assert_not_protected_content(db, actor=me, comment=comment)
     comment.is_hidden = True
     comment.hidden_reason = payload.reason.strip()
-    comment.hidden_by_id = me.id
     await _add_moderation_log(
         db,
         actor_user_id=me.id,

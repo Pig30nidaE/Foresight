@@ -2,7 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Camera, Loader2, X } from "lucide-react";
 
 import ForumPositionEditor, { type ForumAnnotationTool } from "@/features/forum/components/ForumPositionEditor";
 import ForumRecordedMoveChips from "@/features/forum/components/ForumRecordedMoveChips";
@@ -22,6 +22,8 @@ import {
   pruneAnnotationsBeyondPly,
   type BoardAnnotations,
 } from "@/features/forum/lib/forumBoardAnnotations";
+import { recognizeBoardImage } from "@/features/community/api";
+import { getBackendJwt } from "@/shared/lib/backendJwt";
 import { useTranslation } from "@/shared/lib/i18n";
 
 type ForumBoardEditOverlayProps = {
@@ -75,6 +77,36 @@ export default function ForumBoardEditOverlay({
   const [annotationTool, setAnnotationTool] = useState<ForumAnnotationTool>("none");
   const [highlightPick, setHighlightPick] = useState<string>(FORUM_ANNOTATION_COLORS[0].value);
   const [emojiPick, setEmojiPick] = useState<string>(FORUM_ANNOTATION_EMOJIS[0]);
+  const [recognizing, setRecognizing] = useState(false);
+  const [recognizeError, setRecognizeError] = useState<string | null>(null);
+  const [recognizeWarning, setRecognizeWarning] = useState<string | null>(null);
+  const recognizeInputRef = useRef<HTMLInputElement>(null);
+
+  const handleRecognizeBoard = async (file: File) => {
+    setRecognizing(true);
+    setRecognizeError(null);
+    setRecognizeWarning(null);
+    try {
+      const token = await getBackendJwt();
+      if (!token) throw new Error("No token");
+      const result = await recognizeBoardImage(token, file);
+      onBoardFenChange(result.fen);
+      setFenDraft(result.fen);
+      onAnnotationsChange(emptyBoardAnnotations());
+      if (recordMoves) {
+        onRecordStartFenChange(result.fen);
+        onMoveUcisChange([]);
+      }
+      if (result.confidence !== null && result.confidence < 0.7) {
+        setRecognizeWarning(t("forum.boardRecognition.lowConfidence"));
+      }
+    } catch {
+      setRecognizeError(t("forum.boardRecognition.failed"));
+    } finally {
+      setRecognizing(false);
+      if (recognizeInputRef.current) recognizeInputRef.current.value = "";
+    }
+  };
 
   const displayFen = useMemo(() => {
     if (!recordMoves) return boardFen;
@@ -310,14 +342,46 @@ export default function ForumBoardEditOverlay({
               className={`${inputClassName} resize-y py-2 font-mono text-xs leading-snug disabled:opacity-60`}
             />
             {fenError && <p className="text-xs text-red-600 dark:text-red-400">{fenError}</p>}
-            <button
-              type="button"
-              disabled={busy || recordMoves}
-              onClick={handleApplyFen}
-              className="inline-flex items-center gap-1 rounded-md border border-chess-border bg-chess-surface/80 px-2.5 py-1.5 text-xs font-medium text-chess-primary transition hover:bg-chess-elevated/80 disabled:opacity-50"
-            >
-              {t("forum.overlay.applyFen")}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={busy || recordMoves}
+                onClick={handleApplyFen}
+                className="inline-flex items-center gap-1 rounded-md border border-chess-border bg-chess-surface/80 px-2.5 py-1.5 text-xs font-medium text-chess-primary transition hover:bg-chess-elevated/80 disabled:opacity-50"
+              >
+                {t("forum.overlay.applyFen")}
+              </button>
+              <input
+                ref={recognizeInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleRecognizeBoard(f);
+                }}
+              />
+              <button
+                type="button"
+                disabled={busy || recognizing}
+                onClick={() => recognizeInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-chess-accent/50 bg-chess-accent/10 px-2.5 py-1.5 text-xs font-medium text-chess-accent transition hover:bg-chess-accent/20 disabled:opacity-50"
+              >
+                {recognizing ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    {t("forum.boardRecognition.analyzing")}
+                  </>
+                ) : (
+                  <>
+                    <Camera className="size-3.5" aria-hidden />
+                    {t("forum.boardRecognition.upload")}
+                  </>
+                )}
+              </button>
+            </div>
+            {recognizeError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{recognizeError}</p>}
+            {recognizeWarning && <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{recognizeWarning}</p>}
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5 border-t border-chess-border/50 pt-3">

@@ -28,8 +28,11 @@ from fastapi import APIRouter, Body, Depends, Request
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.deps import get_current_user
 from app.core.config import settings
+from app.db.session import get_async_session
 from app.ml.game_analyzer import (
     analyze_game_streaming,
     PlayerAnalysisResult,
@@ -281,6 +284,7 @@ async def analyze_game_stream(
     http_request: Request,
     game_req: GameAnalysisRequest = Body(...),
     current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
 ):
     """
     **SSE 스트리밍 게임 분석**
@@ -342,6 +346,14 @@ async def analyze_game_stream(
                 "Connection": "keep-alive",
             },
         )
+
+    if hasattr(current_user, "analysis_tickets"):
+        if current_user.analysis_tickets < 1:
+            async def ticket_error():
+                yield f"data: {json.dumps({'type': 'error', 'message': '분석 티켓이 부족합니다. 게시판 활동으로 티켓을 획득하세요.'}, ensure_ascii=False)}\n\n"
+            return StreamingResponse(ticket_error(), media_type="text/event-stream")
+        current_user.analysis_tickets -= 1
+        await db.commit()
 
     async def event_generator():
         yield f"data: {json.dumps({'type': 'queued'})}\n\n"
