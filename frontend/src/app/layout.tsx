@@ -3,6 +3,8 @@ import { Jersey_25, VT323 } from "next/font/google";
 import "./globals.css";
 import Providers from "@/shared/components/layout/Providers";
 import Navbar from "@/shared/components/layout/Navbar";
+import TicketToastHost from "@/shared/components/layout/TicketToastHost";
+import AnalysisQueueDrawer from "@/features/dashboard/components/AnalysisQueueDrawer";
 import { Analytics } from "@vercel/analytics/next";
 import { resolveApiBaseUrl } from "@/shared/lib/apiBaseUrl";
 
@@ -96,9 +98,11 @@ export default function RootLayout({
       >
         <Providers apiBaseUrl={apiBaseUrl}>
           <Navbar />
+          <TicketToastHost />
           <main className="relative z-0 max-w-screen-2xl mx-auto px-4 py-6 sm:px-6 sm:py-10">
             {children}
           </main>
+          <AnalysisQueueDrawer />
         </Providers>
         <Analytics />
       </body>

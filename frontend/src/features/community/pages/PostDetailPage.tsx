@@ -54,13 +54,12 @@ import {
   patchDetailBadgeClass,
 } from "@/shared/components/forum/boardPostBadges";
 import { ReportModal } from "@/shared/components/forum/ReportModal";
+import MarkdownBody from "@/shared/components/forum/MarkdownBody";
 import { apiErrorDetail } from "@/shared/lib/apiErrorDetail";
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDateTime } from "@/shared/lib/formatLocaleDate";
-
-function isForumAdminAuthor(role?: string | null) {
-  return (role ?? "").toLowerCase().trim() === "admin";
-}
+import { isForumAdminAuthor } from "@/shared/components/forum/AuthorName";
+import { emitTicketToast } from "@/shared/lib/ticketToast";
 
 type EditChessSnapshot = {
   pgnText: string | null;
@@ -234,11 +233,24 @@ export default function ForumPostDetailPage() {
     if (!post) return;
     setBusy(true);
     try {
-      const token = await getRequiredToken();
-      await createForumComment(post.id, token, {
+      const token = await getBackendJwt().catch(() => null);
+      const result = await createForumComment(post.id, token, {
         body: commentBody,
         ...(replyingTo ? { parent_comment_id: replyingTo.id } : {}),
       });
+      const earned = (result as Record<string, unknown> | undefined)?.tickets_earned;
+      const cooldownSeconds = (result as Record<string, unknown> | undefined)?.ticket_cooldown_seconds;
+      if (typeof earned === "number" && earned > 0) {
+        emitTicketToast({
+          message: t("ticket.earn.comment"),
+          cooldownSeconds: typeof cooldownSeconds === "number" ? cooldownSeconds : 0,
+        });
+      } else if (typeof cooldownSeconds === "number" && cooldownSeconds > 0) {
+        emitTicketToast({
+          message: t("ticket.cooldown.active"),
+          cooldownSeconds,
+        });
+      }
       setCommentBody("");
       setReplyingTo(null);
       await load();
@@ -664,9 +676,15 @@ export default function ForumPostDetailPage() {
                   </div>
                 )
               )}
-              <p className="mt-4 whitespace-pre-wrap break-words text-xl leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.2rem]">
-                {post.body}
-              </p>
+              {post.board_category ? (
+                <p className="mt-4 whitespace-pre-wrap break-words text-xl leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.2rem]">
+                  {post.body}
+                </p>
+              ) : (
+                <MarkdownBody className="mt-4 break-words text-xl leading-relaxed text-chess-primary [overflow-wrap:anywhere] sm:text-[1.2rem]">
+                  {post.body}
+                </MarkdownBody>
+              )}
               {post.pgn_text?.trim() && !post.board_category && !showPgnReplay && (
                 <div className="mt-4 pixel-frame bg-chess-surface/45 p-3 font-sans antialiased">
                   <p className="text-sm font-medium text-chess-muted sm:text-base">{t("forum.pgnLabel")}</p>
@@ -775,12 +793,12 @@ export default function ForumPostDetailPage() {
                 required
                 rows={3}
                 placeholder={t("forum.commentPlaceholder")}
-                disabled={sessionLoading || status !== "authenticated"}
+                disabled={sessionLoading}
                 className="w-full pixel-input px-3 py-2 text-lg leading-relaxed break-words [overflow-wrap:anywhere] disabled:opacity-60 sm:text-[1.05rem]"
               />
               <button
                 type="submit"
-                disabled={busy || sessionLoading || status !== "authenticated"}
+                disabled={busy || sessionLoading}
                 className="font-pixel pixel-btn bg-chess-accent px-4 py-2 text-sm font-semibold text-white border-chess-accent disabled:opacity-50"
               >
                 {t("forum.commentPost")}

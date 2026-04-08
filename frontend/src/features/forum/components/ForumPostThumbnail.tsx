@@ -59,6 +59,8 @@ const THUMB_NOTATION_NUMERIC_NORMAL = {
 
 type ForumPostThumbnailProps = {
   thumbnailFen: string | null | undefined;
+  /** 이미지 썸네일 URL — 있으면 FEN 보드 대신 이미지를 표시 */
+  thumbnailImageUrl?: string | null;
   /** 상세 등에서만 전달 (목록 썸네일은 생략 권장) */
   boardAnnotations?: unknown;
   /** PGN이 있으면 최종 국면에 맞는 byPly만 합성 (이모지가 끝 수에만 붙도록) */
@@ -81,6 +83,7 @@ type ForumPostThumbnailProps = {
  */
 export default function ForumPostThumbnail({
   thumbnailFen,
+  thumbnailImageUrl,
   boardAnnotations,
   pgnText = null,
   className,
@@ -108,7 +111,17 @@ export default function ForumPostThumbnail({
     <div
       className={`absolute inset-0 min-h-0 min-w-0 bg-chess-surface ${noPointer} ${className ?? ""}`}
     >
-      {fen ? (
+      {thumbnailImageUrl ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={thumbnailImageUrl}
+            alt=""
+            loading="lazy"
+            className="h-full w-full rounded-lg object-cover"
+          />
+        </>
+      ) : fen ? (
         <div className={`relative h-full w-full overflow-hidden rounded-lg ${noPointer}`}>
           <Chessboard
             options={{

@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 import {
+  deleteMyAnalyzedGame,
   getMeProfile,
+  getMyAnalyzedGames,
   getMyComments,
   getMyPosts,
   updateMyProfile,
@@ -18,15 +20,18 @@ import AvatarThumb from "@/shared/components/ui/AvatarThumb";
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDateTime } from "@/shared/lib/formatLocaleDate";
 import { forumPostHref } from "@/shared/lib/forumPostHref";
+import { buildGameAnalysisHrefFromDashboard } from "@/shared/lib/gameAnalysisHref";
 import { userProfileHref } from "@/shared/lib/userProfileHref";
 import type {
   MeProfile as Me,
   ProfileCommentItem as MyComment,
   ProfilePostItem as MyPost,
+  SavedAnalyzedGameItem as MyAnalyzedGame,
 } from "@/features/user-profile/types";
 
 export default function MyPage() {
   const PAGE_SIZE = 5;
+  const ANALYZED_PAGE_SIZE = 8;
   const router = useRouter();
   const { status } = useSession();
   const { t, language } = useTranslation();
@@ -45,6 +50,14 @@ export default function MyPage() {
   const [commentsTotal, setCommentsTotal] = useState(0);
   const [postsPage, setPostsPage] = useState(1);
   const [commentsPage, setCommentsPage] = useState(1);
+  const [analyzedGames, setAnalyzedGames] = useState<MyAnalyzedGame[]>([]);
+  const [analyzedTotal, setAnalyzedTotal] = useState(0);
+  const [analyzedPage, setAnalyzedPage] = useState(1);
+  const [analyzedSearchInput, setAnalyzedSearchInput] = useState("");
+  const [analyzedSearchQuery, setAnalyzedSearchQuery] = useState("");
+  const [analyzedDepthFilter, setAnalyzedDepthFilter] = useState<string>("all");
+  const [analyzedLoading, setAnalyzedLoading] = useState(false);
+  const [deletingAnalyzedId, setDeletingAnalyzedId] = useState<string | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const {
     language: settingsLanguage,
@@ -87,6 +100,12 @@ export default function MyPage() {
         setComments([]);
         setPostsTotal(0);
         setCommentsTotal(0);
+        setAnalyzedGames([]);
+        setAnalyzedTotal(0);
+        setAnalyzedPage(1);
+        setAnalyzedSearchInput("");
+        setAnalyzedSearchQuery("");
+        setAnalyzedDepthFilter("all");
       }
     } catch (e: any) {
       const d = e?.response?.data?.detail;
@@ -122,6 +141,32 @@ export default function MyPage() {
     }
   };
 
+  const loadAnalyzedGames = async () => {
+    if (status !== "authenticated" || !me?.signup_completed) return;
+    try {
+      setAnalyzedLoading(true);
+      const token = await getBackendJwt();
+      if (!token) return;
+      const depth = analyzedDepthFilter === "all" ? undefined : Number(analyzedDepthFilter);
+      const result = await getMyAnalyzedGames(
+        token,
+        analyzedPage,
+        ANALYZED_PAGE_SIZE,
+        analyzedSearchQuery,
+        depth,
+      );
+      setAnalyzedGames(result.items ?? []);
+      setAnalyzedTotal(result.total ?? 0);
+    } catch (e: any) {
+      const d = e?.response?.data?.detail;
+      const msg =
+        typeof d === "string" ? d : Array.isArray(d) ? d.map((x: unknown) => JSON.stringify(x)).join(" ") : e?.message;
+      setError(msg ?? t("mypage.error.load"));
+    } finally {
+      setAnalyzedLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadProfile();
   }, [status]);
@@ -129,6 +174,10 @@ export default function MyPage() {
   useEffect(() => {
     void loadActivity();
   }, [status, me?.signup_completed, me?.id, postsPage, commentsPage]);
+
+  useEffect(() => {
+    void loadAnalyzedGames();
+  }, [status, me?.signup_completed, me?.id, analyzedPage, analyzedSearchQuery, analyzedDepthFilter]);
 
   useEffect(() => {
     setDraftLang(settingsLanguage);
@@ -236,12 +285,61 @@ export default function MyPage() {
     window.setTimeout(() => setSettingsSaved(false), 1500);
   };
 
+  const onSubmitAnalyzedSearch = (e: FormEvent) => {
+    e.preventDefault();
+    const next = analyzedSearchInput.trim();
+    setAnalyzedPage(1);
+    setAnalyzedSearchQuery(next);
+  };
+
+  const onClearAnalyzedSearch = () => {
+    setAnalyzedSearchInput("");
+    setAnalyzedPage(1);
+    setAnalyzedSearchQuery("");
+    setAnalyzedDepthFilter("all");
+  };
+
+  const onDeleteAnalyzedGame = async (savedGameId: string) => {
+    const ok = window.confirm(t("mypage.analyzedGameDeleteConfirm"));
+    if (!ok) return;
+
+    setDeletingAnalyzedId(savedGameId);
+    try {
+      const token = await getBackendJwt();
+      if (!token) throw new Error(t("forum.error.noLoginToken"));
+      await deleteMyAnalyzedGame(token, savedGameId);
+
+      if (analyzedGames.length <= 1 && analyzedPage > 1) {
+        setAnalyzedPage((prev) => Math.max(1, prev - 1));
+      } else {
+        await loadAnalyzedGames();
+      }
+    } catch (e: any) {
+      const d = e?.response?.data?.detail;
+      const msg = typeof d === "string" ? d : e?.message ?? t("mypage.error.load");
+      setError(msg);
+    } finally {
+      setDeletingAnalyzedId(null);
+    }
+  };
+
   const postsPageCount = Math.max(1, Math.ceil(postsTotal / PAGE_SIZE));
   const commentsPageCount = Math.max(1, Math.ceil(commentsTotal / PAGE_SIZE));
+  const analyzedPageCount = Math.max(1, Math.ceil(analyzedTotal / ANALYZED_PAGE_SIZE));
   const postsRangeStart = postsTotal > 0 ? (postsPage - 1) * PAGE_SIZE + 1 : 0;
   const postsRangeEnd = postsTotal > 0 ? Math.min(postsPage * PAGE_SIZE, postsTotal) : 0;
   const commentsRangeStart = commentsTotal > 0 ? (commentsPage - 1) * PAGE_SIZE + 1 : 0;
   const commentsRangeEnd = commentsTotal > 0 ? Math.min(commentsPage * PAGE_SIZE, commentsTotal) : 0;
+  const analyzedRangeStart = analyzedTotal > 0 ? (analyzedPage - 1) * ANALYZED_PAGE_SIZE + 1 : 0;
+  const analyzedRangeEnd = analyzedTotal > 0 ? Math.min(analyzedPage * ANALYZED_PAGE_SIZE, analyzedTotal) : 0;
+  const nextNicknameChangeAt = me?.display_name_change_available_at
+    ? new Date(me.display_name_change_available_at)
+    : null;
+  const hasNicknameCooldownInfo =
+    nextNicknameChangeAt !== null && !Number.isNaN(nextNicknameChangeAt.getTime());
+  const nextNicknameChangeText = hasNicknameCooldownInfo
+    ? nextNicknameChangeAt.toLocaleString(language === "ko" ? "ko-KR" : "en-US")
+    : "";
 
   return (
     <section className="mx-auto w-full max-w-4xl space-y-5">
@@ -249,12 +347,6 @@ export default function MyPage() {
         <h1 className="font-pixel text-2xl md:text-3xl font-bold tracking-wide text-chess-primary pixel-glitch-title">
           {t("mypage.title")}
         </h1>
-        <Link
-          href="/forum"
-          className="font-pixel inline-flex items-center px-3 py-1.5 text-xs font-medium text-chess-primary pixel-btn bg-chess-surface/80 hover:brightness-[1.03] dark:bg-chess-elevated/50"
-        >
-          {t("mypage.goForum")}
-        </Link>
       </div>
 
       {loading && (
@@ -415,6 +507,11 @@ export default function MyPage() {
                 onChange={(e) => setDisplayName(e.target.value)}
                 className="mt-1 w-full px-3 py-2 text-sm text-chess-primary pixel-input"
               />
+              {hasNicknameCooldownInfo && (
+                <p className="mt-1 text-xs text-chess-muted">
+                  {t("mypage.nicknameCooldownHint").replace("{at}", nextNicknameChangeText)}
+                </p>
+              )}
             </div>
             <label className="flex cursor-pointer items-start gap-2 text-sm text-chess-primary">
               <input
@@ -568,6 +665,144 @@ export default function MyPage() {
               </div>
             )}
           </section>
+
+          <section
+            className={`pixel-frame pixel-hud-fill p-4 sm:p-5 ${analyzedLoading ? "opacity-70" : ""}`}
+            aria-busy={analyzedLoading}
+          >
+            <h2 className="font-pixel text-lg font-bold text-chess-primary tracking-wide">
+              {t("mypage.myAnalyzedGames")}
+            </h2>
+            <p className="mt-1 text-xs text-chess-muted">{t("mypage.analyzedGamesHint")}</p>
+            <p className="mt-1 text-xs text-chess-muted">{t("mypage.analyzedGameSearchHint")}</p>
+
+            <form onSubmit={onSubmitAnalyzedSearch} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                value={analyzedSearchInput}
+                onChange={(e) => setAnalyzedSearchInput(e.target.value)}
+                placeholder={t("mypage.analyzedGameSearchPlaceholder")}
+                className="w-full min-w-0 flex-1 px-3 py-2 text-sm text-chess-primary pixel-input"
+              />
+              <select
+                value={analyzedDepthFilter}
+                onChange={(e) => {
+                  setAnalyzedPage(1);
+                  setAnalyzedDepthFilter(e.target.value);
+                }}
+                aria-label={t("mypage.analyzedGameDepthFilter")}
+                className="w-full sm:w-36 px-3 py-2 text-sm text-chess-primary pixel-input"
+              >
+                <option value="all">{t("mypage.analyzedGameDepthAll")}</option>
+                {[12, 18, 24].map((depth) => (
+                  <option key={depth} value={String(depth)}>
+                    D{depth}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={analyzedLoading}
+                  className="font-pixel px-3 py-2 text-xs font-semibold text-white bg-chess-accent pixel-btn disabled:opacity-50"
+                >
+                  {t("mypage.analyzedGameSearch")}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClearAnalyzedSearch}
+                  disabled={analyzedLoading}
+                  className="font-pixel px-3 py-2 text-xs font-medium text-chess-primary pixel-btn bg-chess-surface/80 disabled:opacity-50"
+                >
+                  {t("mypage.analyzedGameSearchClear")}
+                </button>
+              </div>
+            </form>
+
+            <div className="mt-3 space-y-2">
+              {analyzedGames.length === 0 ? (
+                <p className="text-sm text-chess-muted border-2 border-dashed border-chess-border/70 px-3 py-6 text-center">
+                  {analyzedSearchQuery ? t("mypage.noAnalyzedGamesBySearch") : t("mypage.noAnalyzedGames")}
+                </p>
+              ) : (
+                analyzedGames.map((item) => {
+                  const href = buildGameAnalysisHrefFromDashboard(item.dashboard_href, item.game_id);
+                  const deleting = deletingAnalyzedId === item.id;
+
+                  return (
+                    <article key={item.id} className="pixel-frame pixel-hud-fill p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <Link
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block min-w-0 max-w-full font-pixel text-sm font-bold text-chess-primary no-underline hover:text-chess-accent"
+                        >
+                          <span className="line-clamp-2 w-full min-w-0 max-w-full break-all [overflow-wrap:anywhere] [word-break:break-word]">
+                            {item.label}
+                          </span>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => void onDeleteAnalyzedGame(item.id)}
+                          disabled={deleting || analyzedLoading}
+                          className="font-pixel shrink-0 px-2 py-1 text-[11px] text-red-600 pixel-btn bg-red-500/10 disabled:opacity-50"
+                        >
+                          {deleting ? t("mypage.analyzedGameDeleting") : t("mypage.analyzedGameDelete")}
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-chess-muted tabular-nums">
+                        {t("mypage.analyzedGameDepth").replace("{depth}", String(item.depth))}
+                      </p>
+                      <p className="mt-1 text-xs text-chess-muted tabular-nums">
+                        {formatPostDateTime(item.analyzed_at, language)}
+                      </p>
+                    </article>
+                  );
+                })
+              )}
+            </div>
+
+            {analyzedPageCount > 1 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-center text-xs text-chess-muted tabular-nums sm:text-sm">
+                  {t("forum.pagination.showing")
+                    .replace("{start}", String(analyzedRangeStart))
+                    .replace("{end}", String(analyzedRangeEnd))
+                    .replace("{total}", String(analyzedTotal))}
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAnalyzedPage((prev) => Math.max(1, prev - 1))}
+                    disabled={analyzedPage === 1 || analyzedLoading}
+                    className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    {t("forum.pagination.prev")}
+                  </button>
+                  <span className="font-pixel text-xs text-chess-muted tabular-nums">
+                    {analyzedPage} / {analyzedPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyzedPage((prev) => Math.min(analyzedPageCount, prev + 1))}
+                    disabled={analyzedPage === analyzedPageCount || analyzedLoading}
+                    className="font-pixel pixel-btn px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    {t("forum.pagination.next")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <div className="flex justify-end">
+            <Link
+              href="/mypage/withdraw"
+              className="text-xs text-chess-muted underline decoration-dotted underline-offset-4 hover:text-red-500"
+            >
+              {t("mypage.withdraw.openSurvey")}
+            </Link>
+          </div>
         </>
       )}
     </section>

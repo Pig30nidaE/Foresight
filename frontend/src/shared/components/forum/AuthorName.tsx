@@ -20,9 +20,20 @@ type AuthorNameLinkProps = {
   avatarSize?: number;
 };
 
+export function isForumAdminAuthor(role?: string): boolean {
+  return (role ?? "").toLowerCase().trim() === "admin";
+}
+
+export function isAnonymousAuthor(author: ForumAuthor): boolean {
+  return (author.role ?? "").toLowerCase().trim() === "guest" || !author.id;
+}
+
 export function AuthorNameLink({ author, href, className, avatarSize = 24 }: AuthorNameLinkProps) {
+  if (isAnonymousAuthor(author)) {
+    return <AuthorNameInline author={author} className={className} avatarSize={avatarSize} />;
+  }
   const to = href ?? userProfileHref(author);
-  const isAdmin = (author.role ?? "").toLowerCase().trim() === "admin";
+  const isAdmin = isForumAdminAuthor(author.role);
   return (
     <Link
       href={to}

@@ -6,6 +6,10 @@ import { signOut, useSession } from "next-auth/react";
 
 import api from "@/shared/lib/api";
 import { clearBackendJwtCache, getBackendJwt } from "@/shared/lib/backendJwt";
+import {
+  computeAnalysisQueueUserKey,
+  disposeAnalysisQueueForUserKey,
+} from "@/features/dashboard/contexts/AnalysisQueueContext";
 import { useTranslation } from "@/shared/lib/i18n";
 
 type MeSignup = {
@@ -16,7 +20,7 @@ type MeSignup = {
 function SignupConsentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { status } = useSession();
+  const { status, data: session } = useSession();
   const { t } = useTranslation();
   const conflictMessage = useMemo(() => {
     const code = searchParams.get("code");
@@ -52,7 +56,13 @@ function SignupConsentContent() {
     void run();
   }, [status, router]);
 
+  const disposeQueueIfSignedIn = () => {
+    const key = computeAnalysisQueueUserKey(session ?? null);
+    if (key) disposeAnalysisQueueForUserKey(key);
+  };
+
   const onReject = async () => {
+    disposeQueueIfSignedIn();
     clearBackendJwtCache();
     await signOut({ callbackUrl: "/" });
   };
@@ -64,13 +74,14 @@ function SignupConsentContent() {
       <section className="mx-auto w-full max-w-xl pixel-frame bg-chess-surface/75 p-6 text-center">
         <h1 className="text-xl font-bold text-chess-primary">{t("signup.conflict.title")}</h1>
         <p className="mt-3 text-sm leading-relaxed text-chess-muted">{t("signup.conflict.lead")}</p>
-        <p className="mt-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-3 text-sm font-medium leading-relaxed text-red-700 dark:text-red-200">
+        <p className="mt-4 rounded-md border border-red-400 bg-red-50 px-3 py-3 text-sm font-semibold leading-relaxed text-red-800 dark:border-red-600 dark:bg-red-950/50 dark:text-red-100">
           {conflictMessage}
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
             onClick={async () => {
+              disposeQueueIfSignedIn();
               clearBackendJwtCache();
               await signOut({ callbackUrl: signInAgainUrl });
             }}

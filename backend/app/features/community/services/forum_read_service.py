@@ -33,7 +33,18 @@ def _decode_cursor(raw: str) -> tuple[datetime, uuid.UUID]:
         ) from exc
 
 
-def _author_out(user: User) -> AuthorOut:
+ANONYMOUS_AUTHOR = AuthorOut(
+    id=None,
+    public_id="anonymous",
+    display_name="익명",
+    avatar_url=None,
+    role="guest",
+)
+
+
+def _author_out(user: User | None) -> AuthorOut:
+    if user is None:
+        return ANONYMOUS_AUTHOR
     return AuthorOut(
         id=user.id,
         public_id=user.public_id,
@@ -151,7 +162,7 @@ async def _list_posts_core(
 
     stmt = (
         select(Post, c_count, l_count, liked)
-        .join(User, Post.author_id == User.id)
+        .outerjoin(User, Post.author_id == User.id)
         .options(selectinload(Post.author))
         .where(*where_clauses)
     )
@@ -211,6 +222,7 @@ async def _list_posts_core(
                 has_pgn=bool(pgn_stripped),
                 has_fen=bool(post.fen_initial and post.fen_initial.strip()),
                 thumbnail_fen=thumbnail_fen_for_post(post.pgn_text, post.fen_initial),
+                thumbnail_image_url=post.thumbnail_image_url,
                 pgn_text=pgn_stripped,
             )
         )
@@ -306,6 +318,7 @@ async def get_post_detail(*, db: AsyncSession, me: User | None, post_id: str) ->
         fen_initial=post.fen_initial,
         board_annotations=post.board_annotations,
         board_category=post.board_category,
+        thumbnail_image_url=post.thumbnail_image_url,
         created_at=post.created_at,
         updated_at=post.updated_at,
         author=_author_out(post.author),

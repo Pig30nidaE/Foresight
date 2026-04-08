@@ -20,6 +20,7 @@ import csv
 import io
 import json
 import logging
+import re
 import statistics
 from collections import deque
 from dataclasses import dataclass
@@ -38,6 +39,94 @@ from app.models.schemas import RatingBracket, Tier
 
 logger = logging.getLogger(__name__)
 
+# ── 오프닝 영문→한글 이름 매핑 (검색용) ─────────────────────────────
+OPENING_NAME_KO: Dict[str, str] = {
+    "Nimzo-Larsen Attack": "님조 라센 어택",
+    "Bird's Opening": "버드 오프닝",
+    "Reti Opening": "레티 오프닝",
+    "English Opening": "잉글리시 오프닝",
+    "English: 1...e5": "잉글리시: 1...e5",
+    "English: Symmetrical": "잉글리시: 대칭형",
+    "Indian Defense": "인디안 디펜스",
+    "Indian: London System": "인디안: 런던 시스템",
+    "Budapest Gambit": "부다페스트 갬빗",
+    "Benko Gambit": "벤코 갬빗",
+    "Dutch Defense": "더치 디펜스",
+    "King's Pawn Game": "킹스 폰 게임",
+    "Scandinavian Defense": "스칸디나비안 디펜스",
+    "Alekhine's Defense": "알레킨 디펜스",
+    "Modern Defense": "모던 디펜스",
+    "Pirc Defense": "피르츠 디펜스",
+    "Caro-Kann Defense": "카로칸 디펜스",
+    "Caro-Kann: Advance": "카로칸: 전진 변형",
+    "Caro-Kann: Exchange": "카로칸: 교환 변형",
+    "Caro-Kann: Main Line": "카로칸: 메인 라인",
+    "Sicilian Defense": "시실리안 디펜스",
+    "Sicilian: Closed": "시실리안: 클로즈드",
+    "Sicilian: Old Sicilian": "시실리안: 올드 시실리안",
+    "Sicilian: 2.Nf3 e6": "시실리안: 2.Nf3 e6",
+    "Sicilian: 2.Nf3 d6": "시실리안: 2.Nf3 d6",
+    "Sicilian: Dragon": "시실리안: 드래곤",
+    "Sicilian: Scheveningen": "시실리안: 셰베닝겐",
+    "Sicilian: Najdorf": "시실리안: 나이도르프",
+    "French Defense": "프렌치 디펜스",
+    "French: Exchange": "프렌치: 교환 변형",
+    "French: Advance": "프렌치: 전진 변형",
+    "French: Classical": "프렌치: 클래시컬",
+    "French: Winawer": "프렌치: 비나베르",
+    "King's Pawn: 1.e4 e5": "킹스 폰: 1.e4 e5",
+    "Bishop's Opening": "비숍 오프닝",
+    "Vienna Game": "비엔나 게임",
+    "King's Gambit": "킹스 갬빗",
+    "King's Knight Opening": "킹스 나이트 오프닝",
+    "Philidor Defense": "필리도르 디펜스",
+    "Petrov's Defense": "페트로프 디펜스",
+    "Scotch Game": "스카치 게임",
+    "Scotch: Main Line": "스카치: 메인 라인",
+    "Three Knights Game": "쓰리 나이트 게임",
+    "Four Knights Game": "포 나이트 게임",
+    "Italian Game": "이탈리안 게임",
+    "Evans Gambit": "에반스 갬빗",
+    "Two Knights Defense": "투 나이트 디펜스",
+    "Ruy Lopez": "루이 로페즈",
+    "Ruy Lopez: Berlin Defense": "루이 로페즈: 베를린 디펜스",
+    "Ruy Lopez: Morphy Defense": "루이 로페즈: 모피 디펜스",
+    "Ruy Lopez: Open Variation": "루이 로페즈: 오픈 변형",
+    "Ruy Lopez: Closed": "루이 로페즈: 클로즈드",
+    "Queen's Pawn Game": "퀸스 폰 게임",
+    "London System": "런던 시스템",
+    "Colle System": "콜레 시스템",
+    "Queen's Gambit": "퀸스 갬빗",
+    "Slav Defense": "슬라브 디펜스",
+    "Queen's Gambit Accepted": "퀸스 갬빗 억셉티드",
+    "Queen's Gambit Declined": "퀸스 갬빗 디클라인드",
+    "Tarrasch Defense": "타라쉬 디펜스",
+    "QGD: 4.Nf3": "퀸스 갬빗 디클라인드: 4.Nf3",
+    "Semi-Slav Defense": "세미슬라브 디펜스",
+    "QGD: 4.Bg5": "퀸스 갬빗 디클라인드: 4.Bg5",
+    "Grunfeld Defense": "그린펠드 디펜스",
+    "Grunfeld: Exchange": "그린펠드: 교환 변형",
+    "Catalan Opening": "카탈란 오프닝",
+    "Queen's Indian Defense": "퀸스 인디안 디펜스",
+    "Bogo-Indian Defense": "보고 인디안 디펜스",
+    "Nimzo-Indian Defense": "님조 인디안 디펜스",
+    "King's Indian Defense": "킹스 인디안 디펜스",
+    "KID: Samisch Variation": "킹스 인디안: 제미쉬 변형",
+    "KID: Classical": "킹스 인디안: 클래시컬",
+    "Starting Position": "시작 포지션",
+}
+
+
+def _get_name_ko(name: str) -> str:
+    """영문 오프닝 이름에 매칭되는 한글 이름 반환. 없으면 빈 문자열."""
+    if name in OPENING_NAME_KO:
+        return OPENING_NAME_KO[name]
+    base = name.split(":")[0].strip()
+    if base in OPENING_NAME_KO:
+        return OPENING_NAME_KO[base]
+    return ""
+
+
 # ── Lichess Explorer 설정 ────────────────────────────────────────────
 EXPLORER_URL = "https://explorer.lichess.org/lichess"
 TOP_N_MOVES = 5
@@ -48,15 +137,15 @@ CATALOG_REQUEST_DELAY = 0.3  # 카탈로그 병렬 요청 슬롯 내 딜레이 (
 MAX_CONCURRENT = 3           # 동시 API 요청 최대 수
 MAX_DEPTH = 10
 MAX_NODES = 200
-MIN_CATALOG_RESULTS = 10     # 이보다 적으면 BFS 폴백
+MIN_CATALOG_RESULTS = MAX_OPENINGS_DISPLAY  # 100개 미만이면 BFS 폴백
 
 # ── 티어 점수 가중치 ───────────────────────────────────────────────
 SCORING_PRIOR = 600    # 베이지안 평활화 강도
 WIN_WEIGHT    = 0.5    # 승률 성분(상대적 퍼포먼스) 가중치
 POP_WEIGHT    = 0.5    # 인기도(로그 정규화 게임 수) 가중치
 PICK_RATE_THRESHOLD = 0.02  # 픽률 2% 이상이면 인기도 가산점 최대 적용
-MIN_PICK_RATE = 0.01        # 온라인 매칭 표본의 1% 미만 변형은 "데이터 부족"으로 제외
-MIN_TIER_DEPTH = 3     # 최소 수(half-move) — 이보다 얕은 범용 포지션 제외
+MIN_PICK_RATE = 0.001       # 0.1% 미만 변형만 마이너로 분류
+MIN_TIER_DEPTH = 2     # 최소 수(half-move) — 너무 얕은 항목만 제외
 POP_DEPTH_TARGET = 5   # 이 depth 이상이면 인기도 패널티 없음
 
 # ── 레이팅 구간 (노출 버킷 5개) ─────────────────────────────────────
@@ -222,6 +311,11 @@ CACHE_LOGIC_VERSION = 9
 def _display_label(bracket_key: int) -> str:
     """실제 Lichess bucket 표시 라벨 반환."""
     return _BRACKET_DISPLAY[bracket_key]
+
+
+def _opening_key(eco: str, name: str) -> str:
+    """ECO 단일 키 병합을 피하기 위해 ECO+이름을 고유 키로 사용합니다."""
+    return f"{eco}|{name}"
 
 
 class OpeningTierService:
@@ -713,9 +807,9 @@ class OpeningTierService:
                 len(openings), rating, speed,
             )
             bfs_openings = await self._bfs_explore(rating, speed, since, until, min_games=min_games)
-            for eco, node in bfs_openings.items():
-                if eco not in openings or node.depth > openings[eco].depth:
-                    openings[eco] = node
+            for key, node in bfs_openings.items():
+                if key not in openings or node.depth > openings[key].depth:
+                    openings[key] = node
         return openings
 
     # ─────────────────────────────────────────────────
@@ -770,7 +864,7 @@ class OpeningTierService:
                 return None
 
             return (
-                eco,
+                _opening_key(eco, name),
                 _OpeningNode(
                     eco=eco,
                     name=name,
@@ -791,10 +885,10 @@ class OpeningTierService:
         for result in results:
             if isinstance(result, Exception) or result is None:
                 continue
-            eco, node = result
-            # 동일 ECO는 더 깊은(구체적인) 변형 우선
-            if eco not in openings or node.depth > openings[eco].depth:
-                openings[eco] = node
+            key, node = result
+            # 동일 ECO+이름 조합에서는 더 깊은(구체적인) 변형 우선
+            if key not in openings or node.depth > openings[key].depth:
+                openings[key] = node
 
         logger.info(
             "Catalog explore done: %d openings (rating=%s speed=%s)",
@@ -850,8 +944,9 @@ class OpeningTierService:
                     black_wins = data.get("black", 0)
                     total = white_wins + draws + black_wins
                     if total >= min_games:
-                        if eco not in openings or depth > openings[eco].depth:
-                            openings[eco] = _OpeningNode(
+                        key = _opening_key(eco, name)
+                        if key not in openings or depth > openings[key].depth:
+                            openings[key] = _OpeningNode(
                                 eco=eco,
                                 name=name,
                                 opening_side=_infer_opening_side_by_eco(eco, name, None, depth),
@@ -1044,7 +1139,10 @@ class OpeningTierService:
         if not openings:
             return []
 
-        openings = self._remove_parent_entries(openings)
+        # 후보가 충분히 많을 때만 prefix 부모 항목을 제거합니다.
+        # 적은 표본에서 부모 제거를 강하게 적용하면 9~12개 수준으로 과도 축소될 수 있습니다.
+        if len(openings) > MAX_OPENINGS_DISPLAY:
+            openings = self._remove_parent_entries(openings)
 
         # 요청 색상과 오프닝 기준 색상이 일치하는 항목만 유지
         openings = {
@@ -1161,6 +1259,7 @@ class OpeningTierService:
                 {
                     "eco": node.eco,
                     "name": node.name,
+                    "name_ko": _get_name_ko(node.name),
                     "tier": tier,
                     "white_wins": node.white_wins,
                     "draws": node.draws,
@@ -1178,17 +1277,53 @@ class OpeningTierService:
         return result
 
     @staticmethod
+    def _normalize_search_text(text: Any) -> str:
+        """검색 비교를 위해 문자열을 소문자/구두점 제거 형태로 정규화합니다."""
+        s = str(text or "").lower().strip()
+        # 영문/숫자/한글을 제외한 문자는 공백으로 치환 후 공백 제거
+        s = re.sub(r"[^0-9a-zA-Z가-힣]+", " ", s)
+        return "".join(s.split())
+
+    @staticmethod
     def filter_openings(
         openings: List[Dict[str, Any]],
         q: str | None = None,
     ) -> List[Dict[str, Any]]:
-        query = (q or "").strip().lower()
-        if not query:
+        query_raw = (q or "").strip()
+        query_norm = OpeningTierService._normalize_search_text(query_raw)
+        if not query_norm:
             return openings
+
+        query_tokens = [t for t in query_raw.lower().split() if t]
+        query_tokens_norm = [
+            OpeningTierService._normalize_search_text(t) for t in query_tokens
+        ]
+        query_tokens_norm = [t for t in query_tokens_norm if t]
+
+        def _matches(row: Dict[str, Any]) -> bool:
+            fields = [
+                str(row.get("name", "")),
+                str(row.get("eco", "")),
+                str(row.get("name_ko", "")),
+            ]
+            row_raw_joined = " ".join(fields).lower()
+            row_norm_joined = OpeningTierService._normalize_search_text(" ".join(fields))
+
+            # 기본: 정규화된 포함 검색
+            if query_norm in row_norm_joined:
+                return True
+
+            # 다중 단어 검색은 각 토큰이 포함되면 매치 (순서 무관)
+            if query_tokens_norm and all(tok in row_norm_joined for tok in query_tokens_norm):
+                return True
+
+            # 정규화 전 원문에도 포함 검색을 한 번 더 시도
+            return query_raw.lower() in row_raw_joined
+
         return [
             row
             for row in openings
-            if query in str(row.get("name", "")).lower() or query in str(row.get("eco", "")).lower()
+            if _matches(row)
         ]
 
     @staticmethod

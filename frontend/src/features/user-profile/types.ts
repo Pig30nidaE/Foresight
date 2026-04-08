@@ -5,7 +5,10 @@ export type MeProfile = {
   display_name: string;
   signup_completed: boolean;
   profile_public: boolean;
+  analysis_tickets?: number;
   avatar_url?: string | null;
+  display_name_changed_at?: string | null;
+  display_name_change_available_at?: string | null;
 };
 
 export type ProfilePostItem = {
@@ -25,6 +28,15 @@ export type ProfileCommentItem = {
   post_public_id: string;
   post_title: string;
   post_board_category?: string | null;
+};
+
+export type SavedAnalyzedGameItem = {
+  id: string;
+  game_id: string;
+  label: string;
+  depth: number;
+  dashboard_href?: string | null;
+  analyzed_at: string;
 };
 
 export type UserPublicProfile = {
