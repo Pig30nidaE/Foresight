@@ -1,6 +1,6 @@
 "use client";
 
-import ForumPostThumbnail from "@/app/forum/ForumPostThumbnail";
+import ForumPostThumbnail from "@/features/forum/components/ForumPostThumbnail";
 import { useTranslation } from "@/shared/lib/i18n";
 
 type ForumBoardPeekCardProps = {

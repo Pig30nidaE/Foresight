@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Chessboard } from "react-chessboard";
 
-import ForumBoardAnnotationLayer from "@/app/forum/ForumBoardAnnotationLayer";
-import { positionsFromPgnText } from "@/shared/lib/forumChess";
+import ForumBoardAnnotationLayer from "@/features/forum/components/ForumBoardAnnotationLayer";
+import { positionsFromPgnText } from "@/features/forum/lib/forumChess";
 import {
   highlightsToSquareStyles,
   mergeAnnotationsForReplayIndex,
   normalizeBoardAnnotationsFromApi,
-} from "@/shared/lib/forumBoardAnnotations";
+} from "@/features/forum/lib/forumBoardAnnotations";
 import { useTranslation } from "@/shared/lib/i18n";
 
 /** 글 상세 재생: 보드 크기에 비례해 좌표 크기 상한 (모바일에서 과대 방지) */

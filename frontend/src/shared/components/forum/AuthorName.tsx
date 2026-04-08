@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import AvatarThumb from "@/shared/components/ui/AvatarThumb";
 import { PixelCrownGlyph } from "@/shared/components/ui/PixelGlyphs";
+import { userProfileHref } from "@/shared/lib/userProfileHref";
 
 export type ForumAuthor = {
   id: string;
@@ -20,7 +21,7 @@ type AuthorNameLinkProps = {
 };
 
 export function AuthorNameLink({ author, href, className, avatarSize = 24 }: AuthorNameLinkProps) {
-  const to = href ?? `/user/${author.public_id ?? author.id}`;
+  const to = href ?? userProfileHref(author);
   const isAdmin = (author.role ?? "").toLowerCase().trim() === "admin";
   return (
     <Link

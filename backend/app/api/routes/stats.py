@@ -113,10 +113,23 @@ async def get_first_move_stats(
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
         logger.info(f"  → API returned {len(games)} games")
+        
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
+        # → AnalysisService는 pandas 대신 row(dict) 리스트를 반환
+        rows = analysis_svc.build_dataframe(games)
+        cols = sorted(rows[0].keys()) if rows else "EMPTY"
+        logger.info(f"  → Rows: {len(rows)} rows, columns={cols}")
 
-        # build_dataframe / build_rows 는 list[dict] 반환 (pandas 아님). GameSummary.pgn 기준 첫 수 추출.
-        rows = analysis_svc.build_rows(games)
-        logger.info(f"  → rows: {len(rows)} (first-move stats input)")
+        if rows:
+            tc_dist: dict[str, int] = {}
+            for row in rows:
+                tc = row.get("time_class")
+                if not tc:
+                    continue
+                tc_dist[str(tc)] = tc_dist.get(str(tc), 0) + 1
+            logger.info(
+                f"  → time_class distribution: {tc_dist if tc_dist else 'NO time_class FIELD'}"
+            )
 
         result = analysis_svc.get_first_move_stats(rows, username.lower())
         logger.info(f"  → Result: white={len(result['white'])}, black={len(result['black'])}, total_games={result.get('total_games', 'N/A')}")
@@ -149,13 +162,21 @@ async def get_opening_tree(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
-        rows = analysis_svc.build_rows(games)
-        if side:
-            u = username.lower()
-            if side == "white":
-                rows = [r for r in rows if (r.get("white") or "").lower() == u]
-            elif side == "black":
-                rows = [r for r in rows if (r.get("black") or "").lower() == u]
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
+        rows = analysis_svc.build_dataframe(games)
+        if rows and side:
+            side_lower = side.lower()
+            user_lower = username.lower()
+            if side_lower == "white":
+                rows = [
+                    r for r in rows
+                    if isinstance(r.get("white"), str) and r["white"].lower() == user_lower
+                ]
+            elif side_lower == "black":
+                rows = [
+                    r for r in rows
+                    if isinstance(r.get("black"), str) and r["black"].lower() == user_lower
+                ]
 
         return analysis_svc.get_opening_tree(rows, depth)
     except Exception as e:
@@ -183,8 +204,9 @@ async def get_best_worst_openings(
         else:
             games = await lichess_svc.get_recent_games(username, max_games, time_class, since_ms=since_ms, until_ms=until_ms)
 
-        rows = analysis_svc.build_rows(games)
-        return analysis_svc.get_best_worst_openings(rows, min_games)
+        # Note: games는 이미 get_recent_games() 에서 time_class로 필터됨
+        df = analysis_svc.build_dataframe(games)
+        return analysis_svc.get_best_worst_openings(df, min_games)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

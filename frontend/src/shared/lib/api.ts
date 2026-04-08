@@ -119,9 +119,15 @@ export async function* streamGameAnalysis(
   stockfishDepth?: number,
   signal?: AbortSignal,
 ): AsyncGenerator<AnalysisSSEEvent> {
+  const token = await getBackendJwt();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${effectiveApiBaseUrl()}/game-analysis/game/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       pgn,
       game_id: gameId,

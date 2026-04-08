@@ -5,44 +5,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ChevronRight, FileText, MessageCircle } from "lucide-react";
 
-import api from "@/shared/lib/api";
+import { getPublicUserProfile } from "@/features/user-profile/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";
-import { resolveAvatarUrl } from "@/shared/lib/avatarUrl";
+import { DEFAULT_AVATAR_PATH, resolveAvatarUrl } from "@/shared/lib/avatarUrl";
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDateTime } from "@/shared/lib/formatLocaleDate";
 import { forumPostHref } from "@/shared/lib/forumPostHref";
-
-type PublicPost = {
-  id: string;
-  public_id: string;
-  title: string;
-  body_preview: string;
-  created_at: string;
-  board_category?: string | null;
-};
-
-type PublicComment = {
-  id: string;
-  body: string;
-  created_at: string;
-  post_id: string;
-  post_public_id: string;
-  post_title: string;
-  post_board_category?: string | null;
-};
-
-type UserPublicProfile = {
-  id: string;
-  public_id: string;
-  display_name: string;
-  avatar_url: string | null;
-  profile_public: boolean;
-  activity_visible: boolean;
-  posts: PublicPost[];
-  comments: PublicComment[];
-  posts_total: number;
-  comments_total: number;
-};
+import type { UserPublicProfile } from "@/features/user-profile/types";
 
 export default function PublicUserProfileView() {
   const PAGE_SIZE = 5;
@@ -66,15 +35,16 @@ export default function PublicUserProfileView() {
         if (isFirstProfileFetch.current) setLoading(true);
         else setListRefreshing(true);
         const token = await getBackendJwt();
-        const { data } = await api.get<UserPublicProfile>(`/users/${userId}`, {
-          params: {
+        const data = await getPublicUserProfile(
+          userId,
+          {
             posts_page: postsPage,
             posts_page_size: PAGE_SIZE,
             comments_page: commentsPage,
             comments_page_size: PAGE_SIZE,
           },
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
+          token ?? undefined,
+        );
         setProfile(data);
         setError(null);
         isFirstProfileFetch.current = false;
@@ -176,6 +146,9 @@ export default function PublicUserProfileView() {
                         alt=""
                         className="h-24 w-24 object-cover pixel-frame sm:h-28 sm:w-28"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.src = DEFAULT_AVATAR_PATH;
+                        }}
                       />
                     )}
                   </div>

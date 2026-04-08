@@ -19,7 +19,7 @@ import {
   PixelMagnifyGlyph,
   PixelPawnGlyph,
 } from "@/shared/components/ui/PixelGlyphs";
-import { resolveAvatarUrl } from "@/shared/lib/avatarUrl";
+import { DEFAULT_AVATAR_PATH, resolveAvatarUrl } from "@/shared/lib/avatarUrl";
 
 const TIME_CLASSES: TimeClass[] = ["bullet", "blitz", "rapid", "classical"];
 
@@ -95,7 +95,7 @@ function DashboardContent() {
 
   const enabled = !!submitted;
 
-  const { data: profile } = useQuery({
+  const { data: profile, error: profileError } = useQuery({
     queryKey: ["profile", submittedPlatform, submitted],
     queryFn: () => getPlayerProfile(submittedPlatform, submitted),
     enabled,
@@ -179,9 +179,10 @@ function DashboardContent() {
             type="button"
             onClick={handleSearch}
             disabled={platform === "lichess"}
-            className="font-pixel pixel-btn px-4 py-2.5 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white text-base font-semibold shrink-0"
+            className="pixel-btn flex items-center justify-center w-11 h-11 bg-chess-inverse hover:bg-chess-inverse/90 disabled:opacity-40 disabled:pointer-events-none text-white shrink-0"
+            aria-label={t("dh.startAnalysis")}
           >
-            {t("dh.startAnalysis")}
+            <PixelMagnifyGlyph size={16} className="shrink-0" />
           </button>
         </div>
 
@@ -376,7 +377,17 @@ function DashboardContent() {
         </div>
       )}
 
-      {submitted && (
+      {submitted && profileError && (
+        <div className="flex flex-col items-center py-16 sm:py-24 gap-3">
+          <PixelPawnGlyph className="opacity-40 text-red-500/50" size={56} />
+          <div className="text-center space-y-2">
+            <p className="font-bold text-chess-primary">{t("dh.userNotFound")}</p>
+            <p className="text-xs text-chess-muted">&quot;{submitted}&quot; {t("dh.userNotFoundDesc")}</p>
+          </div>
+        </div>
+      )}
+
+      {submitted && !profileError && (
         <>
           {profile && (
             <div className="flex items-center gap-3 sm:gap-5 px-1 animate-fade-in">
@@ -387,6 +398,9 @@ function DashboardContent() {
                 className="w-12 h-12 sm:w-16 sm:h-16 rounded-[var(--pixel-radius)] border-2 border-chess-border shrink-0 object-cover"
                 style={{ imageRendering: "pixelated" }}
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.src = DEFAULT_AVATAR_PATH;
+                }}
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">

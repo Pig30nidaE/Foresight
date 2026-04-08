@@ -4,7 +4,7 @@ import { useId, useMemo, useState, type CSSProperties } from "react";
 import { Chessboard, ChessboardProvider, SparePiece } from "react-chessboard";
 import { fenStringToPositionObject } from "react-chessboard";
 
-import ForumBoardAnnotationLayer from "@/app/forum/ForumBoardAnnotationLayer";
+import ForumBoardAnnotationLayer from "@/features/forum/components/ForumBoardAnnotationLayer";
 import {
   applyPieceDropToFen,
   DEFAULT_START_FEN,
@@ -12,8 +12,8 @@ import {
   movePieceOnFenIfLegal,
   removePieceAtSquareFromFen,
   tryLegalMoveUci,
-} from "@/shared/lib/forumChess";
-import { highlightsToSquareStyles, type BoardAnnotations } from "@/shared/lib/forumBoardAnnotations";
+} from "@/features/forum/lib/forumChess";
+import { highlightsToSquareStyles, type BoardAnnotations } from "@/features/forum/lib/forumBoardAnnotations";
 import { useTranslation } from "@/shared/lib/i18n";
 
 const SPARE_WHITES = ["wP", "wN", "wB", "wR", "wQ", "wK"] as const;

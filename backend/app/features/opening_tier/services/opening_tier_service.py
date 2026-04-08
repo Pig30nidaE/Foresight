@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 # ── Lichess Explorer 설정 ────────────────────────────────────────────
 EXPLORER_URL = "https://explorer.lichess.org/lichess"
 TOP_N_MOVES = 5
-MIN_GAMES = 300
+MIN_GAMES = 30
+MAX_OPENINGS_DISPLAY = 100
 REQUEST_DELAY = 0.5          # BFS 단건 요청 간격 (초)
 CATALOG_REQUEST_DELAY = 0.3  # 카탈로그 병렬 요청 슬롯 내 딜레이 (초)
 MAX_CONCURRENT = 3           # 동시 API 요청 최대 수
@@ -58,31 +59,26 @@ MIN_PICK_RATE = 0.01        # 온라인 매칭 표본의 1% 미만 변형은 "�
 MIN_TIER_DEPTH = 3     # 최소 수(half-move) — 이보다 얕은 범용 포지션 제외
 POP_DEPTH_TARGET = 5   # 이 depth 이상이면 인기도 패널티 없음
 
-# ── 레이팅 구간 (Lichess Explorer 실제 제공 bucket) ───────────────────
-RATING_BRACKETS = [1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500]
+# ── 레이팅 구간 (노출 버킷 5개) ─────────────────────────────────────
+RATING_BRACKETS = [1000, 1400, 1800, 2200, 2500]
 
-# 사용자 표시 라벨: 실제 요청 bucket 값을 그대로 노출
+# 사용자 표시 라벨: 집계에 포함되는 실제 Lichess bucket을 함께 표기
 _BRACKET_DISPLAY: Dict[int, str] = {
-    1000: "1000",
-    1200: "1200",
-    1400: "1400",
-    1600: "1600",
-    1800: "1800",
-    2000: "2000",
+    1000: "1000,1200",
+    1400: "1400,1600",
+    1800: "1800,2000",
     2200: "2200",
     2500: "2500",
 }
 
 # Lichess Explorer API 유효 rating bucket ID:
 # 400, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500
-# (2400 등은 무효 — 실제 존재하는 ID만 사용)
+# 노출 버킷은 그룹 키(1000/1400/1800/2200/2500)로 축소하고,
+# 각 키별로 실제 조회 대상 bucket을 매핑해 전달합니다.
 _LICHESS_RATINGS_PARAMS: Dict[int, List[int]] = {
-    1000: [1000],
-    1200: [1200],
-    1400: [1400],
-    1600: [1600],
-    1800: [1800],
-    2000: [2000],
+    1000: [1000, 1200],
+    1400: [1400, 1600],
+    1800: [1800, 2000],
     2200: [2200],
     2500: [2500],
 }
@@ -113,6 +109,8 @@ CACHE_DIR = (
 )
 _LATEST_CACHE_PATH = CACHE_DIR / "opening_tier_latest.json"
 _CACHE_STAMP_FORMAT = "%Y-%m-%d"
+_MONTH_FALLBACK_STEPS = 12
+_SUPABASE_CACHE_OBJECT_KEY = "system/opening_tier_latest.json"
 
 
 def _date_str(d: date) -> str:
@@ -218,7 +216,7 @@ def _infer_opening_side_by_eco(eco: str, _name: str, moves: Optional[List[str]],
 
 
 # 캐시 로직 버전: 로직 변경 시 기존 캐시는 무시하고 새로 생성합니다.
-CACHE_LOGIC_VERSION = 7
+CACHE_LOGIC_VERSION = 9
 
 
 def _display_label(bracket_key: int) -> str:
@@ -241,6 +239,9 @@ class OpeningTierService:
         self._rolling_openings: Dict[str, Dict[str, Dict[str, Any]]] = {}
         self._rolling_window_start: Optional[str] = None
         self._rolling_window_end: Optional[str] = None
+        
+        # 미래 날짜 등 사유로 Lichess 필터가 0건 반환 시 기록해 두어 불필요한 요청 단축
+        self._disable_date_filter_for_fallback: bool = False
 
     def _cache_key(self, rating: int, speed: str, color: str) -> str:
         return f"{rating}|{speed}|{color}"
@@ -261,6 +262,56 @@ class OpeningTierService:
         if self._refresh_lock is None:
             self._refresh_lock = asyncio.Lock()
 
+    @staticmethod
+    def _supabase_cache_config() -> Optional[Tuple[str, str, str]]:
+        supabase_url = (settings.SUPABASE_URL or "").strip().rstrip("/")
+        service_key = (settings.SUPABASE_SERVICE_ROLE_KEY or "").strip()
+        bucket = (settings.SUPABASE_STORAGE_BUCKET or "avatars").strip()
+        if not supabase_url or not service_key or not bucket:
+            return None
+        return supabase_url, service_key, bucket
+
+    async def _load_cache_payload_from_supabase(self) -> Optional[Dict[str, Any]]:
+        cfg = self._supabase_cache_config()
+        if cfg is None:
+            return None
+        supabase_url, service_key, bucket = cfg
+        object_url = f"{supabase_url}/storage/v1/object/{bucket}/{_SUPABASE_CACHE_OBJECT_KEY}"
+        headers = {
+            "Authorization": f"Bearer {service_key}",
+            "apikey": service_key,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(object_url, headers=headers)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return json.loads(resp.text)
+        except Exception as exc:
+            logger.warning("Opening tier cache load from Supabase failed: %s", exc)
+            return None
+
+    def _persist_cache_payload_to_supabase(self, payload: Dict[str, Any]) -> None:
+        cfg = self._supabase_cache_config()
+        if cfg is None:
+            return
+        supabase_url, service_key, bucket = cfg
+        object_url = f"{supabase_url}/storage/v1/object/{bucket}/{_SUPABASE_CACHE_OBJECT_KEY}"
+        headers = {
+            "Authorization": f"Bearer {service_key}",
+            "apikey": service_key,
+            "Content-Type": "application/json",
+            "x-upsert": "true",
+        }
+        try:
+            body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(object_url, content=body, headers=headers)
+            resp.raise_for_status()
+        except Exception as exc:
+            logger.warning("Opening tier cache persist to Supabase skipped: %s", exc)
+
     async def load_cache_from_disk_if_valid(self) -> bool:
         """디스크 캐시를 로드합니다.
 
@@ -272,11 +323,27 @@ class OpeningTierService:
         await self._ensure_async_primitives()
         assert self._cache_ready is not None
 
-        if not _LATEST_CACHE_PATH.exists():
-            return False
+        raw: Optional[Dict[str, Any]] = None
+        if _LATEST_CACHE_PATH.exists():
+            try:
+                raw = json.loads(_LATEST_CACHE_PATH.read_text(encoding="utf-8"))
+            except Exception as exc:
+                logger.warning("Opening tier local cache read failed: %s", exc)
+
+        if raw is None:
+            raw = await self._load_cache_payload_from_supabase()
+            if raw is None:
+                return False
+            try:
+                _LATEST_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                _LATEST_CACHE_PATH.write_text(
+                    json.dumps(raw, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except Exception as exc:
+                logger.warning("Opening tier cache local mirror skipped: %s", exc)
 
         try:
-            raw = json.loads(_LATEST_CACHE_PATH.read_text(encoding="utf-8"))
             if raw.get("logic_version") != CACHE_LOGIC_VERSION:
                 return False
             items: Dict[str, List[Dict[str, Any]]] = raw.get("items", {})
@@ -295,6 +362,8 @@ class OpeningTierService:
             self._rolling_window_start = since
             self._rolling_window_end = until
             self._cache_ready.set()
+            # Keep a shared snapshot so new replicas can load cache without cold re-fetch.
+            self._persist_cache_payload_to_supabase(raw)
             logger.info("Opening tier cache loaded from disk (stamp=%s)", stamp)
             return True
         except Exception as exc:
@@ -323,6 +392,7 @@ class OpeningTierService:
         tmp_path = _LATEST_CACHE_PATH.with_suffix(".tmp")
         tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp_path.replace(_LATEST_CACHE_PATH)
+        self._persist_cache_payload_to_supabase(payload)
 
     def start_midnight_cache_refresher(self) -> None:
         """매월 1일 UTC 00:00에 전달 데이터로 캐시를 일괄 재계산합니다."""
@@ -614,6 +684,7 @@ class OpeningTierService:
             tmp_path = _LATEST_CACHE_PATH.with_suffix(".tmp")
             tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             tmp_path.replace(_LATEST_CACHE_PATH)
+            self._persist_cache_payload_to_supabase(payload)
 
             self._tier_cache = new_items
             self._cache_since = self._rolling_window_start or since
@@ -857,47 +928,74 @@ class OpeningTierService:
         if since_month > until_month:
             since_month = until_month
         # 쉼표 구분 단일 파라미터 (NO [] brackets)
-        params = [
+        base_params = [
             ("fen", fen),
             ("ratings", ratings_str),
             ("speeds", speed_val),
             ("moves", TOP_N_MOVES),
             ("topGames", 0),
             ("recentGames", 0),
-            ("since", since_month),
-            ("until", until_month),
         ]
-        memo_key = f"{fen}|{ratings_str}|{speed_val}|{since_month}|{until_month}"
-        if memo_key in self._opening_fetch_memo:
-            return self._opening_fetch_memo[memo_key]
-        try:
-            # explorer.lichess.org/lichess 는 인증이 필요한 엔드포인트입니다.
-            # (Lichess 정책 변경으로 익명 요청도 401 반환)
-            ua = (
-                settings.LICHESS_USER_AGENT.strip()
-                or f"{settings.PROJECT_NAME}/1.0 (lichess opening explorer)"
-            )
-            headers = {"Accept": "application/json", "User-Agent": ua}
-            if settings.LICHESS_API_TOKEN:
-                headers["Authorization"] = f"Bearer {settings.LICHESS_API_TOKEN}"
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                last_exc: Exception | None = None
-                for attempt in range(3):
-                    try:
-                        resp = await client.get(EXPLORER_URL, params=params, headers=headers)
-                        resp.raise_for_status()
-                        data = resp.json()
-                        self._opening_fetch_memo[memo_key] = data
-                        return data
-                    except Exception as exc:
-                        last_exc = exc
-                        if attempt < 2:
-                            await asyncio.sleep(0.35 * (attempt + 1))
-                if last_exc:
-                    raise last_exc
-        except Exception as err:
-            logger.error("Lichess Explorer failed ratings=%s speed=%s exc=%s", ratings_str, speed_val, err)
-            return None
+        
+        async def _do_fetch(month_window: Optional[Tuple[str, str]]) -> Optional[Dict[str, Any]]:
+            params = list(base_params)
+            if month_window is not None:
+                s_month, u_month = month_window
+                params.extend([("since", s_month), ("until", u_month)])
+            else:
+                s_month, u_month = "all", "all"
+            
+            memo_key = f"{fen}|{ratings_str}|{speed_val}|{s_month}|{u_month}"
+            if memo_key in self._opening_fetch_memo:
+                return self._opening_fetch_memo[memo_key]
+                
+            try:
+                ua = (
+                    settings.LICHESS_USER_AGENT.strip()
+                    or f"{settings.PROJECT_NAME}/1.0 (lichess opening explorer)"
+                )
+                headers = {"Accept": "application/json", "User-Agent": ua}
+                if settings.LICHESS_API_TOKEN:
+                    headers["Authorization"] = f"Bearer {settings.LICHESS_API_TOKEN}"
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    last_exc: Exception | None = None
+                    for attempt in range(3):
+                        try:
+                            resp = await client.get(EXPLORER_URL, params=params, headers=headers)
+                            resp.raise_for_status()
+                            data = resp.json()
+                            self._opening_fetch_memo[memo_key] = data
+                            return data
+                        except Exception as exc:
+                            last_exc = exc
+                            if attempt < 2:
+                                await asyncio.sleep(0.35 * (attempt + 1))
+                    if last_exc:
+                        raise last_exc
+            except Exception as err:
+                logger.error("Lichess Explorer failed ratings=%s speed=%s exc=%s", ratings_str, speed_val, err)
+                return None
+        
+        data = None
+        if not self._disable_date_filter_for_fallback:
+            probe_since, probe_until = since_month, until_month
+            for _ in range(_MONTH_FALLBACK_STEPS + 1):
+                data = await _do_fetch((probe_since, probe_until))
+                if data is None:
+                    break
+                total_games = data.get("white", 0) + data.get("draws", 0) + data.get("black", 0)
+                if total_games > 0:
+                    return data
+                # 0건이면 이전 월로 이동하여 재탐색
+                probe_since = _prev_month(probe_since)
+                probe_until = _prev_month(probe_until)
+
+            if fen == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1":
+                logger.info("fetch_single root fen month-window returned 0 games repeatedly; disable date-filtered probing.")
+                self._disable_date_filter_for_fallback = True
+
+        logger.info("fetch_single fen='%s' month-window lookup empty; fallback to all-time.", fen)
+        return await _do_fetch(None)
 
     # ─────────────────────────────────────────────────
     # 티어 배정 (Z-score 기반)

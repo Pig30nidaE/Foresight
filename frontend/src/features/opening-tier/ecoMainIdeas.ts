@@ -1,6 +1,6 @@
 import type { Color } from "./types";
-import enCatalog from "../../../../eco_main_ideas/eco_main_ideas_en.json";
-import koCatalog from "../../../../eco_main_ideas/eco_main_ideas_ko.json";
+import enCatalog from "./eco_main_ideas_en.json";
+import koCatalog from "./eco_main_ideas_ko.json";
 
 type SidePayload = { white: string[]; black: string[] };
 type Catalog = Record<string, SidePayload>;

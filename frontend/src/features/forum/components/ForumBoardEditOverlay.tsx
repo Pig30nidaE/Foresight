@@ -4,15 +4,15 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 
-import ForumPositionEditor, { type ForumAnnotationTool } from "@/app/forum/ForumPositionEditor";
-import ForumRecordedMoveChips from "@/app/forum/ForumRecordedMoveChips";
+import ForumPositionEditor, { type ForumAnnotationTool } from "@/features/forum/components/ForumPositionEditor";
+import ForumRecordedMoveChips from "@/features/forum/components/ForumRecordedMoveChips";
 import {
   applyFenStringToBoard,
   DEFAULT_START_FEN,
   EMPTY_BOARD_FEN,
   fenAfterUcis,
   sanListFromStartAndUcis,
-} from "@/shared/lib/forumChess";
+} from "@/features/forum/lib/forumChess";
 import {
   emptyBoardAnnotations,
   FORUM_ANNOTATION_COLORS,
@@ -21,7 +21,7 @@ import {
   mergeAnnotationsForRecordCurrentPly,
   pruneAnnotationsBeyondPly,
   type BoardAnnotations,
-} from "@/shared/lib/forumBoardAnnotations";
+} from "@/features/forum/lib/forumBoardAnnotations";
 import { useTranslation } from "@/shared/lib/i18n";
 
 type ForumBoardEditOverlayProps = {
