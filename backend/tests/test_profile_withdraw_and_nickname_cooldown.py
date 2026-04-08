@@ -81,10 +81,12 @@ async def test_withdraw_my_account_saves_survey_and_deletes_user():
     db = MagicMock()
     db.delete = AsyncMock()
     db.commit = AsyncMock()
+    recent_claims = {"iat": int(datetime.now(timezone.utc).timestamp())}
 
     await profile_handlers.withdraw_my_account_handler(
         request=SimpleNamespace(),
         payload=AccountWithdrawRequest(reason_code="low_usage"),
+        claims=recent_claims,
         db=db,
         me=me,
     )
@@ -95,3 +97,26 @@ async def test_withdraw_my_account_saves_survey_and_deletes_user():
     assert added.reason_code == "low_usage"
     db.delete.assert_awaited_once_with(me)
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_withdraw_my_account_requires_recent_auth_claims():
+    me = SimpleNamespace(id=uuid.uuid4())
+    db = MagicMock()
+    db.delete = AsyncMock()
+    db.commit = AsyncMock()
+
+    stale_claims = {"iat": int((datetime.now(timezone.utc) - timedelta(minutes=10)).timestamp())}
+
+    with pytest.raises(HTTPException) as exc:
+        await profile_handlers.withdraw_my_account_handler(
+            request=SimpleNamespace(),
+            payload=AccountWithdrawRequest(reason_code="low_usage"),
+            claims=stale_claims,
+            db=db,
+            me=me,
+        )
+
+    assert exc.value.status_code == 401
+    db.delete.assert_not_awaited()
+    db.commit.assert_not_awaited()

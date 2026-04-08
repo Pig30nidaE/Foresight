@@ -1,4 +1,5 @@
 from typing import Annotated
+import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +39,7 @@ from app.models.forum_schemas import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/me", response_model=MeResponse)
@@ -483,9 +485,10 @@ async def recognize_board(
         try:
             result = await asyncio.to_thread(recognize_board_from_image, data)
         except Exception as exc:
+            logger.exception("Board recognition failed")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Board recognition failed: {exc}",
+                detail="Board recognition failed. Please upload a clearer board image.",
             ) from exc
 
         return result

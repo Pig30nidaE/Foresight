@@ -11,7 +11,7 @@
 1. 환경 변수 준비
 
 ```bash
-cp .env.example .env
+cp .env.template .env
 ```
 
 1. 개발 스택 실행

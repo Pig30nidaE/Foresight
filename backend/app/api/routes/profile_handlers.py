@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 
 import magic
 from fastapi import HTTPException, Request, UploadFile, status
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +41,7 @@ _MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 _ALLOWED_MIME = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
 _DISPLAY_NAME_CHANGE_COOLDOWN = timedelta(days=7)
 _ANALYZED_GAME_RETENTION = timedelta(days=365)
+_WITHDRAW_RECENT_AUTH_WINDOW = timedelta(minutes=5)
 
 
 def _is_protected_account(user: User) -> bool:
@@ -95,6 +98,69 @@ def _normalize_dashboard_href(value: str | None) -> str | None:
             detail="dashboard_href must start with /dashboard",
         )
     return href
+
+
+def _normalize_timestamp_claim(value: object) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _assert_recent_auth_for_withdrawal(claims: dict) -> None:
+    now = datetime.now(timezone.utc)
+    iat = _normalize_timestamp_claim(claims.get("iat"))
+    if iat is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="보안을 위해 다시 로그인한 뒤 탈퇴를 진행해 주세요.",
+        )
+
+    issued_at = datetime.fromtimestamp(iat, tz=timezone.utc)
+    if now - issued_at > _WITHDRAW_RECENT_AUTH_WINDOW:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="보안을 위해 다시 로그인한 뒤 탈퇴를 진행해 주세요.",
+        )
+
+
+def _sanitize_upload_image_bytes(data: bytes, mime: str) -> bytes:
+    save_format_by_mime = {
+        "image/jpeg": "JPEG",
+        "image/png": "PNG",
+        "image/gif": "GIF",
+        "image/webp": "WEBP",
+    }
+    save_format = save_format_by_mime.get(mime)
+    if save_format is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type",
+        )
+
+    try:
+        with Image.open(BytesIO(data)) as image:
+            normalized = ImageOps.exif_transpose(image)
+            if save_format == "JPEG" and normalized.mode not in ("RGB", "L"):
+                normalized = normalized.convert("RGB")
+
+            out = BytesIO()
+            save_kwargs: dict[str, object] = {"format": save_format}
+            if save_format == "JPEG":
+                save_kwargs.update({"quality": 92, "optimize": True, "exif": b""})
+            elif save_format == "PNG":
+                save_kwargs.update({"optimize": True})
+            elif save_format == "WEBP":
+                save_kwargs.update({"quality": 90, "method": 6, "exif": b""})
+
+            normalized.save(out, **save_kwargs)
+            return out.getvalue()
+    except (UnidentifiedImageError, OSError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid image payload",
+        ) from exc
 
 
 def _to_saved_analyzed_game_item(row: SavedAnalyzedGame) -> SavedAnalyzedGameItem:
@@ -325,10 +391,12 @@ async def withdraw_my_account_handler(
     *,
     request: Request,
     payload: AccountWithdrawRequest,
+    claims: dict,
     db: AsyncSession,
     me: User,
 ) -> None:
     _ = request
+    _assert_recent_auth_for_withdrawal(claims)
     feedback = payload.additional_feedback.strip() if payload.additional_feedback else None
     db.add(
         AccountDeletionSurvey(
@@ -703,6 +771,9 @@ async def upload_forum_image_handler(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unsupported file type",
         )
+    data = _sanitize_upload_image_bytes(data, mime)
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large")
     name = file.filename or "upload"
     url = await upload_image_bytes(
         data,

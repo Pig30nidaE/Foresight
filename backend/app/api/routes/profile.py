@@ -108,12 +108,14 @@ async def update_my_profile(
 async def withdraw_my_account(
 	request: Request,
 	payload: AccountWithdrawRequest,
+	claims: Annotated[dict, Depends(get_token_payload)],
 	db: AsyncSession = Depends(get_async_session),
 	me: User = Depends(get_current_user),
 ):
 	await profile_handlers.withdraw_my_account_handler(
 		request=request,
 		payload=payload,
+		claims=claims,
 		db=db,
 		me=me,
 	)

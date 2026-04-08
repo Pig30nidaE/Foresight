@@ -114,13 +114,13 @@ alembic -c alembic.ini upgrade head
 | `AUTH_DISCORD_ID` / `AUTH_DISCORD_SECRET` | Discord 로그인 시 | |
 | `FORESIGHT_API_URL` 또는 `NEXT_PUBLIC_API_URL` | 프론트→API | 예: `http://localhost:8000/api/v1` |
 
-전체 키 이름은 [`.env.example`](../.env.example)을 참고하세요.
+전체 키 이름은 이 문서의 표와 섹션 예시를 기준으로 설정하세요.
 
 ### 4.2 `frontend/.env.local` (로컬에서 `npm run dev`만 쓸 때)
 
 Next.js는 기본적으로 여기를 읽습니다. Docker를 쓰지 않고 프론트만 로컬로 띄우면 **여기에 Auth·API URL**을 넣는 것이 편합니다.
 
-- [frontend/.env.example](../frontend/.env.example) 참고  
+- `frontend/.env.local` 파일에 필요한 값을 직접 설정  
 - `AUTH_SECRET`, `AUTH_URL`, OAuth 키, `FORESIGHT_API_URL` 등
 
 ### 4.3 Vercel (프로덕션 프론트)
