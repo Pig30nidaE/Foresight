@@ -1,4 +1,5 @@
 from typing import Annotated
+import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,7 @@ from app.core.limiter import limiter
 from app.db.models.forum import User
 from app.db.session import get_async_session
 from app.models.forum_schemas import (
+    AccountWithdrawRequest,
     BoardPostCreate,
     CommentCreate,
     CommentUpdate,
@@ -37,6 +39,7 @@ from app.models.forum_schemas import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/me", response_model=MeResponse)
@@ -109,6 +112,23 @@ async def update_my_profile(
         db=db,
         me=me,
     )
+
+
+@router.post("/me/withdraw", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/hour")
+async def withdraw_my_account(
+    request: Request,
+    payload: AccountWithdrawRequest,
+    db: AsyncSession = Depends(get_async_session),
+    me: User = Depends(get_current_user),
+):
+    await profile_handlers.withdraw_my_account_handler(
+        request=request,
+        payload=payload,
+        db=db,
+        me=me,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/me/posts", response_model=MyPostListResponse)
@@ -245,7 +265,7 @@ async def create_post(
     request: Request,
     body: PostCreate,
     db: AsyncSession = Depends(get_async_session),
-    me: User = Depends(get_current_user_completed),
+    me: User | None = Depends(get_optional_current_user),
 ):
     _ = request
     return await forum_service.create_post(db=db, me=me, body=body)
@@ -257,7 +277,7 @@ async def create_board_post(
     request: Request,
     body: BoardPostCreate,
     db: AsyncSession = Depends(get_async_session),
-    me: User = Depends(get_current_user_completed),
+    me: User | None = Depends(get_optional_current_user),
 ):
     _ = request
     return await forum_service.create_board_post(db=db, me=me, body=body)
@@ -321,7 +341,7 @@ async def add_comment(
     post_id: str,
     body: CommentCreate,
     db: AsyncSession = Depends(get_async_session),
-    me: User = Depends(get_current_user_completed),
+    me: User | None = Depends(get_optional_current_user),
 ):
     _ = request
     return await forum_service.add_comment(db=db, me=me, post_id=post_id, body=body)
@@ -427,3 +447,50 @@ async def upload_forum_image(
         file=file,
         me=me,
     )
+
+
+@router.post("/recognize-board")
+@limiter.limit("5/minute")
+async def recognize_board(
+    request: Request,
+    file: UploadFile = File(...),
+    me: User = Depends(get_current_user_completed),
+):
+    """Upload a chess board image and get the FEN position back."""
+    import asyncio
+    import magic as _magic
+
+    from app.shared.forum_board_recognition import is_recognition_available, recognize_board_from_image
+
+    _ = (request, me)
+
+    if not is_recognition_available():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Board recognition is not available (chessimg2pos not installed)",
+        )
+
+    try:
+        data = await file.read()
+        if len(data) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB)")
+
+        mime = _magic.from_buffer(data, mime=True)
+        if mime not in ("image/jpeg", "image/png", "image/webp"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported file type. Use jpeg, png, or webp.",
+            )
+
+        try:
+            result = await asyncio.to_thread(recognize_board_from_image, data)
+        except Exception as exc:
+            logger.exception("Board recognition failed")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Board recognition failed. Please upload a clearer board image.",
+            ) from exc
+
+        return result
+    finally:
+        await file.close()

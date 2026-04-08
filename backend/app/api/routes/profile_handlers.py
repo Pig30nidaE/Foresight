@@ -1,19 +1,25 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from io import BytesIO
 
 import magic
 from fastapi import HTTPException, Request, UploadFile, status
-from sqlalchemy import func, select
+from PIL import Image, ImageOps, UnidentifiedImageError
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.forum import Comment, Post, User
+from app.db.models.forum import AccountDeletionSurvey, Comment, Post, SavedAnalyzedGame, User
 from app.models.forum_schemas import (
+    AccountWithdrawRequest,
     MeResponse,
     MyCommentListItem,
     MyCommentListResponse,
     MyPostListItem,
     MyPostListResponse,
     ProfileUpdateRequest,
+    SavedAnalyzedGameCreateRequest,
+    SavedAnalyzedGameItem,
+    SavedAnalyzedGameListResponse,
     SignupEmailCodeVerify,
     SignupRequest,
     UploadResponse,
@@ -33,6 +39,9 @@ from app.shared.signup_helpers import (
 _PREVIEW_LEN = 280
 _MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 _ALLOWED_MIME = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
+_DISPLAY_NAME_CHANGE_COOLDOWN = timedelta(days=7)
+_ANALYZED_GAME_RETENTION = timedelta(days=365)
+_WITHDRAW_RECENT_AUTH_WINDOW = timedelta(minutes=5)
 
 
 def _is_protected_account(user: User) -> bool:
@@ -41,6 +50,13 @@ def _is_protected_account(user: User) -> bool:
 
 def _normalize_display_name(value: str) -> str:
     return normalize_display_name(value)
+
+
+def _display_name_change_available_at(user: User) -> datetime | None:
+    changed_at = user.display_name_changed_at
+    if changed_at is None:
+        return None
+    return changed_at + _DISPLAY_NAME_CHANGE_COOLDOWN
 
 
 async def _is_display_name_taken(db: AsyncSession, *, my_user_id, display_name: str) -> bool:
@@ -68,6 +84,104 @@ def _validate_avatar_url_value(url: str) -> str:
     return u
 
 
+def _normalize_dashboard_href(value: str | None) -> str | None:
+    if value is None:
+        return None
+    href = value.strip()
+    if not href:
+        return None
+    if len(href) > 1024:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="dashboard_href too long")
+    if not href.startswith("/dashboard"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="dashboard_href must start with /dashboard",
+        )
+    return href
+
+
+def _normalize_timestamp_claim(value: object) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _assert_recent_auth_for_withdrawal(claims: dict) -> None:
+    now = datetime.now(timezone.utc)
+    iat = _normalize_timestamp_claim(claims.get("iat"))
+    if iat is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="보안을 위해 다시 로그인한 뒤 탈퇴를 진행해 주세요.",
+        )
+
+    issued_at = datetime.fromtimestamp(iat, tz=timezone.utc)
+    if now - issued_at > _WITHDRAW_RECENT_AUTH_WINDOW:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="보안을 위해 다시 로그인한 뒤 탈퇴를 진행해 주세요.",
+        )
+
+
+def _sanitize_upload_image_bytes(data: bytes, mime: str) -> bytes:
+    save_format_by_mime = {
+        "image/jpeg": "JPEG",
+        "image/png": "PNG",
+        "image/gif": "GIF",
+        "image/webp": "WEBP",
+    }
+    save_format = save_format_by_mime.get(mime)
+    if save_format is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type",
+        )
+
+    try:
+        with Image.open(BytesIO(data)) as image:
+            normalized = ImageOps.exif_transpose(image)
+            if save_format == "JPEG" and normalized.mode not in ("RGB", "L"):
+                normalized = normalized.convert("RGB")
+
+            out = BytesIO()
+            save_kwargs: dict[str, object] = {"format": save_format}
+            if save_format == "JPEG":
+                save_kwargs.update({"quality": 92, "optimize": True, "exif": b""})
+            elif save_format == "PNG":
+                save_kwargs.update({"optimize": True})
+            elif save_format == "WEBP":
+                save_kwargs.update({"quality": 90, "method": 6, "exif": b""})
+
+            normalized.save(out, **save_kwargs)
+            return out.getvalue()
+    except (UnidentifiedImageError, OSError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid image payload",
+        ) from exc
+
+
+def _to_saved_analyzed_game_item(row: SavedAnalyzedGame) -> SavedAnalyzedGameItem:
+    return SavedAnalyzedGameItem(
+        id=row.id,
+        game_id=row.game_id,
+        label=row.label,
+        depth=row.depth,
+        dashboard_href=row.dashboard_href,
+        analyzed_at=row.analyzed_at,
+    )
+
+
+async def _purge_expired_saved_games(db: AsyncSession) -> int:
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        delete(SavedAnalyzedGame).where(SavedAnalyzedGame.expires_at <= now)
+    )
+    return int(result.rowcount or 0)
+
+
 async def _me_response(db: AsyncSession, me: User) -> MeResponse:
     norm = normalize_email(me.email)
     other = await find_user_with_same_email(db, my_user_id=me.id, email_normalized=norm)
@@ -84,6 +198,9 @@ async def _me_response(db: AsyncSession, me: User) -> MeResponse:
         role=me.role,
         signup_completed=me.signup_completed,
         profile_public=me.profile_public,
+        display_name_changed_at=me.display_name_changed_at,
+        display_name_change_available_at=_display_name_change_available_at(me),
+        analysis_tickets=getattr(me, "analysis_tickets", 5),
         email_conflict=email_conflict,
         masked_conflict_email=masked_conflict,
         needs_email_verification=needs_email_verification,
@@ -230,12 +347,23 @@ async def update_my_profile_handler(
     elif "display_name" in data and data["display_name"] is not None:
         new_name = _normalize_display_name(data["display_name"])
         if new_name != me.display_name.strip():
+            now = datetime.now(timezone.utc)
+            available_at = _display_name_change_available_at(me)
+            if available_at is not None and now < available_at:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "닉네임은 7일에 한 번만 변경할 수 있습니다. "
+                        f"다음 변경 가능 시각: {available_at.isoformat()}"
+                    ),
+                )
             if await _is_display_name_taken(db, my_user_id=me.id, display_name=new_name):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="이미 사용 중인 닉네임입니다.",
                 )
             me.display_name = new_name
+            me.display_name_changed_at = now
             changed = True
 
     if "profile_public" in data and data["profile_public"] is not None:
@@ -257,6 +385,173 @@ async def update_my_profile_handler(
 
     await db.refresh(me)
     return await _me_response(db, me)
+
+
+async def withdraw_my_account_handler(
+    *,
+    request: Request,
+    payload: AccountWithdrawRequest,
+    claims: dict,
+    db: AsyncSession,
+    me: User,
+) -> None:
+    _ = request
+    _assert_recent_auth_for_withdrawal(claims)
+    feedback = payload.additional_feedback.strip() if payload.additional_feedback else None
+    db.add(
+        AccountDeletionSurvey(
+            reason_code=payload.reason_code,
+            additional_feedback=feedback or None,
+        )
+    )
+    await db.delete(me)
+    await db.commit()
+
+
+async def save_analyzed_game_handler(
+    *,
+    request: Request,
+    payload: SavedAnalyzedGameCreateRequest,
+    db: AsyncSession,
+    me: User,
+) -> SavedAnalyzedGameItem:
+    _ = request
+    game_id = payload.game_id.strip()
+    label = payload.label.strip()
+    if not game_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="game_id is required")
+    if not label:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="label is required")
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + _ANALYZED_GAME_RETENTION
+    dashboard_href = _normalize_dashboard_href(payload.dashboard_href)
+
+    await _purge_expired_saved_games(db)
+
+    existing = (
+        (
+            await db.execute(
+                select(SavedAnalyzedGame).where(
+                    SavedAnalyzedGame.user_id == me.id,
+                    SavedAnalyzedGame.game_id == game_id,
+                    SavedAnalyzedGame.depth == payload.depth,
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+    if existing is None:
+        row = SavedAnalyzedGame(
+            user_id=me.id,
+            game_id=game_id,
+            label=label,
+            depth=payload.depth,
+            dashboard_href=dashboard_href,
+            analyzed_at=now,
+            expires_at=expires_at,
+        )
+        db.add(row)
+    else:
+        existing.label = label
+        existing.dashboard_href = dashboard_href
+        existing.analyzed_at = now
+        existing.expires_at = expires_at
+        row = existing
+
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="이미 저장된 분석 게임입니다.",
+        ) from exc
+
+    await db.refresh(row)
+    return _to_saved_analyzed_game_item(row)
+
+
+async def get_my_analyzed_games_handler(
+    *,
+    db: AsyncSession,
+    me: User,
+    page: int,
+    page_size: int,
+    q: str | None,
+    depth: int | None,
+) -> SavedAnalyzedGameListResponse:
+    purged = await _purge_expired_saved_games(db)
+    if purged > 0:
+        await db.commit()
+
+    now = datetime.now(timezone.utc)
+    where_clause = [
+        SavedAnalyzedGame.user_id == me.id,
+        SavedAnalyzedGame.expires_at > now,
+    ]
+    if depth is not None:
+        where_clause.append(SavedAnalyzedGame.depth == depth)
+
+    search = (q or "").strip()
+    if search:
+        tokens = [token for token in search.split() if token]
+        for token in tokens:
+            like = f"%{token}%"
+            where_clause.append(
+                or_(
+                    SavedAnalyzedGame.label.ilike(like),
+                    SavedAnalyzedGame.game_id.ilike(like),
+                )
+            )
+
+    total = (
+        await db.execute(
+            select(func.count()).select_from(SavedAnalyzedGame).where(*where_clause)
+        )
+    ).scalar_one()
+
+    offset = (page - 1) * page_size
+    rows = (
+        (
+            await db.execute(
+                select(SavedAnalyzedGame)
+                .where(*where_clause)
+                .order_by(SavedAnalyzedGame.analyzed_at.desc())
+                .offset(offset)
+                .limit(page_size)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    return SavedAnalyzedGameListResponse(
+        total=int(total),
+        items=[_to_saved_analyzed_game_item(row) for row in rows],
+    )
+
+
+async def delete_my_analyzed_game_handler(
+    *,
+    request: Request,
+    saved_game_id: str,
+    db: AsyncSession,
+    me: User,
+) -> None:
+    _ = request
+    parsed_id = try_parse_uuid(saved_game_id)
+    if parsed_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved game not found")
+
+    row = await db.get(SavedAnalyzedGame, parsed_id)
+    if row is None or row.user_id != me.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved game not found")
+
+    await db.delete(row)
+    await db.commit()
 
 
 async def get_my_posts_handler(
@@ -476,12 +771,15 @@ async def upload_forum_image_handler(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unsupported file type",
         )
+    data = _sanitize_upload_image_bytes(data, mime)
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large")
     name = file.filename or "upload"
     url = await upload_image_bytes(
         data,
         content_type=mime,
         original_filename=name,
         public_base_url=str(request.base_url),
-        object_prefix="profile",
+        object_prefix="forum-post",
     )
     return UploadResponse(url=url, content_type=mime)
