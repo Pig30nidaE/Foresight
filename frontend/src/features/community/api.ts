@@ -23,6 +23,7 @@ export type ForumPostItem = {
   like_count: number;
   comment_count: number;
   thumbnail_fen?: string | null;
+  thumbnail_image_url?: string | null;
   has_pgn?: boolean;
   has_fen?: boolean;
   pgn_text?: string | null;
@@ -45,6 +46,7 @@ export type BoardPostItem = {
   like_count: number;
   comment_count: number;
   thumbnail_fen?: string | null;
+  thumbnail_image_url?: string | null;
 };
 
 export type BoardPostListResponse = {
@@ -57,6 +59,7 @@ export type MeSummary = {
   id?: string;
   signup_completed?: boolean;
   role?: string;
+  analysis_tickets?: number;
 };
 
 export type ForumCommentItem = {
@@ -77,6 +80,7 @@ export type ForumPostDetail = {
   fen_initial: string | null;
   board_annotations?: unknown;
   board_category?: string | null;
+  thumbnail_image_url?: string | null;
   author: CommunityAuthor;
   created_at: string;
   like_count: number;
@@ -92,6 +96,7 @@ export type CreateForumPostPayload = {
   pgn_text: string | null;
   fen_initial: string | null;
   board_annotations: unknown | null;
+  thumbnail_image_url?: string | null;
 };
 
 export type CreateBoardPostPayload = {
@@ -106,11 +111,17 @@ export type UpdateForumPostPayload = {
   pgn_text: string | null;
   fen_initial: string | null;
   board_annotations?: unknown | null;
+  thumbnail_image_url?: string | null;
 };
 
 export type CreateForumCommentPayload = {
   body: string;
   parent_comment_id?: string;
+};
+
+export type TicketRewardResponse = {
+  tickets_earned?: number;
+  ticket_cooldown_seconds?: number;
 };
 
 export type CreateForumReportPayload = {
@@ -137,21 +148,21 @@ export const getMeSummary = async (token: string): Promise<MeSummary> => {
 };
 
 export const createForumPost = async (
-  token: string,
+  token: string | null | undefined,
   payload: CreateForumPostPayload,
-): Promise<{ id: string; public_id?: string }> => {
-  const { data } = await api.post<{ id: string; public_id?: string }>("/forum/posts", payload, {
-    headers: authHeaders(token),
+): Promise<{ id: string; public_id?: string } & TicketRewardResponse> => {
+  const { data } = await api.post<{ id: string; public_id?: string } & TicketRewardResponse>("/forum/posts", payload, {
+    headers: authHeaders(token ?? undefined),
   });
   return data;
 };
 
 export const createBoardPost = async (
-  token: string,
+  token: string | null | undefined,
   payload: CreateBoardPostPayload,
-): Promise<{ id: string; public_id?: string }> => {
-  const { data } = await api.post<{ id: string; public_id?: string }>("/forum/board/posts", payload, {
-    headers: authHeaders(token),
+): Promise<{ id: string; public_id?: string } & TicketRewardResponse> => {
+  const { data } = await api.post<{ id: string; public_id?: string } & TicketRewardResponse>("/forum/board/posts", payload, {
+    headers: authHeaders(token ?? undefined),
   });
   return data;
 };
@@ -181,12 +192,15 @@ export const unlikeForumPost = async (postId: string, token: string): Promise<vo
 
 export const createForumComment = async (
   postId: string,
-  token: string,
+  token: string | null | undefined,
   payload: CreateForumCommentPayload,
-): Promise<void> => {
-  await api.post(`/forum/posts/${postId}/comments`, payload, {
-    headers: authHeaders(token),
-  });
+): Promise<{ id: string } & TicketRewardResponse> => {
+  const { data } = await api.post<{ id: string } & TicketRewardResponse>(
+    `/forum/posts/${postId}/comments`,
+    payload,
+    { headers: authHeaders(token ?? undefined) },
+  );
+  return data;
 };
 
 export const updateForumComment = async (commentId: string, token: string, body: string): Promise<void> => {
@@ -225,4 +239,45 @@ export const deleteForumPost = async (postId: string, token: string): Promise<vo
   await api.delete(`/forum/posts/${postId}`, {
     headers: authHeaders(token),
   });
+};
+
+export type UploadImageResponse = {
+  url: string;
+  content_type: string;
+};
+
+export type RecognizeBoardResponse = {
+  fen: string;
+  confidence: number | null;
+};
+
+export const recognizeBoardImage = async (
+  token: string,
+  file: File,
+): Promise<RecognizeBoardResponse> => {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<RecognizeBoardResponse>("/forum/recognize-board", form, {
+    headers: {
+      ...authHeaders(token),
+      "Content-Type": "multipart/form-data",
+    },
+    timeout: 60000,
+  });
+  return data;
+};
+
+export const uploadForumImage = async (
+  token: string,
+  file: File,
+): Promise<UploadImageResponse> => {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<UploadImageResponse>("/forum/upload", form, {
+    headers: {
+      ...authHeaders(token),
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return data;
 };

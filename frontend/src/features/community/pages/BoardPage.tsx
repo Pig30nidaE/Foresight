@@ -20,7 +20,7 @@ import { noticeListBadgeClass, patchListBadgeClass } from "@/shared/components/f
 import { useTranslation } from "@/shared/lib/i18n";
 import { formatPostDate } from "@/shared/lib/formatLocaleDate";
 import { forumPostHref } from "@/shared/lib/forumPostHref";
-import ForumPostThumbnail from "@/features/forum/components/ForumPostThumbnail";
+import { emitTicketToast } from "@/shared/lib/ticketToast";
 
 const SORT_OPTIONS: { value: string; labelKey: "board.sort.new" | "board.sort.old" | "board.sort.likes" | "board.sort.comments" }[] = [
   { value: "new", labelKey: "board.sort.new" },
@@ -35,19 +35,9 @@ const listUlClass =
 function PostListRow({ p }: { p: BoardPostItem }) {
   const { t, language } = useTranslation();
   const href = forumPostHref(p);
-  const hasThumb = Boolean(p.thumbnail_fen?.trim());
   return (
     <li>
       <div className="flex flex-row flex-wrap items-start gap-3 px-3 py-2.5 text-sm transition hover:bg-chess-elevated/40 sm:items-baseline sm:gap-x-3 sm:gap-y-1 sm:px-4">
-        {hasThumb ? (
-          <Link
-            href={href}
-            className="relative mt-0.5 h-14 w-14 shrink-0 overflow-hidden rounded-md bg-chess-surface ring-1 ring-chess-border/50 sm:mt-1 sm:h-[4.25rem] sm:w-[4.25rem]"
-            aria-label={t("forum.aria.openPostFromThumbnail")}
-          >
-            <ForumPostThumbnail thumbnailFen={p.thumbnail_fen} compactNotation />
-          </Link>
-        ) : null}
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3">
           <div className="flex min-w-0 flex-col gap-1 sm:flex-1 sm:flex-row sm:items-start sm:gap-2">
             <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pt-0.5">
@@ -207,22 +197,22 @@ export default function BoardPage() {
   useEffect(() => {
     const loadMe = async () => {
       if (status !== "authenticated") {
-        setCanWrite(false);
+        setCanWrite(true);
         setIsAdmin(false);
         return;
       }
       try {
         const token = await getBackendJwt();
         if (!token) {
-          setCanWrite(false);
+          setCanWrite(true);
           setIsAdmin(false);
           return;
         }
         const data = await getMeSummary(token);
-        setCanWrite(Boolean(data.signup_completed));
+        setCanWrite(true);
         setIsAdmin((data.role ?? "").toLowerCase() === "admin");
       } catch {
-        setCanWrite(false);
+        setCanWrite(true);
         setIsAdmin(false);
       }
     };
@@ -246,8 +236,7 @@ export default function BoardPage() {
     if ((createKind === "notice" || createKind === "patch") && !isAdmin) return;
     setBusyCreate(true);
     try {
-      const token = await getBackendJwt();
-      if (!token) throw new Error(t("board.error.loginRequired"));
+      const token = await getBackendJwt().catch(() => null);
       const data = await createBoardPost(token, {
         title: createTitle.trim(),
         body: createBody.trim(),
@@ -257,6 +246,19 @@ export default function BoardPage() {
       setCreateTitle("");
       setCreateBody("");
       setCreateKind("free");
+      const earned = (data as Record<string, unknown>)?.tickets_earned;
+      const cooldownSeconds = (data as Record<string, unknown>)?.ticket_cooldown_seconds;
+      if (typeof earned === "number" && earned > 0) {
+        emitTicketToast({
+          message: t("ticket.earn.post"),
+          cooldownSeconds: typeof cooldownSeconds === "number" ? cooldownSeconds : 0,
+        });
+      } else if (typeof cooldownSeconds === "number" && cooldownSeconds > 0) {
+        emitTicketToast({
+          message: t("ticket.cooldown.active"),
+          cooldownSeconds,
+        });
+      }
       await fetchList();
       const slug = data?.public_id ?? data?.id;
       if (slug) router.push(forumPostHref({ public_id: slug, id: slug, board_category: createKind }));

@@ -2,7 +2,7 @@
  * 오프닝 티어 API
  * ─────────────────────────────────────────
  * Endpoint: GET /api/v1/opening-tier/*
- * 로그인 필요. 백엔드는 이 라우트에서 JWT를 요구함.
+ * 로그인 불필요. 토큰이 있으면 전달, 없으면 공개 조회.
  */
 import api from "@/shared/lib/api";
 import { getBackendJwt } from "@/shared/lib/backendJwt";

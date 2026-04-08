@@ -39,16 +39,23 @@ const TIME_CLASS_META: Record<
   classical: { Icon: PixelBookGlyph, key: "dh.tc.classical" },
 };
 
+function parseTimeClass(value: string | null): TimeClass | null {
+  if (!value) return null;
+  return TIME_CLASSES.includes(value as TimeClass) ? (value as TimeClass) : null;
+}
+
 function DashboardContent() {
   const params = useSearchParams();
   const router = useRouter();
   const { t } = useTranslation();
   const initUsername = params.get("username") || "";
   const initPlatform = (params.get("platform") || "chess.com") as Platform;
+  const initTimeClass = parseTimeClass(params.get("timeClass")) ?? "blitz";
+  const focusGameId = params.get("focusGameId");
 
   const [username, setUsername] = useState(initUsername);
   const [platform, setPlatform] = useState<Platform>(initPlatform);
-  const [timeClass, setTimeClass] = useState<TimeClass>("blitz");
+  const [timeClass, setTimeClass] = useState<TimeClass>(initTimeClass);
   const [submitted, setSubmitted] = useState(initUsername);
   const [submittedPlatform, setSubmittedPlatform] = useState<Platform>(initPlatform);
   const [activeTab, setActiveTab] = useState<"games" | "analysis">("games");
@@ -56,7 +63,7 @@ function DashboardContent() {
   // 모바일 필터 시트 상태 (드래프트 값: 아직 적용 전)
   const [filterOpen, setFilterOpen] = useState(false);
   const [draftPlatform, setDraftPlatform] = useState<Platform>(initPlatform);
-  const [draftTimeClass, setDraftTimeClass] = useState<TimeClass>("blitz");
+  const [draftTimeClass, setDraftTimeClass] = useState<TimeClass>(initTimeClass);
 
   const sinceMs = undefined;
   const untilMs = undefined;
@@ -66,7 +73,7 @@ function DashboardContent() {
     if (!username.trim() || platform === "lichess") return;
     setSubmitted(username.trim());
     setSubmittedPlatform(platform);
-    router.replace(`/dashboard?platform=${platform}&username=${username.trim()}`);
+    router.replace(`/dashboard?platform=${platform}&username=${encodeURIComponent(username.trim())}&timeClass=${timeClass}`);
   };
 
   const openFilter = () => {
@@ -85,10 +92,15 @@ function DashboardContent() {
     const urlUsername = params.get("username") || "";
     if (urlUsername && urlUsername !== submitted) {
       const urlPlatform = (params.get("platform") || "chess.com") as Platform;
+      const urlTimeClass = parseTimeClass(params.get("timeClass"));
       setUsername(urlUsername);
       setPlatform(urlPlatform);
       setSubmitted(urlUsername);
       setSubmittedPlatform(urlPlatform);
+      if (urlTimeClass) {
+        setTimeClass(urlTimeClass);
+        setDraftTimeClass(urlTimeClass);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
@@ -105,10 +117,11 @@ function DashboardContent() {
   });
 
   useEffect(() => {
+    if (params.get("timeClass")) return;
     if (profile?.preferred_time_class) {
       setTimeClass(profile.preferred_time_class as TimeClass);
     }
-  }, [profile?.preferred_time_class]);
+  }, [profile?.preferred_time_class, params]);
 
   const tcGameCount = (tc: TimeClass): number | undefined => {
     if (!profile) return undefined;
@@ -471,6 +484,7 @@ function DashboardContent() {
               timeClass={timeClass}
               sinceMs={sinceMs}
               untilMs={untilMs}
+              focusGameId={focusGameId}
             />
           </section>
 

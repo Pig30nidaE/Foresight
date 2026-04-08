@@ -70,7 +70,7 @@ export default function OpeningTierTable({ entries, color, onOpeningClick }: Pro
       <div className="sm:hidden space-y-2">
         {entries.map((entry) => (
           <div
-            key={entry.eco}
+            key={`${entry.eco}-${entry.name}`}
             className="flex flex-col gap-2 px-3 py-2.5 pixel-frame pixel-hud-fill hover:brightness-[1.02] transition-[filter]"
           >
             <div className="flex items-start gap-3">
@@ -111,7 +111,7 @@ export default function OpeningTierTable({ entries, color, onOpeningClick }: Pro
           <tbody>
             {entries.map((entry) => (
               <tr
-                key={entry.eco}
+                key={`${entry.eco}-${entry.name}`}
                 className="border-b border-chess-border/40 hover:bg-chess-surface/35 dark:hover:bg-chess-elevated/20 transition-colors"
               >
                 <td className="py-2.5 px-3">

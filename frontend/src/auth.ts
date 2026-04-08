@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Discord from "next-auth/providers/discord";
 import Google from "next-auth/providers/google";
 
+import Lichess from "@/auth/providers/lichess";
 import { getAuthSecret } from "@/lib/authSecret";
 
 const providers = [];
@@ -30,6 +31,16 @@ if (process.env.AUTH_DISCORD_ID && process.env.AUTH_DISCORD_SECRET) {
     Discord({
       clientId: process.env.AUTH_DISCORD_ID,
       clientSecret: process.env.AUTH_DISCORD_SECRET,
+    })
+  );
+}
+
+/** Lichess: PKCE 공개 클라이언트 — AUTH_LICHESS_ID 권장 (오타 AUTH_LICHES_ID도 임시 호환) */
+const lichessClientId = process.env.AUTH_LICHESS_ID?.trim() || process.env.AUTH_LICHES_ID?.trim();
+if (lichessClientId) {
+  providers.push(
+    Lichess({
+      clientId: lichessClientId,
     })
   );
 }

@@ -9,6 +9,22 @@ const publicApiBase =
   process.env.NEXT_PUBLIC_API ||
   "http://localhost:8000/api/v1";
 
+/** fetch/XHR 대상 API origin (로컬 http://host:8000 등 — connect-src 에 https: 만으로는 막힘) */
+function apiOriginForCsp(base) {
+  try {
+    return new URL(base).origin;
+  } catch {
+    return null;
+  }
+}
+
+const cspConnectSrc = (() => {
+  const parts = ["'self'", "https:", "wss:"];
+  const origin = apiOriginForCsp(publicApiBase);
+  if (origin && !parts.includes(origin)) parts.push(origin);
+  return parts.join(" ");
+})();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
@@ -60,7 +76,7 @@ const nextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",
-              "connect-src 'self' https: wss:",
+              `connect-src ${cspConnectSrc}`,
               "font-src 'self' data:",
               "frame-ancestors 'none'",
               "base-uri 'self'",

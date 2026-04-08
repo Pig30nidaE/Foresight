@@ -156,6 +156,30 @@ def test_compute_date_range_is_previous_calendar_month_window():
     assert (until_day + timedelta(days=1)).day == 1
 
 
+def test_filter_openings_matches_by_substring_not_exact_name():
+    openings = [
+        {"eco": "B10", "name": "Caro-Kann Defense", "name_ko": "카로칸 디펜스"},
+        {"eco": "B20", "name": "Sicilian Defense", "name_ko": "시실리안 디펜스"},
+    ]
+
+    result = OpeningTierService.filter_openings(openings, "kann")
+    assert len(result) == 1
+    assert result[0]["eco"] == "B10"
+
+
+def test_filter_openings_ignores_spaces_and_punctuation():
+    openings = [
+        {"eco": "B10", "name": "Caro-Kann Defense", "name_ko": "카로칸 디펜스"},
+    ]
+
+    # 공백/하이픈/콜론 차이가 있어도 동일 문자열 포함으로 검색되어야 한다.
+    result_en = OpeningTierService.filter_openings(openings, "caro kann")
+    result_ko = OpeningTierService.filter_openings(openings, "카로칸디펜스")
+
+    assert len(result_en) == 1
+    assert len(result_ko) == 1
+
+
 @pytest.mark.asyncio
 async def test_catalog_uses_eco_range_for_opening_side(monkeypatch):
     svc = OpeningTierService()

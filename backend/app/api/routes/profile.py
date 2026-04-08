@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes import profile_handlers
@@ -14,10 +14,14 @@ from app.core.limiter import limiter
 from app.db.models.forum import User
 from app.db.session import get_async_session
 from app.models.forum_schemas import (
+	AccountWithdrawRequest,
 	MeResponse,
 	MyCommentListResponse,
 	MyPostListResponse,
 	ProfileUpdateRequest,
+	SavedAnalyzedGameCreateRequest,
+	SavedAnalyzedGameItem,
+	SavedAnalyzedGameListResponse,
 	SignupEmailCodeVerify,
 	SignupRequest,
 	UploadResponse,
@@ -99,6 +103,23 @@ async def update_my_profile(
     )
 
 
+@router.post("/me/withdraw", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/hour")
+async def withdraw_my_account(
+	request: Request,
+	payload: AccountWithdrawRequest,
+	db: AsyncSession = Depends(get_async_session),
+	me: User = Depends(get_current_user),
+):
+	await profile_handlers.withdraw_my_account_handler(
+		request=request,
+		payload=payload,
+		db=db,
+		me=me,
+	)
+	return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/me/posts", response_model=MyPostListResponse)
 async def get_my_posts(
     db: AsyncSession = Depends(get_async_session),
@@ -127,6 +148,60 @@ async def get_my_comments(
         page=page,
         page_size=page_size,
     )
+
+
+@router.post("/me/analyzed-games", response_model=SavedAnalyzedGameItem)
+@limiter.limit("60/minute")
+async def save_my_analyzed_game(
+	request: Request,
+	payload: SavedAnalyzedGameCreateRequest,
+	db: AsyncSession = Depends(get_async_session),
+	me: User = Depends(get_current_user),
+):
+	return await profile_handlers.save_analyzed_game_handler(
+		request=request,
+		payload=payload,
+		db=db,
+		me=me,
+	)
+
+
+@router.get("/me/analyzed-games", response_model=SavedAnalyzedGameListResponse)
+@limiter.limit("60/minute")
+async def get_my_analyzed_games(
+	request: Request,
+	db: AsyncSession = Depends(get_async_session),
+	me: User = Depends(get_current_user),
+	page: int = Query(1, ge=1),
+	page_size: int = Query(10, ge=1, le=50),
+	q: str | None = Query(None, max_length=100),
+	depth: int | None = Query(None, ge=1, le=99),
+):
+	return await profile_handlers.get_my_analyzed_games_handler(
+		db=db,
+		me=me,
+		page=page,
+		page_size=page_size,
+		q=q,
+		depth=depth,
+	)
+
+
+@router.delete("/me/analyzed-games/{saved_game_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("60/minute")
+async def delete_my_analyzed_game(
+	request: Request,
+	saved_game_id: str,
+	db: AsyncSession = Depends(get_async_session),
+	me: User = Depends(get_current_user),
+):
+	await profile_handlers.delete_my_analyzed_game_handler(
+		request=request,
+		saved_game_id=saved_game_id,
+		db=db,
+		me=me,
+	)
+	return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/users/{user_id}", response_model=UserPublicProfileResponse)

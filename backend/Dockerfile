@@ -13,7 +13,12 @@ RUN apt-get update \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# chessimg2pos pulls torchvision from PyPI; mismatched torch/torchvision causes
+# "RuntimeError: operator torchvision::nms does not exist". Install matching CPU wheels twice:
+# before deps (so pip resolves torch first) and after (overwrite any PyPI torchvision).
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir --upgrade torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 COPY . .
 
