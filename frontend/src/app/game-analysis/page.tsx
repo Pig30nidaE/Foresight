@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { signIn, useSession } from "next-auth/react";
 
@@ -57,7 +57,7 @@ function normalizeOpeningName(value: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-export default function GameAnalysisPage() {
+function GameAnalysisPageContent() {
   const { t, language } = useTranslation();
   const params = useSearchParams();
   const router = useRouter();
@@ -372,5 +372,19 @@ export default function GameAnalysisPage() {
         </div>
       )}
     </section>
+  );
+}
+
+export default function GameAnalysisPage() {
+  return (
+    <Suspense
+      fallback={
+        <section className="mx-auto w-full max-w-6xl space-y-4 sm:space-y-6">
+          <div className="pixel-frame p-4 text-sm text-chess-muted">Loading...</div>
+        </section>
+      }
+    >
+      <GameAnalysisPageContent />
+    </Suspense>
   );
 }

@@ -210,7 +210,7 @@ class AnalysisQueueStore {
       const entries = Array.from(this.completedByGameId.values())
         .reverse()
         .slice(0, ANALYSIS_RESULT_CACHE_LIMIT)
-        .map((item) => {
+        .map((item): PersistedCompletedAnalysis | null => {
           if (!item.result) return null;
           return {
             gameId: item.gameId,
@@ -218,7 +218,7 @@ class AnalysisQueueStore {
             label: item.label,
             dashboardHref: item.dashboardHref,
             result: item.result,
-          } satisfies PersistedCompletedAnalysis;
+          };
         })
         .filter((v): v is PersistedCompletedAnalysis => v !== null);
 
